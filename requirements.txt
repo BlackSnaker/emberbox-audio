@@ -1,0 +1,4 @@
+# GTK / PyGObject and native libraries come from the system package manager.
+numpy>=1.24
+Pillow>=10
+websocket-client>=1.6

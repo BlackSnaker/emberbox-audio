@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+ <defs><linearGradient id="sky" x2="0" y2="1"><stop stop-color="#343c36"/><stop offset="1" stop-color="#a17a4b"/></linearGradient><radialGradient id="halo"><stop stop-color="#e5b56b" stop-opacity=".25"/><stop offset="1" stop-color="#e5b56b" stop-opacity="0"/></radialGradient></defs>
+ <rect width="960" height="540" fill="url(#sky)"/><circle cx="640" cy="209" r="255" fill="url(#halo)"/><circle cx="640" cy="209" r="74" fill="#e9c17c"/>
+ <path d="m0 342 144-107 98 73 151-134 167 126 99-86 135 74 166-104v356H0Z" fill="#5b6551"/>
+ <path d="m0 391 220-118 143 116 221-103 173 101 203-92v245H0Z" fill="#344e40"/>
+ <path d="m0 454 175-65 165 86 242-89 181 78 197-92v168H0Z" fill="#203b32"/>
+ <path d="m0 502 190-46 184 43 262-39 177 33 147-22v69H0Z" fill="#172b25"/>
+ <path d="M53 53h29m-14-14v29" stroke="#eed9aa" stroke-opacity=".65"/>
+ <text x="50" y="437" fill="#f0e1b7" font-family="Noto Sans" font-weight="bold" font-size="35" letter-spacing="7">THE QUIET HOURS</text>
+ <text x="53" y="470" fill="#bac2a4" font-family="Noto Sans" font-size="11" letter-spacing="4">AN EMBERBOX ORIGINAL / SLOW DOWN A LITTLE</text>
+ <path d="M825 59h75" stroke="#e4cf9f" stroke-opacity=".5"/><circle cx="900" cy="59" r="3" fill="#fabd2f"/>
+ </svg>

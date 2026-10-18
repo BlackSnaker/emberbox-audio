@@ -1,0 +1,13 @@
+[project]
+name = "emberbox-audio"
+version = "0.1.0"
+description = "A warm Gruvbox desktop companion for Spotify"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{name = "BlackSnaker"}]
+classifiers = ["Development Status :: 3 - Alpha", "Environment :: X11 Applications :: GTK", "Operating System :: POSIX :: Linux", "Programming Language :: Python :: 3"]
+
+[project.urls]
+Homepage = "https://github.com/BlackSnaker/emberbox-audio"
+Issues = "https://github.com/BlackSnaker/emberbox-audio/issues"

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="640" viewBox="0 0 640 640">
+ <defs><linearGradient id="sky" x2=".8" y2="1"><stop stop-color="#222e29"/><stop offset="1" stop-color="#66705a"/></linearGradient><linearGradient id="sun" x2="0" y2="1"><stop stop-color="#ffda84"/><stop offset="1" stop-color="#c8793e"/></linearGradient></defs>
+ <rect width="640" height="640" fill="url(#sky)"/><circle cx="320" cy="290" r="192" fill="none" stroke="#e4cf9f" stroke-opacity=".17"/>
+ <circle cx="320" cy="290" r="163" fill="none" stroke="#e4cf9f" stroke-opacity=".1"/><circle cx="320" cy="290" r="122" fill="url(#sun)"/>
+ <path d="m0 452 146-109 149 73 138-123 207 159v188H0Z" fill="#25392f"/><path d="m0 520 177-87 150 51 156-88 157 132v112H0Z" fill="#1b2b24"/>
+ <path d="M55 59h35m-17-17v35" stroke="#ebdbb2" stroke-width="1.5"/><text x="51" y="558" fill="#f4e7bf" font-family="Noto Sans" font-weight="bold" font-size="48" letter-spacing="6">AFTERGLOW</text>
+ <text x="55" y="595" fill="#b6bba4" font-family="Noto Sans" font-size="13" letter-spacing="5">EMBERBOX SESSIONS / VOL. 01</text></svg>

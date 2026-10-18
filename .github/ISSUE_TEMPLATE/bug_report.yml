@@ -1,0 +1,22 @@
+name: Bug report
+description: Something in the widget is not behaving as expected.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Expected behaviour, actual behaviour and reproduction steps.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Distribution, desktop/compositor, X11 or Wayland, Python and relevant player versions.
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Screenshot or relevant diagnostics
+      description: Include only details you are comfortable making public.
