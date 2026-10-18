@@ -5,6 +5,7 @@ import io
 import time
 import threading
 import urllib.request
+from urllib.parse import urlparse, unquote
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from paths import CACHE_DIR, CONFIG_DIR
@@ -54,6 +55,11 @@ class Artwork:
                     with urllib.request.urlopen(url, timeout=7) as response:
                         raw = response.read(5_000_000)
                     source = Image.open(io.BytesIO(raw))
+                elif url.startswith('file://') and urlparse(url).netloc in ('', 'localhost'):
+                    local = Path(unquote(urlparse(url).path))
+                    if local.stat().st_size > 5_000_000:
+                        raise ValueError('Artwork too large')
+                    source = Image.open(local)
                 else:
                     source = Image.open(self.placeholder)
                 image = ImageOps.fit(source.convert('RGBA'), (size, size), Image.Resampling.LANCZOS)

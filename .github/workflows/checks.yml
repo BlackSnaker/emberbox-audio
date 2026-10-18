@@ -20,5 +20,7 @@ jobs:
         run: /usr/bin/python3 -m compileall -q src tools tests
       - name: Regression checks
         run: /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: MPRIS source routing
+        run: dbus-run-session -- /usr/bin/python3 tests/mpris_smoke.py
       - name: GTK layout and controls
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/gui_smoke.py

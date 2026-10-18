@@ -32,7 +32,13 @@ class DummySound:
     def toggle_mute(self):pass
     def close(self):pass
 widget.SpotifyVolume=DummySound
-widget.control.player_name=lambda _connection:None
+from sources import Session
+class DummyMonitor:
+    def __init__(self, connection, changed): self.changed=changed;self.calls=[]
+    def poll(self): pass
+    def call(self, session, method, args=None, root=False): self.calls.append((session.name,method))
+    def close(self): pass
+widget.Monitor=DummyMonitor
 widget.SpotifyAudioMeter.start=lambda self:None
 app=widget.Widget()
 try:
@@ -45,6 +51,36 @@ try:
     app.toggle_compact(None)
     settle()
     assert app.window.get_size().width==460
+    spotify=Session('org.mpris.MediaPlayer2.spotify', 'Spotify', 'spotify', 1,
+        {'PlaybackStatus':'Playing','Metadata':{'xesam:title':'Spotify track'}})
+    browser=Session('org.mpris.MediaPlayer2.firefox.instance123', 'Firefox', 'firefox', 2,
+        {'PlaybackStatus':'Paused','Metadata':{'xesam:title':'Apple track'}})
+    app.on_sessions([spotify,browser])
+    assert app.title.get_text()=='Spotify track'
+    app.select_source('apple-music',browser)
+    assert app.title.get_text()=='Apple track'
+    assert app.monitor.calls==[(spotify.name,'Pause')]
+    app.on_action(None,'next')
+    assert app.monitor.calls[-1]==(browser.name,'Next')
+    app.toggle_compact(None)
+    settle()
+    assert app.window.get_size().width==320
+    assert app.compact_source.get_visible()
+    app.show_sources(app.compact_source)
+    settle()
+    assert app.source_picker.popover.get_visible()
+    app.source_picker.popover.popdown()
+    app.toggle_compact(None)
+    settle()
+    app.select_source('spotify')
+    assert app.title.get_text()=='Spotify track'
+    assert not app.source_picker.popover.get_visible()
+    app.expanded=True;app.apply_layout()
+    app.select_source('apple-music',browser)
+    assert not app.drawer.get_reveal_child()
+    assert app.discovery_name.get_text()=='♫  Apple Music'
+    app.select_source('spotify')
+    assert app.drawer.get_reveal_child()
     panel=app.panel
     panel.data={'shelves':[{'title':'Evening','items':[]},{'title':'Morning','items':[]}]}
     panel.render_filters()

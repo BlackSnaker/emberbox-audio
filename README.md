@@ -10,10 +10,11 @@
 
 ## Your music, a little warmer.
 
-A warm desktop companion for Spotify, with audio-reactive gas-discharge tubes and controls that feel like a small piece of hi-fi equipment.
+A warm desktop companion for **Spotify and Apple Music on the web**, with audio-reactive gas-discharge tubes and controls that feel like a small piece of hi-fi equipment.
 
+- **Choose your source.** Switch between Spotify and Apple Music; the selector is available in mini mode too. [Apple Music setup →](docs/APPLE_MUSIC.md)
 - **Music without the window juggling.** Artwork, track details, seeking and transport controls beside your work.
-- **Real sound, warm light.** Nine frequency bands from Spotify’s own audio stream, with smooth, critically damped motion.
+- **Real sound, warm light.** Nine frequency bands from the selected application’s audio stream, with smooth, critically damped motion.
 - **Tactile controls.** A metal mute toggle, a fine-adjustable volume dial, and separated playback buttons.
 - **Small when you want it.** A draggable mini mode with cover art, controls and glowing tubes.
 - **Personal picks, close by.** An optional experimental drawer for your Spotify collections and their tracks.
@@ -38,7 +39,9 @@ cd emberbox-audio
 
 Then open **Emberbox Audio** from your applications menu. Installation uses no `sudo`, downloads no code, and does not change your desktop theme. Omit `--autostart` to launch only when you choose. To try the source without installing, use `./run.sh`.
 
-Open Spotify to start listening. Basic playback uses MPRIS; the personal-picks drawer has a separate local connection. [Spotify setup →](docs/SPOTIFY.md)
+Select **Spotify** or **Apple Music** in the source menu. For Apple Music, start a song at music.apple.com and bind its browser session. [Browser setup and limits →](docs/APPLE_MUSIC.md)
+
+Open Spotify to listen to Spotify. Basic playback uses MPRIS; the personal-picks drawer has a separate local connection. [Spotify setup →](docs/SPOTIFY.md)
 
 ## Grunesphism / Грунесфизм
 
@@ -53,15 +56,16 @@ Dark olive-charcoal surfaces, warm cream type, amber light behind glass, a smoot
 | Action | Control |
 | --- | --- |
 | Move the widget | Drag its header or cover |
+| Music source | **Spotify ⌄ / Apple Music ⌄**, or **S⌄ / A⌄** on the compact cover |
 | Compact mode | **Mini** / expand icon |
 | Volume | Wheel over the dial, or drag up/right; **Shift** for finer steps |
 | Mute | Metal toggle; the volume setting is retained |
 | Seek | Click the progress bar |
 | Browse collections | **For you**; choose a collection, then a track |
 
-## What to expect in v0.1
+## What to expect in v0.2
 
-This is an early source release, built from the working desktop widgets. Spotify must be installed and running. Personal recommendations use an optional, version-sensitive local desktop-client integration rather than the Spotify Web API. A client update can require an integration fix; see the setup notes.
+This is an early source release, built from the working desktop widgets. Use the Spotify desktop client or the Apple Music web player in an MPRIS-capable Linux browser. Browser media controls and audio streams may be shared with other tabs; see the [Apple Music limits](docs/APPLE_MUSIC.md#browser-limits). Personal recommendations use an optional, version-sensitive local desktop-client integration rather than the Spotify Web API. A client update can require an integration fix; see the setup notes.
 
 - The widget is designed to live on the desktop, underneath ordinary app windows.
 - Position, compact mode and audio preferences are kept locally in the standard XDG directories.
@@ -74,4 +78,4 @@ This is an early source release, built from the working desktop widgets. Spotify
 
 Emberbox Audio is one half of a pair. Its companion, [Emberbox Video](https://github.com/BlackSnaker/emberbox-video), shares the tubes, materials and Grunesphism design language.
 
-Built by [BlackSnaker](https://github.com/BlackSnaker). Source and original preview artwork are [MIT licensed](LICENSE). Spotify is a third-party service; this is an independent project.
+Built by [BlackSnaker](https://github.com/BlackSnaker). Source and original preview artwork are [MIT licensed](LICENSE). Spotify and Apple Music are third-party services; this is an independent project.

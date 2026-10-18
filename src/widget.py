@@ -1,5 +1,5 @@
 #!/usr/bin/python
-"""A draggable, directly clickable Gruvbox Spotify desktop widget."""
+"""A draggable, directly clickable Gruvbox music desktop widget."""
 
 import json
 import math
@@ -26,6 +26,9 @@ from discovery_panel import DiscoveryPanel
 from hardware_controls import MuteToggle, VolumeKnob
 from nixie_spectrum import NixieSpectrum
 from spotify_volume import SpotifyVolume
+from sources import Monitor, choose_session
+from stream_target import Target
+from source_picker import SourcePicker, text
 
 
 ROOT = Path(__file__).parent
@@ -133,6 +136,9 @@ entry.track-search { background-color: #252721; color: #ebdbb2; border: none; bo
 .discovery-scroll, .filter-scroll, .discovery-scroll viewport, .filter-scroll viewport { background-color: transparent; border: none; }
 .discovery-scroll scrollbar, .filter-scroll scrollbar { background-color: transparent; border: none; }
 .discovery-scroll scrollbar slider, .filter-scroll scrollbar slider { background-color: #665c54; border: none; border-radius: 5px; min-width: 3px; min-height: 3px; }
+button.source-button { font-size: 10px; min-height: 22px; padding: 2px 7px; }
+.source-popover button, .source-popover button:focus { outline-style: none; outline-width: 0; }
+.source-popover { background-color: #2c2c29; color: #ebdbb2; border-radius: 16px; border-color: #504945; }
 button.mode-button { font-size: 10px; min-width: 30px; min-height: 20px; padding: 3px 7px; }
 .card.compact { border-radius: 18px; }
 .compact .cover-surface { padding: 4px; border-radius: 14px; }
@@ -158,6 +164,8 @@ class Widget:
 
         self.connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
         self.player = None
+        self.session = None
+        self.sessions = []
         self.playing = False
         self.length = 0
         self.position = 0
@@ -171,6 +179,12 @@ class Widget:
             saved = json.loads(STATE.read_text())
         except (OSError, ValueError):
             saved = {}
+        self.source = saved.get('source', 'spotify')
+        if self.source not in ('spotify', 'apple-music'):
+            self.source = 'spotify'
+        self.browser_binding = str(saved.get('apple_browser', ''))
+        self.monitor = Monitor(self.connection, self.on_sessions)
+        self.source_picker = SourcePicker(self.select_source, self.launch_apple)
         self.expanded = bool(saved.get('expanded', False))
         self.compact = bool(saved.get('compact', False))
         self.visual_levels = [0.0] * 9
@@ -232,10 +246,13 @@ class Widget:
         card.pack_start(header, False, False, 0)
         header_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         header.add(header_row)
-        eyebrow = Gtk.Label(label='●  EMBERBOX   /   AUDIO')
-        eyebrow.get_style_context().add_class('eyebrow')
-        eyebrow.set_halign(Gtk.Align.START)
-        header_row.pack_start(eyebrow, True, True, 0)
+        self.source_button = Gtk.Button(label='●  SPOTIFY  ⌄')
+        self.source_button.get_style_context().add_class('filter-chip')
+        self.source_button.get_style_context().add_class('source-button')
+        self.source_button.set_halign(Gtk.Align.START)
+        self.source_button.get_accessible().set_name(text('Switch music source', 'Выбрать источник музыки'))
+        self.source_button.connect('clicked', self.show_sources)
+        header_row.pack_start(self.source_button, True, True, 0)
         neon_caption = Gtk.Label(label='●  LIVE AUDIO')
         neon_caption.get_style_context().add_class('neon-caption')
         self.mini_button = Gtk.Button(label='Mini')
@@ -271,7 +288,17 @@ class Widget:
         cover_drag.connect('motion-notify-event', self.on_drag_motion)
         cover_drag.connect('button-release-event', self.on_drag_end)
         cover_drag.add(cover_surface)
-        body.pack_start(cover_drag, False, False, 0)
+        cover_overlay = Gtk.Overlay()
+        cover_overlay.add(cover_drag)
+        self.compact_source = Gtk.Button(label='S⌄')
+        self.compact_source.get_style_context().add_class('filter-chip')
+        self.compact_source.get_style_context().add_class('source-button')
+        self.compact_source.set_halign(Gtk.Align.START)
+        self.compact_source.set_valign(Gtk.Align.START)
+        self.compact_source.get_accessible().set_name(text('Switch music source', 'Выбрать источник музыки'))
+        self.compact_source.connect('clicked', self.show_sources)
+        cover_overlay.add_overlay(self.compact_source)
+        body.pack_start(cover_overlay, False, False, 0)
 
         details = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.details = details
@@ -346,10 +373,10 @@ class Widget:
         self.discovery_button.set_margin_end(18)
         self.discovery_button.set_margin_bottom(10)
         entry = Gtk.Box(spacing=10)
-        name = Gtk.Label(label='✦  For you')
+        name = self.discovery_name = Gtk.Label(label='✦  For you')
         name.get_style_context().add_class('discovery-name')
         entry.pack_start(name, False, False, 0)
-        hint = Gtk.Label(label='Mixes · discoveries · tracks')
+        hint = self.discovery_hint = Gtk.Label(label='Mixes · discoveries · tracks')
         hint.get_style_context().add_class('discovery-hint')
         entry.pack_start(hint, True, True, 0)
         self.chevron = Gtk.Label(label='⌃' if self.expanded else '⌄')
@@ -369,7 +396,8 @@ class Widget:
         self.window.show_all()
         self.panel.show_home()
         self.apply_layout()
-        if self.expanded and not self.compact:
+        self.update_source_ui()
+        if self.expanded and not self.compact and self.source == 'spotify':
             GLib.idle_add(self.panel.open)
         GLib.idle_add(self.place_window)
         self.refresh()
@@ -393,6 +421,7 @@ class Widget:
         return False
 
     def on_destroy(self, _window):
+        self.monitor.close()
         self.meter.stop()
         self.sound.close()
         self.artwork.pool.shutdown(wait=False, cancel_futures=True)
@@ -422,6 +451,7 @@ class Widget:
         for child in (self.header, self.title, self.artist, self.album,
                       self.progress_event, self.time, self.open, self.discovery_button):
             child.set_visible(not self.compact)
+        self.compact_source.set_visible(self.compact)
         self.restore_button.set_visible(self.compact)
         self.equalizer.set_compact(self.compact)
         if self.compact:
@@ -429,7 +459,7 @@ class Widget:
             self.drawer.hide()
         else:
             self.drawer.show()
-            self.drawer.set_reveal_child(self.expanded)
+            self.drawer.set_reveal_child(self.expanded and self.source == 'spotify')
         self.load_cover(preserve=True)
         self.window.set_size_request(self.layout_width(), 1 if self.compact else HEIGHT)
         self.reflow()
@@ -437,17 +467,20 @@ class Widget:
     def toggle_compact(self, _button):
         self.compact = not self.compact
         self.apply_layout()
-        if not self.compact and self.expanded:
+        if not self.compact and self.expanded and self.source == 'spotify':
             self.panel.open()
         if self.positioned:
             self.save_position()
 
     def toggle_discovery(self, _button):
+        if self.source == 'apple-music':
+            self.launch_apple()
+            return
         if self.compact:
             return
         self.expanded = not self.expanded
         self.chevron.set_text('⌃' if self.expanded else '⌄')
-        self.drawer.set_reveal_child(self.expanded)
+        self.drawer.set_reveal_child(self.expanded and self.source == 'spotify')
         if self.expanded:
             self.panel.open()
         self.save_position()
@@ -470,6 +503,48 @@ class Widget:
             if (x, y) != (target_x, target_y):
                 self.window.move(target_x, target_y)
         return False
+
+    def show_sources(self, button):
+        self.monitor.poll()
+        self.source_picker.show(button, self.source, self.sessions, self.browser_binding)
+
+    def select_source(self, source, session=None):
+        previous = self.session
+        self.source = source
+        if session:
+            self.browser_binding = session.binding
+            self.player = session.name
+        else:
+            self.player = None
+        self.play_request += 1
+        # A deliberate change pauses the previous source; it never autoplays
+        # the next one. Closing a popover cannot start music or open a window.
+        selected = choose_session(self.sessions, self.source, self.browser_binding, self.player or '')
+        if previous and previous.properties.get('PlaybackStatus') == 'Playing':
+            if not selected or previous.name != selected.name:
+                self.monitor.call(previous, 'Pause')
+        self.meter.stop()
+        self.visual_levels = [0.] * 9
+        self.visual_velocity = [0.] * 9
+        self.update_source_ui()
+        self.apply_layout()
+        self.apply_sessions()
+        self.save_position()
+        self.monitor.poll()
+
+    def update_source_ui(self):
+        spotify = self.source == 'spotify'
+        self.source_button.set_label('●  ' + ('SPOTIFY' if spotify else 'APPLE MUSIC') + '  ⌄')
+        self.compact_source.set_label('S⌄' if spotify else 'A⌄')
+        self.open.get_accessible().set_name('Open Spotify' if spotify else 'Open Apple Music')
+        self.discovery_name.set_text(text('✦  For you', '✦  Для тебя') if spotify else '♫  Apple Music')
+        self.discovery_hint.set_text(text('Mixes · discoveries · tracks', 'Миксы · открытия · треки') if spotify
+                                     else text('Library and picks in your browser ↗', 'Медиатека и подборки в браузере ↗'))
+        self.chevron.set_visible(spotify)
+
+    def launch_apple(self):
+        subprocess.Popen(['xdg-open', 'https://music.apple.com/'],
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def launch_spotify(self, uri=None):
         flags = ['--remote-debugging-port=43827', '--remote-debugging-address=127.0.0.1']
@@ -508,6 +583,8 @@ class Widget:
         threading.Thread(target=work, daemon=True).start()
 
     def play_uri(self, uri):
+        if self.source != 'spotify':
+            return
         if not uri.startswith(('spotify:track:', 'spotify:playlist:', 'spotify:album:')):
             return
         from discovery import ConnectionUnavailable, LocalSpotify
@@ -590,7 +667,8 @@ class Widget:
         x, y = self.window.get_position()
         STATE.parent.mkdir(parents=True, exist_ok=True)
         STATE.write_text(json.dumps({'x': x, 'y': y, 'expanded': self.expanded,
-                                     'compact': self.compact}) + '\n')
+                                     'compact': self.compact, 'source': self.source,
+                                     'apple_browser': self.browser_binding}) + '\n')
         return False
 
     def on_drag(self, _box, event):
@@ -625,19 +703,23 @@ class Widget:
         return True
 
     def on_action(self, _button, action):
-        print(f'clicked {action}', flush=True)
-        if action == 'open' or (action == 'toggle' and not self.player):
-            if self.player:
-                try:
-                    self.connection.call_sync(self.player, control.PATH, 'org.mpris.MediaPlayer2',
-                                              'Raise', None, None, Gio.DBusCallFlags.NONE, 1000, None)
-                except GLib.Error:
-                    self.launch_spotify()
+        if action == 'open':
+            if self.source == 'apple-music':
+                self.launch_apple()
+            elif self.session:
+                self.monitor.call(self.session, 'Raise', root=True)
             else:
                 self.launch_spotify()
             return
+        if not self.session:
+            if action == 'toggle':
+                if self.source == 'apple-music':
+                    self.show_sources(self.compact_source if self.compact else self.source_button)
+                else:
+                    self.launch_spotify()
+            return
         method = {'previous': 'Previous', 'toggle': 'PlayPause', 'next': 'Next'}.get(action)
-        if method and self.player:
+        if method:
             self.call(method)
             GLib.timeout_add(150, self.refresh_once)
 
@@ -646,11 +728,8 @@ class Widget:
         return False
 
     def call(self, method, args=None):
-        try:
-            self.connection.call_sync(self.player, control.PATH, control.PLAYER, method,
-                                      args, None, Gio.DBusCallFlags.NONE, 1200, None)
-        except GLib.Error as error:
-            print(f'Spotify {method}: {error.message}', flush=True)
+        if self.session:
+            self.monitor.call(self.session, method, args)
 
     def set_art(self, url):
         if url == self.art_url:
@@ -676,56 +755,62 @@ class Widget:
         self.volume_knob.set_state(sound.volume, sound.muted, sound.available)
 
     def refresh(self):
-        try:
-            name = control.player_name(self.connection)
-            if not name:
-                self.player = None
-                self.sound.refresh(None)
-                self.playing = False
-                self.meter.stop()
-                self.length = 0
-                self.track_id = None
-                self.title.set_text('Ready when you are')
-                self.artist.set_text('Open Spotify to begin')
-                self.album.set_text('')
-                self.time.set_text('0:00  /  0:00')
-                self.progress.set_fraction(0)
-                self.previous.set_sensitive(False)
-                self.next.set_sensitive(False)
-                self.play.set_label('▶')
-                self.set_art(None)
-                return True
+        self.monitor.poll()
+        return True
 
-            self.player = name
-            self.sound.refresh(name)
-            metadata = control.property_value(self.connection, name, 'Metadata')
-            status = control.property_value(self.connection, name, 'PlaybackStatus')
-            self.playing = status == 'Playing'
-            if self.playing:
-                self.meter.start()
-            else:
-                self.meter.stop()
-            self.length = int(metadata.get('mpris:length', 0))
-            self.track_id = metadata.get('mpris:trackid')
-            try:
-                self.position = int(control.property_value(self.connection, name, 'Position'))
-            except GLib.Error:
-                self.position = 0
-            self.title.set_text(str(metadata.get('xesam:title') or 'Spotify'))
-            artists = metadata.get('xesam:artist') or []
-            self.artist.set_text(', '.join(artists) if artists else 'Музыка')
-            self.album.set_text(str(metadata.get('xesam:album') or ''))
+    def on_sessions(self, sessions):
+        self.sessions = sessions
+        self.apply_sessions()
+
+    def apply_sessions(self):
+        session = choose_session(self.sessions, self.source, self.browser_binding, self.player or '')
+        self.session = session
+        self.player = session.name if session else None
+        target = Target(self.source, session.pid if session else 0,
+                        session.family if session else '', self.player or '')
+        self.sound.refresh(target)
+        self.meter.set_target(target)
+        if not session:
+            self.playing = False
+            self.meter.stop()
+            self.length, self.position, self.track_id = 0, 0, None
+            self.title.set_text(text('Ready when you are', 'Готов играть'))
+            self.artist.set_text(text('Open Spotify to begin', 'Открой Spotify') if self.source == 'spotify'
+                                 else text('Start Apple Music · choose its browser', 'Включи Apple Music · выбери браузер'))
+            self.album.set_text('')
+            self.time.set_text('0:00  /  0:00')
+            self.progress.set_fraction(0)
+            self.play.set_sensitive(True)
+            self.progress_event.set_sensitive(False)
+            self.previous.set_sensitive(False)
+            self.next.set_sensitive(False)
+            self.play.set_label('▶')
+            self.set_art(None)
+            return
+        props, metadata = session.properties, session.metadata
+        self.playing = props.get('PlaybackStatus') == 'Playing'
+        if self.playing:
+            self.meter.start()
+        else:
+            self.meter.stop()
+        self.length = int(metadata.get('mpris:length') or 0)
+        self.track_id = metadata.get('mpris:trackid')
+        self.position = int(props.get('Position') or 0)
+        self.title.set_text(str(metadata.get('xesam:title') or ('Spotify' if self.source == 'spotify' else 'Apple Music')))
+        artists = metadata.get('xesam:artist') or []
+        self.artist.set_text(', '.join(artists) if artists else text('Music', 'Музыка'))
+        self.album.set_text(str(metadata.get('xesam:album') or ''))
+        if self.source == 'spotify':
             track_id = str(metadata.get('mpris:trackid') or '').rsplit('/', 1)[-1]
             self.panel.update_current('spotify:track:' + track_id)
-            self.time.set_text(f'{stamp(self.position)}  /  {stamp(self.length)}')
-            self.progress.set_fraction(max(0, min(1, self.position / self.length)) if self.length else 0)
-            self.previous.set_sensitive(True)
-            self.next.set_sensitive(True)
-            self.play.set_label('Ⅱ' if self.playing else '▶')
-            self.set_art(metadata.get('mpris:artUrl'))
-        except (GLib.Error, ValueError, TypeError) as error:
-            print(f'Spotify refresh: {error}', flush=True)
-        return True
+        self.time.set_text(f'{stamp(self.position)}  /  {stamp(self.length)}')
+        self.progress.set_fraction(max(0, min(1, self.position / self.length)) if self.length else 0)
+        self.previous.set_sensitive(bool(props.get('CanGoPrevious', True)))
+        self.next.set_sensitive(bool(props.get('CanGoNext', True)))
+        self.play.set_sensitive(bool(props.get('CanControl', True)))
+        self.progress_event.set_sensitive(bool(props.get('CanSeek', True)))
+        self.play.set_label('Ⅱ' if self.playing else '▶')
+        self.set_art(metadata.get('mpris:artUrl'))
 
     def animate(self, _window, frame_clock):
         frame_time = frame_clock.get_frame_time()

@@ -2,6 +2,15 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.2.0 — 2026-10-18
+
+- Spotify / Apple Music web source selector in full and compact views.
+- Explicit browser-session binding, capability-aware controls and async MPRIS polling.
+- Separate volume/mute profiles and selected-application PipeWire spectrum.
+- Source switching pauses previous playback without opening or autoplaying the next source.
+- Browser artwork support, English/Russian setup notes and D-Bus regression coverage.
+- Apple Music recommendations remain in the browser; shared-tab audio limits are documented.
+
 ## 0.1.0 — 2026-10-18
 
 First public source preview of Emberbox Audio.

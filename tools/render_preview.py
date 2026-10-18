@@ -18,6 +18,7 @@ VIDEO = (ROOT / 'src/youtube.py').exists()
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output', type=Path, required=True)
 parser.add_argument('--frames', type=int, default=48)
+parser.add_argument('--source', choices=('spotify', 'apple-music'), default='spotify')
 args = parser.parse_args()
 args.output.mkdir(parents=True, exist_ok=True)
 temporary = tempfile.TemporaryDirectory(prefix='emberbox-preview-')
@@ -85,14 +86,22 @@ else:
     widget.SpotifyVolume = DemoSound
     widget.SpotifyAudioMeter.start = lambda self: None
     widget.Artwork.load = image_load
-    widget.control.player_name = lambda _connection: 'demo'
+    from sources import Session
+    class DemoMonitor:
+        def __init__(self, connection, changed): self.changed=changed
+        def poll(self):
+            self.changed([Session('org.mpris.MediaPlayer2.spotify', 'Spotify', 'spotify', properties=values),
+                          Session('org.mpris.MediaPlayer2.firefox.instance42', 'Firefox', 'firefox', properties={
+                              **values, 'Metadata': {**metadata, 'xesam:url': 'https://music.apple.com/demo'}})])
+        def call(self,*args,**kwargs): pass
+        def close(self): pass
+    widget.Monitor = DemoMonitor
     metadata = {'xesam:title': 'Afterglow', 'xesam:artist': ['Emberbox Sessions'],
                 'xesam:album': 'Vol. 01 · Slow Evenings', 'mpris:length': 242_000_000,
                 'mpris:trackid': '/demo/afterglow', 'mpris:artUrl': 'demo'}
     values = {'Metadata': metadata, 'PlaybackStatus': 'Playing', 'Position': 82_000_000}
-    widget.control.property_value = lambda _connection, _name, key: values[key]
     widget.STATE = Path(temporary.name) / 'state.json'
-    widget.STATE.write_text(json.dumps({'x': 40, 'y': 30, 'expanded': False, 'compact': False}))
+    widget.STATE.write_text(json.dumps({'x': 40, 'y': 30, 'expanded': False, 'compact': False, 'source': args.source}))
     app = widget.Widget()
     app.panel.open = lambda: None
 

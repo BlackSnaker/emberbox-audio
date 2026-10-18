@@ -1,7 +1,6 @@
-"""Nonblocking volume and mute for Spotify's own PipeWire/PulseAudio streams."""
+"""Nonblocking volume and mute for the selected application's PipeWire/PulseAudio streams."""
 
 import json
-import re
 import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -9,37 +8,30 @@ from pathlib import Path
 from paths import CACHE_DIR, CONFIG_DIR
 
 from gi.repository import GLib
+from stream_target import Target, matches
 
 
 STATE = CONFIG_DIR / 'audio.json'
 
 
-def spotify_streams():
+def source_streams(target):
     result = subprocess.run(['pactl', '-f', 'json', 'list', 'sink-inputs'],
                             capture_output=True, text=True, timeout=2, check=True)
-    streams = []
-    for item in json.loads(result.stdout):
-        props = item.get('properties', {})
-        names = [str(props.get(key, '')).lower() for key in
-                 ('application.name', 'application.process.binary', 'application.id', 'node.name')]
-        if any(name in ('spotify', 'com.spotify.client') or re.fullmatch(r'spotify-\d+', name)
-               for name in names):
-            streams.append(item)
-    return streams
+    return [item for item in json.loads(result.stdout)
+            if matches(item.get('properties', {}), target)]
 
 
 class SpotifyVolume:
     def __init__(self, changed):
         self.changed = changed
+        self.target = None
         self.volume, self.muted, self.available = 1.0, False, False
         self.configured = False
         try:
             saved = json.loads(STATE.read_text())
-            self.volume = max(0.0, min(1.0, float(saved['volume'])))
-            self.muted = bool(saved.get('muted', False))
-            self.configured = True
-        except (OSError, ValueError, TypeError, KeyError):
-            pass
+            self.saved = saved.get('sources', {'spotify': saved})
+        except (OSError, ValueError, TypeError):
+            self.saved = {}
         self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='spotify-volume')
         self.stream_ids = set()
         self.revision = 0
@@ -71,11 +63,27 @@ class SpotifyVolume:
             self._dispatch()
         return False
 
-    def refresh(self, player):
-        available = bool(player)
+    def refresh(self, target):
+        if target != self.target:
+            old = self.target
+            if old and old.source != target.source:
+                self._remember()
+            self.target = target
+            self.revision += 1
+            self.stream_ids = set()
+            if not old or old.source != target.source:
+                saved = self.saved.get(target.source, {})
+                try:
+                    self.volume = max(0., min(1., float(saved.get('volume', 1.))))
+                    self.muted = bool(saved.get('muted', False))
+                    self.configured = 'volume' in saved
+                except (ValueError, TypeError):
+                    self.volume, self.muted, self.configured = 1., False, False
+            self.dirty = False
+        available = bool(target.player)
         if available != self.available:
             self.available = available
-            self.changed(self)
+        self.changed(self)
         if not self.busy and not self.timer:
             self._dispatch()
 
@@ -102,11 +110,16 @@ class SpotifyVolume:
             GLib.source_remove(self.save_timer)
         self.save_timer = GLib.timeout_add(400, self._save)
 
+    def _remember(self):
+        if self.target and self.configured:
+            self.saved[self.target.source] = {'volume': self.volume, 'muted': self.muted}
+
     def _save(self):
+        self._remember()
         self.save_timer = 0
         STATE.parent.mkdir(parents=True, exist_ok=True)
         temporary = STATE.with_suffix('.next.json')
-        temporary.write_text(json.dumps({'volume': self.volume, 'muted': self.muted}))
+        temporary.write_text(json.dumps({'sources': self.saved}))
         temporary.replace(STATE)
         return False
 
@@ -116,19 +129,22 @@ class SpotifyVolume:
             return False
         self.busy = True
         revision = self.revision
-        future = self.pool.submit(self._sync, self.volume, self.muted,
+        future = self.pool.submit(self._sync, self.target, self.volume, self.muted,
                                   self.dirty, self.configured, set(self.stream_ids))
         future.add_done_callback(lambda result: GLib.idle_add(self._done, revision, result))
         return False
 
-    @staticmethod
-    def _sync(volume, muted, dirty, configured, known):
-        streams = spotify_streams()
+    def _sync(self, target, volume, muted, dirty, configured, known):
+        streams = source_streams(target)
         ids = {item['index'] for item in streams}
         apply = ids if dirty else ids - known if configured else set()
         for index in apply:
+            if self.closed or self.target != target:
+                return [], set()
             for command, value in [('set-sink-input-volume', f'{volume * 100:.1f}%'),
                                    ('set-sink-input-mute', '1' if muted else '0')]:
+                if self.closed or self.target != target:
+                    return [], set()
                 subprocess.run(['pactl', command, str(index), value], check=True,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
         return streams, apply
@@ -140,12 +156,12 @@ class SpotifyVolume:
         try:
             streams, applied = future.result()
         except Exception as error:
-            print(f'Spotify volume: {error}', flush=True)
+            print(f'Audio volume: {error}', flush=True)
             return False
-        self.stream_ids = {item['index'] for item in streams}
         if revision != self.revision:
             self._dispatch()
             return False
+        self.stream_ids = {item['index'] for item in streams}
         if applied:
             self.dirty = False
         elif streams:
@@ -177,6 +193,5 @@ class SpotifyVolume:
         except subprocess.TimeoutExpired:
             self.watcher.kill()
             self.watcher.wait(timeout=.5)
-        if self.configured:
-            self._save()
+        self._save()
         self.pool.shutdown(wait=False, cancel_futures=True)

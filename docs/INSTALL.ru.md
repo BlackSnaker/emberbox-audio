@@ -82,3 +82,7 @@ systemctl --user stop emberbox-audio.service
 - Лампы неподвижны: проверь `pw-link -l` и наличие звука у нужного приложения. Аудиопорты Spotify должны быть видны в PipeWire хоста.
 - Нет звука: проверь тумблер, крутилку и системный микшер приложений.
 - Журнал службы: `journalctl --user -u emberbox-audio.service -n 40`.
+
+## Apple Music
+
+Вместо клиента Spotify можно выбрать браузер Linux с MPRIS. См. [подключение и ограничения](APPLE_MUSIC.ru.md).

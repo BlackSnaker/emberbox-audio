@@ -82,3 +82,7 @@ Uninstall removes installed application files and launchers and leaves personal 
 - **No moving lamps:** check `pw-link -l` and that the intended application is actually producing audio. Spotify output ports must be available to the host PipeWire session.
 - **No sound:** check the widget’s mute toggle, its dial and the system’s application mixer.
 - **Service diagnostics:** `journalctl --user -u emberbox-audio.service -n 40`.
+
+## Apple Music
+
+A Linux browser with MPRIS support can replace the Spotify client as a source. See [browser setup and limits](APPLE_MUSIC.md).
