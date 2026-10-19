@@ -39,7 +39,7 @@ class Session:
         # The embedded Apple engine publishes the runtime's Chromium MPRIS
         # identity. It is already exposed by our native Apple Music source.
         try:
-            if self.pid and Path(f'/proc/{self.pid}/exe').readlink().name == 'EmberboxApple':
+            if self.pid and Path(f'/proc/{self.pid}/exe').readlink().name in ('EmberboxApple','EmberboxYandex'):
                 return ''
         except OSError:
             pass

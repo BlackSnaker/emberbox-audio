@@ -11,6 +11,7 @@ python3 -m compileall -q src tools tests
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 node tests/apple_web_test.js
 node tests/apple_browser_test.js
+node tests/yandex_web_test.js
 GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a python3 tests/gui_smoke.py
 ```
 

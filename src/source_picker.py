@@ -35,7 +35,7 @@ class SourcePicker:
             box.pack_start(item, False, False, 0)
             return item
 
-        for key, name in [('spotify', 'Spotify'), ('apple-music', 'Apple Music · '+text('Your library','медиатека')), ('youtube', 'YouTube · '+text('Search & play', 'поиск и музыка'))]:
+        for key, name in [('spotify', 'Spotify'), ('apple-music', 'Apple Music · '+text('Your library','медиатека')), ('youtube', 'YouTube · '+text('Search & play', 'поиск и музыка')), ('yandex-music',text('Yandex Music · My Wave','Яндекс Музыка · Моя волна'))]:
             button(('●  ' if source == key else '○  ') + name,
                    lambda k=key: self.changed(k, None))
         browsers = [session for session in sessions if session.family]
@@ -53,12 +53,12 @@ class SourcePicker:
                 name += '\n' + title
             button(name, lambda s=session, service=site: self.changed(service, s))
         hint = Gtk.Label(label=text(
-            'Apple Music and YouTube play inside Emberbox. You can also select a browser session.\n'
+            'Apple Music, Yandex Music and YouTube play inside Emberbox. You can also select a browser session.\n'
             'Browser controls and sound may be shared with other tabs.',
-            'Apple Music и YouTube играют прямо в плеере. Можно также выбрать сеанс браузера.\n'
+            'Apple Music, Яндекс Музыка и YouTube играют прямо в плеере. Можно также выбрать сеанс браузера.\n'
             'Управление и звук браузера могут быть общими для вкладок.') if browsers else text(
-                'Apple Music and YouTube play inside Emberbox.',
-                'Apple Music и YouTube играют прямо в плеере.'))
+                'Apple Music, Yandex Music and YouTube play inside Emberbox.',
+                'Apple Music, Яндекс Музыка и YouTube играют прямо в плеере.'))
         hint.set_line_wrap(True)
         hint.set_max_width_chars(34)
         hint.get_style_context().add_class('caption')

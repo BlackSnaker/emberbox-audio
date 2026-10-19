@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.4.0 — 2026-10-19
+
+- Experimental Yandex Music source with in-player My Wave, like/dislike, search and loaded collection/queue tracks.
+- Yandex ID connection from Accounts, with a separate profile, service and private local bridge.
+- Shared playback component setup, independent volume/mute and selected-process spectrum; source switching pauses the previous player.
+- English/Russian setup and subscription tester checklist. Real Plus playback is pending tester verification; offline adapter and GTK checks are included.
+
 ## 0.3.1 — 2026-10-19
 
 - Move spectrum recorder cleanup off the GTK thread during track and audio-stream changes.

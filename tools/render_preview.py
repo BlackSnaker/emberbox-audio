@@ -21,7 +21,7 @@ parser.add_argument('--frames', type=int, default=48)
 parser.add_argument('--library', action='store_true')
 parser.add_argument('--settings', action='store_true')
 parser.add_argument('--accounts', action='store_true')
-parser.add_argument('--source', choices=('spotify', 'apple-music', 'youtube'), default='spotify')
+parser.add_argument('--source', choices=('spotify', 'apple-music', 'youtube','yandex-music'), default='spotify')
 args = parser.parse_args()
 args.output.mkdir(parents=True, exist_ok=True)
 temporary = tempfile.TemporaryDirectory(prefix='emberbox-preview-')
@@ -97,7 +97,7 @@ else:
         def __init__(self, changed):
             self.state = {'ready':True,'authorized':True,'title':'Afterglow','artist':'Emberbox Sessions',
                           'album':'Vol. 01 · Slow Evenings','duration':242,'position':82,'image':'demo',
-                          'playing':True,'canNext':True,'canPrevious':True}
+                          'playing':True,'subscribed':True,'wave':True,'canNext':True,'canPrevious':True}
         def set_enabled(self, enabled): self.enabled=enabled
         def ensure_started(self): pass
         def poll(self): pass
@@ -105,6 +105,7 @@ else:
         def request(self,*args,**kwargs): return {'items':[],'tracks':[],'next':None}
         def close(self): pass
     widget.AppleWeb = DemoAppleWeb
+    widget.YandexWeb = DemoAppleWeb
     from sources import Session
     class DemoMonitor:
         def __init__(self, connection, changed): self.changed=changed
@@ -146,6 +147,11 @@ else:
         app.expanded=True
         app.apply_layout()
         app.render_youtube()
+    if args.source=='yandex-music':
+        app.expanded=True
+        app.apply_layout()
+        app.render_apple()
+        app.yandex_panel.open()
     if args.library:
         from types import SimpleNamespace
         items=[{'id':'p.demo'+str(n),'kind':'library-playlists','title':title,'subtitle':'Emberbox Sessions',

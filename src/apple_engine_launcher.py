@@ -15,9 +15,10 @@ import tempfile
 from asar_pack import pack
 
 parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--service', choices=('apple','yandex'), default='apple')
 parser.add_argument('--runtime', type=Path, required=True, help='Installed Electron/Chromium executable.')
 parser.add_argument('--cdm-module', type=Path, required=True, help='Installed Widevine version directory with manifest.json.')
-parser.add_argument('--profile', type=Path, default=Path.home()/'.config/emberbox-audio/apple-chromium-experiment')
+parser.add_argument('--profile', type=Path)
 parser.add_argument('--socket', type=Path)
 parser.add_argument('--visible', action='store_true')
 parser.add_argument('--probe', action='store_true')
@@ -30,9 +31,9 @@ manifest = json.loads((cdm_root/'manifest.json').read_text())
 if not cdm.is_file():
     parser.error('Widevine module is missing its Linux x64 library.')
 identity = str(args.runtime.resolve())+str(args.runtime.stat().st_mtime_ns)
-cache = Path(os.environ.get('XDG_CACHE_HOME', Path.home()/'.cache'))/'emberbox-audio/apple-web-electron-runtime'/hashlib.sha256(identity.encode()).hexdigest()[:16]
+cache = Path(os.environ.get('XDG_CACHE_HOME', Path.home()/'.cache'))/f'emberbox-audio/{args.service}-web-electron-runtime'/hashlib.sha256(identity.encode()).hexdigest()[:16]
 cache.mkdir(parents=True, exist_ok=True, mode=0o700)
-binary = cache/'EmberboxApple'
+binary = cache/('EmberboxYandex' if args.service=='yandex' else 'EmberboxApple')
 if not binary.exists() or binary.stat().st_mtime_ns != args.runtime.resolve().stat().st_mtime_ns:
     shutil.copy2(args.runtime.resolve(), binary)
 for name in ('libGLESv2.so','libEGL.so','libvulkan.so.1','libvk_swiftshader.so','libffmpeg.so',
@@ -45,7 +46,7 @@ for name in ('libGLESv2.so','libEGL.so','libvulkan.so.1','libvk_swiftshader.so',
 (cache/'resources').mkdir(exist_ok=True)
 pack(Path(__file__).resolve().parent/'apple_web_host',cache/'resources/app.asar')
 temporary = tempfile.TemporaryDirectory(prefix='emberbox-chromium-check-', ignore_cleanup_errors=True) if args.probe or args.smoke_seconds else None
-profile = Path(temporary.name) if temporary else args.profile.resolve()
+profile = Path(temporary.name) if temporary else (args.profile or Path(os.environ.get('XDG_CONFIG_HOME',Path.home()/'.config'))/'emberbox-audio'/f'{args.service}-web-profile').resolve()
 profile.mkdir(parents=True, exist_ok=True, mode=0o700)
 profile.chmod(0o700)
 # Register only an installed public DRM module, never an existing browser session.
@@ -53,9 +54,9 @@ profile.chmod(0o700)
 widevine = profile/'WidevineCdm'
 widevine.mkdir(exist_ok=True)
 (widevine/'latest-component-updated-widevine-cdm').write_text(json.dumps({'Path':str(cdm_root)}))
-runtime = Path(os.environ.get('XDG_RUNTIME_DIR', tempfile.gettempdir()))/'emberbox-apple-web'
+runtime = Path(os.environ.get('XDG_RUNTIME_DIR', tempfile.gettempdir()))/f'emberbox-{args.service}-web'
 runtime.mkdir(parents=True, exist_ok=True, mode=0o700)
-env = dict(os.environ, EMBERBOX_APPLE_PROFILE=str(profile),
+env = dict(os.environ, EMBERBOX_WEB_SERVICE=args.service, EMBERBOX_APPLE_PROFILE=str(profile),
            EMBERBOX_APPLE_SOCKET=str(args.socket) if args.socket else '',
            EMBERBOX_APPLE_HIDE='0' if args.visible else '1',
            EMBERBOX_WIDEVINE=str(cdm), EMBERBOX_WIDEVINE_VERSION=manifest['version'],

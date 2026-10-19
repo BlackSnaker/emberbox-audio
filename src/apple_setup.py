@@ -24,9 +24,9 @@ def valid(config):
         return False
 
 
-def configured():
+def configured(config_path=None):
     try:
-        value = json.loads(ENGINE_CONFIG.read_text())
+        value = json.loads((config_path or ENGINE_CONFIG).read_text())
         return value if valid(value) else None
     except (OSError,ValueError):
         return None
@@ -57,18 +57,19 @@ def widevine_candidates():
             and (p/'_platform_specific/linux_x64/libwidevinecdm.so').is_file()]
 
 
-def save(config):
-    ENGINE_CONFIG.parent.mkdir(parents=True,exist_ok=True)
-    temporary = ENGINE_CONFIG.with_suffix('.next.json')
+def save(config, config_path=None):
+    destination = config_path or ENGINE_CONFIG
+    destination.parent.mkdir(parents=True,exist_ok=True)
+    temporary = destination.with_suffix('.next.json')
     with open(temporary,'w',opener=lambda path,flags:os.open(path,flags,0o600)) as stream:
         json.dump(config,stream,indent=2)
         stream.write('\n')
     temporary.chmod(0o600)
-    temporary.replace(ENGINE_CONFIG)
+    temporary.replace(destination)
 
 
-def prepare(runtime=None, module=None):
-    existing = configured()
+def prepare(runtime=None, module=None, *, config_path=None, profile_name='apple-web-profile'):
+    existing = configured(config_path)
     if existing and not runtime and not module:
         return existing
     runtimes = [str(Path(runtime).expanduser().resolve())] if runtime else runtime_candidates()
@@ -80,7 +81,7 @@ def prepare(runtime=None, module=None):
     for candidate in runtimes:
         for cdm in modules[:2]:
             config = {'runtime':candidate,'cdm_module':cdm,
-                      'profile':(existing or {}).get('profile',str(CONFIG_DIR/'apple-web-profile'))}
+                      'profile':(existing or {}).get('profile',str(CONFIG_DIR/profile_name))}
             if not valid(config):
                 continue
             try:
@@ -90,7 +91,7 @@ def prepare(runtime=None, module=None):
                 reports = [json.loads(line) for line in result.stdout.splitlines() if line.startswith('{"engine":')]
                 capabilities = reports[-1].get('capabilities',{}) if reports else {}
                 if result.returncode == 0 and capabilities.get('aac') and capabilities.get('widevine') and capabilities.get('mediaKeysCreated'):
-                    save(config)
+                    save(config,config_path)
                     return config
             except (OSError,ValueError,subprocess.SubprocessError):
                 continue

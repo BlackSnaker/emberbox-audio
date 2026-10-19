@@ -49,7 +49,7 @@ class SettingsMenu:
             return button
 
         if self.accounts:
-            self.accounts_button = action(text('Accounts · Spotify / Apple Music','Аккаунты · Spotify / Apple Music'),self.accounts)
+            self.accounts_button = action(text('Accounts · Spotify / Apple / Yandex','Аккаунты · Spotify / Apple / Яндекс'),self.accounts)
         self.mode_button = action(
             text('Full player', 'Обычный режим') if compact else text('Compact player', 'Компактный режим'),
             self.compact)

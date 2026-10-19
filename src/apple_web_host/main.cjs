@@ -6,7 +6,13 @@ const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 const net = require('node:net');
-const pageCommand = fs.readFileSync(path.join(__dirname,'page.js'),'utf8');
+const yandex = process.env.EMBERBOX_WEB_SERVICE === 'yandex';
+const service = yandex ? {title:'Yandex Music',origin:'https://music.yandex.ru/',
+  url:'https://music.yandex.ru/',command:'emberboxYandexCommand',page:'yandex.js',error:'YANDEX_REQUEST_FAILED'} :
+  {title:'Apple Music',origin:'https://music.apple.com/',url:'https://music.apple.com/us/new',
+   command:'emberboxAppleCommand',page:'page.js',error:'APPLE_REQUEST_FAILED'};
+const methods = ['status','browse','tracks','search','play','transport','seek',...(yandex?['wave','feedback']:[])];
+const pageCommand = fs.readFileSync(path.join(__dirname,service.page),'utf8');
 let enabled = false;
 const profile = process.env.EMBERBOX_APPLE_PROFILE;
 if (!profile) throw new Error('An independent EMBERBOX_APPLE_PROFILE is required.');
@@ -33,7 +39,7 @@ function record(changes) {
 }
 function appleHost(url) {
   try {const host=new URL(url).hostname;
-    return ['apple.com','applemusic.com','cdn-apple.com','mzstatic.com'].some(root=>host===root||host.endsWith('.'+root))?host:'other';
+    return (yandex?['yandex.ru','yandex.com','yandex.net','yastatic.net','yastatic-net.ru']:['apple.com','applemusic.com','cdn-apple.com','mzstatic.com']).some(root=>host===root||host.endsWith('.'+root))?host:'other';
   }catch{return 'other';}
 }
 function diagnostic(kind, url='', code) {
@@ -60,7 +66,7 @@ function consoleDiagnostic(message, source) {
 }
 function makeWindow(show=true) {
   const win = new BrowserWindow({width:1060,height:760,show,
-    title:'Emberbox Audio · Apple Music', backgroundColor:'#282828',
+    title:'Emberbox Audio · '+service.title, backgroundColor:'#282828',
     autoHideMenuBar:true,
     webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,
       allowRunningInsecureContent:false,webviewTag:false,safeDialogs:true,backgroundThrottling:false}});
@@ -81,7 +87,7 @@ function makeWindow(show=true) {
     if(isMain&&code!==-3) diagnostic('page-load-failed',url,code);
   });
   win.webContents.setWindowOpenHandler(({url})=>{
-    try {const u=new URL(url);if(u.protocol==='https:'&&(u.hostname==='apple.com'||u.hostname.endsWith('.apple.com')))
+    try {const u=new URL(url);if(u.protocol==='https:'&&(yandex?['yandex.ru','yandex.com'].some(root=>u.hostname===root||u.hostname.endsWith('.'+root)):(u.hostname==='apple.com'||u.hostname.endsWith('.apple.com'))))
       return {action:'allow',overrideBrowserWindowOptions:{autoHideMenuBar:true,
         webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}}};
     } catch {}
@@ -95,27 +101,30 @@ async function command(win, request) {
   if(request.method==='hide'){win.hide();record({windowVisible:false});return {hidden:true};}
   if(request.method==='enable') {
     enabled=params.enabled===true;
-    if(win.webContents.getURL().startsWith('https://music.apple.com/')) {
+    if(win.webContents.getURL().startsWith(service.origin)) {
       await win.webContents.executeJavaScript('window.__emberboxPlaybackAllowed='+JSON.stringify(enabled));
       if(!enabled) await command(win,{method:'transport',params:{action:'pause'}}).catch(()=>{});
     }
     return {enabled};
   }
-  if(!['status','browse','tracks','search','play','transport','seek'].includes(request.method)) throw Error('UNSUPPORTED');
-  if(!win.webContents.getURL().startsWith('https://music.apple.com/')) return {ready:false,authorized:false};
+  if(!methods.includes(request.method)) throw Error('UNSUPPORTED');
+  if(!win.webContents.getURL().startsWith(service.origin)) {
+    if(yandex&&request.method!=='status')throw Error('SIGN_IN_REQUIRED');
+    return {ready:false,authorized:false};
+  }
   const reasons=['CONTENT_EQUIVALENT','CONTENT_UNAVAILABLE','CONTENT_UNSUPPORTED','DEVICE_LIMIT','GEO_BLOCK',
     'INVALID_ARGUMENTS','MEDIA_LICENSE','MEDIA_KEY','MEDIA_PLAYBACK','NETWORK_ERROR','SUBSCRIPTION_ERROR','TypeError','ReferenceError','Error',
     'TOKEN_EXPIRED','UNAUTHORIZED_ERROR','UNSUPPORTED_ERROR','USER_INTERACTION_REQUIRED','WIDEVINE_CDM_EXPIRED',
-    'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND'];
+    'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND','REGION_UNAVAILABLE','SUBSCRIPTION_REQUIRED','ADAPTER_UNAVAILABLE','YANDEX_REQUEST_FAILED'];
   const source='(async()=>{window.__emberboxPlaybackAllowed='+JSON.stringify(enabled)+';'+pageCommand+
-    ';try{return await emberboxAppleCommand('+JSON.stringify(request)+');}catch(e){'+
-    'const code=String(e.message||"").includes("Sign in to Apple Music")?"SIGN_IN_REQUIRED":String(e.message||"").includes("MusicKit is not ready")?"NOT_READY":e.errorCode||e.reason||e.name;const hints=["is not a function","Invalid queue","No playable","storefront","not writable","undefined","not supported","user interaction"];'+
-    'return {__emberboxError:'+JSON.stringify(reasons)+'.includes(code)?code:"APPLE_REQUEST_FAILED",'+
+    ';try{return await '+service.command+'('+JSON.stringify(request)+');}catch(e){'+
+    'const code='+ (yandex?'String(e.message||e.name)': 'String(e.message||"").includes("Sign in to Apple Music")?"SIGN_IN_REQUIRED":String(e.message||"").includes("MusicKit is not ready")?"NOT_READY":e.errorCode||e.reason||e.name')+';const hints=["is not a function","Invalid queue","No playable","storefront","not writable","undefined","not supported","user interaction"];'+
+    'return {__emberboxError:'+JSON.stringify(reasons)+'.includes(code)?code:'+JSON.stringify(service.error)+','+
     'stage:["storefront","queue","start"].includes(e.emberboxStage)?e.emberboxStage:"other",'+
     'hint:hints.find(h=>String(e.message||"").includes(h))||"other"};}})()';
-  const result=await win.webContents.executeJavaScript(source,['play','transport'].includes(request.method));
+  const result=await win.webContents.executeJavaScript(source,['play','transport','wave','feedback'].includes(request.method));
   if(result?.__emberboxError){
-    diagnostic('apple-api-'+result.stage+'-'+result.hint);
+    diagnostic((yandex?'yandex-api-':'apple-api-')+result.stage+'-'+result.hint);
     throw Error(result.__emberboxError);
   }
   if(request.method==='status')record({ready:!!result.ready,authorized:!!result.authorized,
@@ -146,9 +155,9 @@ function connectBridge(win) {
         const allowed=['CONTENT_EQUIVALENT','CONTENT_UNAVAILABLE','CONTENT_UNSUPPORTED','DEVICE_LIMIT','GEO_BLOCK',
           'INVALID_ARGUMENTS','MEDIA_LICENSE','MEDIA_KEY','MEDIA_PLAYBACK','NETWORK_ERROR','SUBSCRIPTION_ERROR','TypeError','ReferenceError','Error',
           'TOKEN_EXPIRED','UNAUTHORIZED_ERROR','UNSUPPORTED_ERROR','USER_INTERACTION_REQUIRED','WIDEVINE_CDM_EXPIRED',
-          'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND'];
+          'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND','REGION_UNAVAILABLE','SUBSCRIPTION_REQUIRED','ADAPTER_UNAVAILABLE','YANDEX_REQUEST_FAILED'];
         const code=allowed.includes(value)?value:value.includes('Sign in to Apple Music')?'SIGN_IN_REQUIRED':
-          value.includes('MusicKit is not ready')?'NOT_READY':value==='TIMEOUT'?'TIMEOUT':'APPLE_REQUEST_FAILED';
+          value.includes('MusicKit is not ready')?'NOT_READY':value==='TIMEOUT'?'TIMEOUT':service.error;
         if(!socket.destroyed)socket.write(JSON.stringify({id:request.id,error:code})+'\n');
       }).finally(()=>clearTimeout(timer));
     }
@@ -172,7 +181,7 @@ app.whenReady().then(async()=>{
   if (components && typeof components.whenReady==='function') await components.whenReady();
   const requests=session.defaultSession.webRequest;
   if(requests&&typeof requests.onErrorOccurred==='function')
-    requests.onErrorOccurred({urls:['https://*.apple.com/*']},details=>{
+    requests.onErrorOccurred({urls:yandex?['https://*.yandex.ru/*','https://*.yandex.net/*']:['https://*.apple.com/*']},details=>{
       const errors=['net::ERR_CONNECTION_CLOSED','net::ERR_CONNECTION_RESET','net::ERR_TIMED_OUT',
         'net::ERR_NAME_NOT_RESOLVED','net::ERR_CERT_AUTHORITY_INVALID','net::ERR_FAILED'];
       diagnostic(errors.includes(details.error)?details.error:'request-error',details.url);
@@ -195,7 +204,7 @@ app.whenReady().then(async()=>{
     const win=makeWindow(!seconds && process.env.EMBERBOX_APPLE_HIDE!=='1');
     connectBridge(win);
     if(seconds) setTimeout(()=>{process.stdout.write(JSON.stringify(state)+'\n');app.quit();},seconds*1000);
-    await win.loadURL('https://music.apple.com/us/new');
+    await win.loadURL(service.url);
   }
 }).catch(error=>{record({startupError:error.name,
   localStack:String(error.stack).split('\n').slice(1).filter(line=>line.includes('app.asar')).slice(0,4)});

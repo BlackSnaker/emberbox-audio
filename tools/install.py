@@ -55,6 +55,7 @@ def main(argv=None):
         previous = json.loads(manifest.read_text())
         if previous['systemd']:
             service('stop', f'{APP}-apple.service')
+            service('stop', f'{APP}-yandex.service')
             service('disable', '--now', f'{APP}.service')
         for value in previous['files']:
             Path(value).unlink(missing_ok=True)
@@ -77,6 +78,7 @@ def main(argv=None):
     if was_running:
         service('stop', f'{APP}.service', check=True)
         service('stop', f'{APP}-apple.service')
+        service('stop', f'{APP}-yandex.service')
     target.mkdir(parents=True, exist_ok=True)
     if (target / 'src').exists():
         shutil.rmtree(target / 'src')

@@ -10,9 +10,9 @@
 
 ## Your music, a little warmer.
 
-A warm desktop companion for **Spotify, Apple Music and YouTube**, with audio-reactive gas-discharge tubes and controls that feel like a small piece of hi-fi equipment.
+A warm desktop companion for **Spotify, Apple Music, YouTube and Yandex Music**, with audio-reactive gas-discharge tubes and controls that feel like a small piece of hi-fi equipment.
 
-- **Choose your source.** Spotify, Apple Music or YouTube, including in mini mode. Apple Music has an in-widget library, song search and playback. [Apple Music setup →](docs/APPLE_MUSIC.md)
+- **Choose your source.** Spotify, Apple Music, YouTube or Yandex Music, including in mini mode. Apple Music has an in-widget library, song search and playback. [Apple Music setup →](docs/APPLE_MUSIC.md)
 - **Music without the window juggling.** Artwork, track details, seeking and transport controls beside your work.
 - **Real sound, warm light.** Nine frequency bands from the selected application’s audio stream, with smooth, critically damped motion.
 - **Tactile controls.** A metal mute toggle, a fine-adjustable volume dial, and separated playback buttons.
@@ -28,11 +28,17 @@ A warm desktop companion for **Spotify, Apple Music and YouTube**, with audio-re
 
 ![Account centre with original artwork and demo data](assets/accounts.png)
 
-**Settings → Accounts** brings Spotify and Apple Music together: launch official sign-in, see connection status and return to your music. First launch opens this panel automatically. Apple Music includes background component checks and setup without terminal commands. [Connect your music →](docs/ACCOUNTS.md)
+**Settings → Accounts** brings Spotify, Apple Music and Yandex Music together: launch official sign-in, see connection status and return to your music. First launch opens this panel automatically. Apple Music includes background component checks and setup without terminal commands. [Connect your music →](docs/ACCOUNTS.md)
 
 ## YouTube, without an account
 
 Select **YouTube · Search & play**, search by title or paste a YouTube/YouTube Music link. Audio plays inside the widget with cover art, a queue, seeking and the same reactive tubes. Existing browser sessions can also be selected. [Setup and details →](docs/YOUTUBE.md)
+
+## My Wave, in the warm light
+
+![Yandex Music interface with original demo artwork and synthetic playback](assets/yandex-music.png)
+
+**Experimental Yandex Music integration:** start **My Wave**, send like/dislike reactions and browse loaded search, collection and queue tracks inside the widget. Connect Yandex ID from **Settings → Accounts**. Full playback requires Yandex Plus. Subscription playback is **awaiting testers**; interface, routing and adapter checks use fixtures. [Setup and tester checklist →](docs/YANDEX_MUSIC.md)
 
 ## Get started
 
@@ -66,14 +72,14 @@ Dark olive-charcoal surfaces, warm cream type, amber light behind glass, a smoot
 | Action | Control |
 | --- | --- |
 | Move the widget | Drag its header or cover |
-| Music source | **Spotify / Apple Music / YouTube ⌄**, or **S⌄ / A⌄ / Y⌄** on the compact cover |
+| Music source | **Spotify / Apple Music / YouTube / Yandex Music ⌄**, or **S⌄ / A⌄ / Y⌄ / Я⌄** on the compact cover |
 | Compact mode | **Mini** / expand icon |
 | Volume | Wheel over the dial, or drag up/right; **Shift** for finer steps |
 | Mute | Metal toggle; the volume setting is retained |
 | Seek | Click the progress bar |
 | Browse collections | **For you** for Spotify; **Your library** for Apple Music |
 
-## What to expect in v0.3
+## What to expect in v0.4
 
 This is an early source release, built from the working desktop widgets. Apple Music's in-widget integration is experimental and uses Apple's website in a separately configured local engine; compatible runtime binaries are not distributed. Browser MPRIS remains an optional fallback. Spotify personal recommendations use an optional, version-sensitive local desktop-client integration. Website and client updates may require integration fixes; see the setup notes.
 

@@ -19,7 +19,8 @@ class AppleWeb:
     native = True
     def __init__(self, changed):
         self.changed = changed
-        self.bridge = AppleBridge('apple-player.sock', ('status','browse','tracks','search','play','transport','seek','show','hide','enable'))
+        self.bridge = AppleBridge(getattr(self,'socket_filename','apple-player.sock'),
+            ('status','browse','tracks','search','play','transport','seek','show','hide','enable')+getattr(self,'extra_methods',()))
         self.pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix='apple-player')
         self.state = {}
         self.enabled = False

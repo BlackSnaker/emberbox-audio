@@ -33,6 +33,8 @@ from source_picker import SourcePicker, text
 from apple_bridge import AppleBridge
 from apple_library import AppleLibraryPanel
 from apple_web import AppleWeb
+from yandex_web import YandexWeb
+from yandex_panel import YandexPanel
 from accounts import Accounts
 from account_panel import AccountPanel
 from ember_mpris import EmberMpris
@@ -164,6 +166,7 @@ button.settings-button:hover { color: #fabd2f; }
 .account-status { color: #b8bb26; font-size: 10px; }
 .account-spotify { color: #b8bb26; font-size: 17px; }
 .account-apple { color: #d3869b; font-size: 17px; }
+.account-yandex { color: #fabd2f; font-size: 17px; }
 .account-card button { border-radius: 10px; padding: 6px 10px; }
 button.mode-button { font-size: 10px; min-width: 30px; min-height: 20px; padding: 3px 7px; }
 .card.compact { border-radius: 18px; }
@@ -190,6 +193,7 @@ class Widget:
 
         self.apple = AppleBridge()
         self.apple_web = AppleWeb(self.on_apple_changed)
+        self.yandex_web = YandexWeb(self.on_yandex_changed)
         self.apple_was_connected = False
         self.connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
         self.mpris = EmberMpris(self.connection,self.system_action,self.seek_to,self.system_volume)
@@ -210,7 +214,7 @@ class Widget:
         except (OSError, ValueError):
             saved = {}
         self.source = saved.get('source', 'spotify')
-        if self.source not in ('spotify', 'apple-music', 'youtube'):
+        if self.source not in ('spotify', 'apple-music', 'youtube','yandex-music'):
             self.source = 'spotify'
         self.browser_binding = str(saved.get('apple_browser', ''))
         self.apple_mode = 'browser' if saved.get('apple_mode') == 'browser' else 'native'
@@ -222,7 +226,7 @@ class Widget:
         self.monitor = Monitor(self.connection, self.on_sessions)
         self.accounts_visible = False
         self.accounts = Accounts(self.apple_web,self.on_accounts_changed,self.open_spotify_login,
-                                 self.connect_for_discovery,self.account_source)
+                                 self.connect_for_discovery,self.account_source,self.yandex_web)
         self.source_picker = SourcePicker(self.select_source, self.launch_apple,self.show_accounts)
         self.settings = SettingsMenu(lambda: self.toggle_compact(None), self.reconnect_player, self.restart_widget,self.show_accounts)
         self.restarting = False
@@ -445,6 +449,9 @@ class Widget:
         self.library_stack.set_homogeneous(False)
         self.library_stack.add_named(self.panel, 'spotify')
         self.library_stack.add_named(self.apple_panel, 'apple-music')
+        self.yandex_panel = YandexPanel(self.artwork,self.yandex_web,self.start_yandex_wave,
+            lambda:self.show_accounts('yandex-music'),self.reflow)
+        self.library_stack.add_named(self.yandex_panel,'yandex-music')
         self.account_panel = AccountPanel(self.accounts,self.hide_accounts,lambda:self.window,
                                         lambda:self.reflow() if self.accounts_visible else False)
         self.library_stack.add_named(self.account_panel,'accounts')
@@ -460,6 +467,7 @@ class Widget:
         self.apple_panel.show_home()
         self.youtube.set_enabled(self.source == 'youtube' and self.youtube_mode == 'native')
         self.apple_web.set_enabled(self.apple_native())
+        self.yandex_web.set_enabled(self.source=='yandex-music')
         self.apply_layout()
         self.update_source_ui()
         if self.expanded and not self.compact:
@@ -502,6 +510,8 @@ class Widget:
         self.mpris.close()
         self.apple.close()
         self.apple_web.close()
+        self.yandex_web.close()
+        self.yandex_panel.close()
         self.monitor.close()
         self.meter.stop()
         self.sound.close()
@@ -509,7 +519,7 @@ class Widget:
 
     def show_settings(self, button):
         self.drag_offset = None
-        self.settings.show(button, self.compact, {'spotify':'Spotify','apple-music':'Apple Music','youtube':'YouTube'}[self.source])
+        self.settings.show(button, self.compact, {'spotify':'Spotify','apple-music':'Apple Music','youtube':'YouTube','yandex-music':text('Yandex Music','Яндекс Музыка')}[self.source])
 
     def show_accounts(self, service=None):
         if self.compact:
@@ -546,9 +556,9 @@ class Widget:
         self.visual_velocity = [0.] * 9
         self.equalizer.set_levels(self.visual_levels)
         self.monitor.poll()
-        if self.apple_native():
-            self.apple_web.ensure_started()
-            self.apple_web.poll()
+        if self.native_web():
+            self.native_web().ensure_started()
+            self.native_web().poll()
         if self.expanded and not self.compact:
             panel = self.active_panel()
             panel.on_refresh(None)
@@ -660,6 +670,7 @@ class Widget:
         if source == 'apple-music':
             self.apple_mode = 'browser' if session else 'native'
         self.apple_web.set_enabled(self.apple_native())
+        self.yandex_web.set_enabled(self.source=='yandex-music')
         apple_bridge = self.apple_web if self.apple_mode == 'native' else self.apple
         if self.apple_panel.bridge is not apple_bridge:
             self.apple_panel.pages = {}
@@ -679,7 +690,7 @@ class Widget:
         # A deliberate change pauses the previous source; it never autoplays
         # the next one. Closing a popover cannot start music or open a window.
         binding = self.youtube_binding if source == 'youtube' else self.browser_binding
-        selected = choose_session(self.sessions, self.source, binding, self.player or '') if not (self.youtube_native() or self.apple_native()) else None
+        selected = choose_session(self.sessions, self.source, binding, self.player or '') if not (self.youtube_native() or self.native_web()) else None
         if previous and previous.properties.get('PlaybackStatus') == 'Playing':
             if not selected or previous.name != selected.name:
                 self.monitor.call(previous, 'Pause')
@@ -700,18 +711,20 @@ class Widget:
             self.show_apple_library()
 
     def update_source_ui(self):
-        names = {'spotify':'SPOTIFY', 'apple-music':'APPLE MUSIC', 'youtube':'YOUTUBE'}
+        names = {'spotify':'SPOTIFY', 'apple-music':'APPLE MUSIC', 'youtube':'YOUTUBE','yandex-music':text('YANDEX MUSIC','ЯНДЕКС МУЗЫКА')}
         self.source_button.set_label('●  ' + names[self.source] + '  ⌄')
-        self.compact_source.set_label({'spotify':'S⌄','apple-music':'A⌄','youtube':'Y⌄'}[self.source])
+        self.compact_source.set_label({'spotify':'S⌄','apple-music':'A⌄','youtube':'Y⌄','yandex-music':'Я⌄'}[self.source])
         self.open.get_accessible().set_name({'spotify':'Open Spotify','apple-music':'Open Apple Music',
-                                            'youtube':'Open YouTube'}[self.source])
+                                            'youtube':'Open YouTube','yandex-music':'Open Yandex Music'}[self.source])
         self.library_stack.set_visible_child_name('accounts' if self.accounts_visible else self.source)
         if self.accounts_visible:
-            name,hint = text('◎  Accounts','◎  Аккаунты'),'Spotify · Apple Music'
+            name,hint = text('◎  Accounts','◎  Аккаунты'),text('Spotify · Apple · Yandex','Spotify · Apple · Яндекс')
         elif self.source == 'spotify':
             name, hint = text('✦  For you', '✦  Для тебя'), text('Mixes · discoveries · tracks','Миксы · открытия · треки')
         elif self.source == 'apple-music':
             name, hint = text('♫  Your library','♫  Медиатека'), text('Playlists · albums · songs','Плейлисты · альбомы · треки')
+        elif self.source == 'yandex-music':
+            name,hint = text('≈  My Wave','≈  Моя волна'),text('Personal stream · collection','Личный поток · коллекция')
         else:
             name, hint = '♫  YouTube', text('Search · links · queue','Поиск · ссылки · очередь')
         self.discovery_name.set_text(name)
@@ -721,13 +734,34 @@ class Widget:
     def active_panel(self):
         if self.accounts_visible:
             return self.account_panel
-        return {'spotify':self.panel,'apple-music':self.apple_panel,'youtube':self.youtube_panel}[self.source]
+        return {'spotify':self.panel,'apple-music':self.apple_panel,'youtube':self.youtube_panel,'yandex-music':self.yandex_panel}[self.source]
 
     def youtube_native(self):
         return self.source == 'youtube' and self.youtube_mode == 'native'
 
     def apple_native(self):
         return self.source == 'apple-music' and self.apple_mode == 'native'
+
+    def native_web(self):
+        if self.source=='yandex-music':return self.yandex_web
+        return self.apple_web if self.apple_native() else None
+
+    def show_yandex(self):
+        if self.compact:self.toggle_compact(None)
+        self.expanded=True
+        self.drawer.set_reveal_child(True)
+        self.yandex_panel.open()
+        self.save_position()
+
+    def start_yandex_wave(self):
+        if self.source!='yandex-music':self.select_source('yandex-music')
+        self.yandex_panel.request('wave')
+
+    def on_yandex_changed(self):
+        if not getattr(self,'resources_closed',True):
+            self.accounts.update(self.sessions)
+            self.yandex_panel.update()
+            if self.source=='yandex-music':self.render_apple()
 
     def show_apple_library(self):
         if self.compact:
@@ -745,12 +779,13 @@ class Widget:
             self.render_apple()
 
     def render_apple(self):
-        if not self.apple_native() or self.resources_closed:
+        if not self.native_web() or self.resources_closed:
             return False
-        apple, state = self.apple_web, self.apple_web.state
+        apple = self.native_web()
+        state = apple.state
         self.session = None
-        self.player = 'apple-native' if apple.connected else None
-        target = Target('apple-music', apple.pid, '', self.player or '')
+        self.player = ('yandex-native' if self.source=='yandex-music' else 'apple-native') if apple.connected else None
+        target = Target(self.source, apple.pid, '', self.player or '')
         self.sound.refresh(target)
         self.meter.set_target(target)
         self.playing = bool(apple.enabled and state.get('playing'))
@@ -759,7 +794,7 @@ class Widget:
         self.position = int(max(0, float(state.get('position') or 0))*1_000_000)
         self.track_id = None
         authorized = state.get('authorized', False)
-        self.title.set_text(state.get('title') or 'Apple Music')
+        self.title.set_text(state.get('title') or (text('Yandex Music','Яндекс Музыка') if self.source=='yandex-music' else 'Apple Music'))
         self.artist.set_text(state.get('artist') or (text('Your library is inside Emberbox','Медиатека внутри плеера') if authorized else text('Connecting your music…','Подключаю твою музыку…')))
         self.album.set_text(apple.error or state.get('album') or '')
         self.time.set_text(f'{stamp(self.position)}  /  {stamp(self.length)}')
@@ -1024,10 +1059,10 @@ class Widget:
         return False
 
     def on_seek(self, _box, event):
-        if self.apple_native():
+        if self.native_web():
             if event.button == 1 and self.length:
                 fraction = max(0.,min(1.,event.x/max(1,self.progress_event.get_allocated_width())))
-                self.apple_web.action('seek',position=fraction*self.length/1_000_000)
+                self.native_web().action('seek',position=fraction*self.length/1_000_000)
                 return True
             return False
         if self.youtube_native():
@@ -1045,6 +1080,11 @@ class Widget:
         return True
 
     def on_action(self, _button, action):
+        if self.source=='yandex-music':
+            if action=='open':self.show_yandex()
+            elif action=='toggle' and not self.yandex_web.state.get('title'):self.start_yandex_wave()
+            elif action in ('toggle','previous','next'):self.yandex_web.action('transport',action=action)
+            return
         if self.apple_native():
             if action == 'open' or (action == 'toggle' and not self.apple_web.state.get('title')):
                 self.show_apple_library()
@@ -1123,8 +1163,8 @@ class Widget:
         self.sound.set_volume(value)
 
     def seek_to(self,seconds):
-        if self.apple_native():
-            self.apple_web.action('seek',position=seconds)
+        if self.native_web():
+            self.native_web().action('seek',position=seconds)
         elif self.youtube_native():
             self.youtube.seek(seconds)
 
@@ -1140,9 +1180,10 @@ class Widget:
 
     def publish_mpris(self):
         state = {'active':False}
-        if self.apple_native():
-            item = self.apple_web.state
-            state = {**item,'active':bool(item.get('authorized') and self.apple_web.connected),'source':'apple-music',
+        if self.native_web():
+            web=self.native_web()
+            item = web.state
+            state = {**item,'active':bool(item.get('authorized') and web.connected),'source':self.source,
                      'next':item.get('canNext'),'previous':item.get('canPrevious')}
         elif self.youtube_native() and self.youtube.current:
             item = self.youtube.current
@@ -1171,7 +1212,7 @@ class Widget:
         self.apply_sessions()
 
     def apply_sessions(self):
-        if self.apple_native():
+        if self.native_web():
             self.render_apple()
             return
         if self.youtube_native():
@@ -1212,7 +1253,7 @@ class Widget:
         self.length = int(metadata.get('mpris:length') or 0)
         self.track_id = metadata.get('mpris:trackid')
         self.position = int(props.get('Position') or 0)
-        self.title.set_text(str(metadata.get('xesam:title') or {'spotify':'Spotify','apple-music':'Apple Music','youtube':'YouTube'}[self.source]))
+        self.title.set_text(str(metadata.get('xesam:title') or {'spotify':'Spotify','apple-music':'Apple Music','youtube':'YouTube','yandex-music':text('Yandex Music','Яндекс Музыка')}[self.source]))
         artists = metadata.get('xesam:artist') or []
         self.artist.set_text(', '.join(artists) if artists else text('Music', 'Музыка'))
         self.album.set_text(str(metadata.get('xesam:album') or ''))

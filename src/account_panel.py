@@ -30,7 +30,7 @@ class AccountPanel(Gtk.Box):
         titles.pack_start(label(text('Connect once. Keep your music close.','Подключи один раз — музыка всегда рядом.'),'caption'),False,False,0)
         heading.pack_start(titles,True,True,0)
         self.pack_start(heading,False,False,2)
-        for source,title in (('spotify','Spotify'),('apple-music','Apple Music')):
+        for source,title in (('spotify','Spotify'),('apple-music','Apple Music'),*([('yandex-music',text('Yandex Music','Яндекс Музыка'))] if accounts.yandex else [])):
             self._card(source,title)
         self.pack_start(label(text('Sign-in opens in the service’s own window. Return here when you’re done.',
                                   'Вход откроется в окне сервиса. После него возвращайся сюда.'),'caption'),False,False,2)
@@ -41,7 +41,7 @@ class AccountPanel(Gtk.Box):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8)
         card.get_style_context().add_class('account-card')
         row = Gtk.Box(spacing=8)
-        dot = label('●','account-spotify' if source=='spotify' else 'account-apple')
+        dot = label('●',{'spotify':'account-spotify','apple-music':'account-apple','yandex-music':'account-yandex'}[source])
         row.pack_start(dot,False,False,0)
         row.pack_start(label(title,'account-title'),True,True,0)
         spinner = Gtk.Spinner();spinner.set_no_show_all(True);row.pack_start(spinner,False,False,0)
@@ -72,21 +72,22 @@ class AccountPanel(Gtk.Box):
                                 ('module',text('Choose Widevine folder…','Выбрать папку Widevine…'))):
                 choose = Gtk.Button(label=caption)
                 choose.get_style_context().add_class('filter-chip')
-                choose.connect('clicked',lambda _b,k=key:self.choose_file(k))
+                choose.connect('clicked',lambda _b,k=key,s=source:self.choose_file(k,s))
                 details.pack_start(choose,False,False,0)
         card.pack_start(details,False,False,0)
         self.cards[source] = dict(status=status,description=description,connect=connect,listen=listen,
                                   details=details,spinner=spinner)
         self.pack_start(card,False,False,0)
 
-    def choose_file(self,key):
-        dialog = Gtk.FileChooserDialog(title=text('Apple Music playback setup','Воспроизведение Apple Music'),
+    def choose_file(self,key,source='apple-music'):
+        dialog = Gtk.FileChooserDialog(title=text('Music playback setup','Настройка воспроизведения'),
             transient_for=self.parent(),action=Gtk.FileChooserAction.OPEN if key=='runtime' else Gtk.FileChooserAction.SELECT_FOLDER)
         dialog.add_buttons(text('Cancel','Отмена'),Gtk.ResponseType.CANCEL,text('Choose','Выбрать'),Gtk.ResponseType.OK)
         if dialog.run() == Gtk.ResponseType.OK:
             setattr(self.accounts,key,dialog.get_filename())
             self.accounts.error = ''
-            self.accounts.connect('apple-music')
+            self.accounts.error_source = source
+            self.accounts.connect(source)
         dialog.destroy()
 
     def open(self):

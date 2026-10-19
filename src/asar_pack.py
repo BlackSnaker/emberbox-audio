@@ -1,4 +1,4 @@
-"""Package our three JS application files in the standard ASAR/Pickle format.
+"""Package our JS application files in the standard ASAR/Pickle format.
 
 No Node.js, package downloads, vendor code or browser profiles are involved.
 The format follows electron/asar's disk.ts and pickle.ts.
@@ -12,7 +12,7 @@ import struct
 def pack(source,destination):
     source,destination = Path(source),Path(destination)
     files,data,offset = {},[],0
-    for name in ('package.json','main.cjs','page.js'):
+    for name in ('package.json','main.cjs','page.js','yandex.js'):
         raw = (source/name).read_bytes()
         block_size = 4*1024*1024
         files[name] = {'size':len(raw),'offset':str(offset),'integrity':{

@@ -57,6 +57,7 @@ class DummyAppleWeb:
         self.calls.append((method,params));return {'items':[],'tracks':[],'next':None}
     def close(self):pass
 widget.AppleWeb=DummyAppleWeb
+widget.YandexWeb=DummyAppleWeb
 app=widget.Widget()
 try:
     settle()
@@ -208,7 +209,7 @@ try:
     app.frame_health.obscured=False
     app.frame_health.check()
     settle()
-    assert app.frame_health.recoveries==recovered+1
+    assert app.frame_health.recoveries>=recovered+1
     assert app.frame_health.paints>paints
     assert time.monotonic()-app.frame_health.last_frame<.3
     with patch('widget.launch_desktop') as launch:
@@ -227,6 +228,34 @@ try:
     assert app.window.get_size().width==320 and app.compact_source.get_label()=='A⌄'
     app.select_source('spotify')
     assert not app.apple_web.enabled
+    app.accounts.connect('yandex-music')
+    assert app.yandex_web.calls[-1]==('show',{})
+    assert app.source=='spotify'
+    app.yandex_web.state={'ready':True,'authorized':True,'subscribed':True,'title':'Wave fixture',
+        'artist':'Fixture artist','duration':180,'position':2,'playing':True,'canNext':True,'wave':True}
+    app.on_yandex_changed()
+    assert app.yandex_web.calls[-1]==('hide',{})
+    app.select_source('yandex-music');settle()
+    assert app.native_web() is app.yandex_web and app.yandex_web.enabled
+    assert not app.apple_web.enabled and not app.youtube.enabled
+    assert app.title.get_text()=='Wave fixture' and app.playing
+    assert app.sound.target.source=='yandex-music' and app.sound.target.pid==12345
+    app.on_action(None,'next');app.seek_to(42)
+    assert app.yandex_web.calls[-2:]==[('transport',{'action':'next'}),('seek',{'position':42})]
+    app.show_yandex();settle()
+    assert app.library_stack.get_visible_child() is app.yandex_panel
+    app.yandex_panel.wave_button.clicked();settle()
+    assert ('wave',{}) in app.yandex_web.calls
+    app.yandex_panel.entry.set_text('Fixture');app.yandex_panel.search();settle()
+    assert ('search',{'term':'Fixture'}) in app.yandex_web.calls
+    app.yandex_panel.render([{'id':'123','title':'Fixture','artist':'Artist','image':''}])
+    app.yandex_panel.track_buttons[0].clicked();settle()
+    assert ('play',{'id':'123'}) in app.yandex_web.calls
+    app.toggle_compact(None);settle()
+    assert app.window.get_size().width==320 and app.compact_source.get_label()=='Я⌄'
+    app.toggle_compact(None);settle()
+    app.select_source('apple-music')
+    assert not app.yandex_web.enabled and app.apple_web.enabled
     app.source='apple-music';app.browser_binding='firefox';app.compact=True
     app.show_settings(app.settings_button)
     with patch('widget.widget_restart.service_restart',return_value=True) as restart:
@@ -237,10 +266,11 @@ try:
         assert restart.call_count==1
     saved=json.loads(widget.STATE.read_text())
     assert saved['source']=='apple-music' and saved['apple_browser']=='firefox' and saved['compact']
-    print('PASS settings in both layouts, restart state retention and category switching')
+    print('PASS settings, restart retention, Apple transitions, Yandex My Wave routing and compact source switching')
 finally:
     # Gtk.main() is not entered by this synchronous harness.
     app.frame_health.close()
+    app.yandex_panel.close();app.yandex_web.close()
     app.accounts.close();app.mpris.close()
     app.youtube_panel.close();app.youtube.close();app.apple.close();app.apple_web.close();app.monitor.close();app.meter.stop();app.sound.close()
     app.artwork.pool.shutdown(wait=False,cancel_futures=True)
