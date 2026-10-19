@@ -35,6 +35,14 @@ def main():
         print('\nMissing: ' + ', '.join(missing))
         print('See docs/INSTALL.md for system packages. Nothing was installed.')
         return 1
+    if not VIDEO:
+        try:
+            importlib.import_module('mpv')
+            if not shutil.which('yt-dlp') and not (Path.home()/'.local/bin/yt-dlp').is_file():
+                raise ImportError('yt-dlp')
+            print('  OK  Optional YouTube audio: libmpv / python-mpv / yt-dlp')
+        except (ImportError, OSError):
+            print('  --  Optional YouTube search/playback needs libmpv, python-mpv and yt-dlp.')
     print('\nDependencies found. A running desktop session and PipeWire are required.')
     return 0
 

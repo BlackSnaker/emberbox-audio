@@ -2,6 +2,16 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.3.0 — 2026-10-19
+
+- In-player Spotify and Apple Music account centre with first-launch onboarding and live connection status.
+- Official sign-in windows, completion detection, missing-client guidance and Apple setup without a terminal or Node.js.
+- Native Apple Music library, catalogue search and playback; a compatible DRM-capable runtime is required.
+- YouTube audio search, links, queue and playback without an account.
+- Settings and widget restart; desktop players run in independent services.
+- Native media card branded **Ember**, with artwork, transport, seeking and volume.
+- English/Russian guides and regression checks, plus verified subscription playback and actual PipeWire spectrum.
+
 ## 0.2.0 — 2026-10-18
 
 - Spotify / Apple Music web source selector in full and compact views.

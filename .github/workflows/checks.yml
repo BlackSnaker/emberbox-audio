@@ -15,12 +15,16 @@ jobs:
       - name: System dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y python3-gi gir1.2-gtk-3.0 python3-numpy python3-pil python3-websocket python3-mpv mpv dbus-x11 xvfb
+          sudo apt-get install -y python3-gi gir1.2-gtk-3.0 python3-numpy python3-pil python3-websocket python3-mpv mpv dbus-x11 xvfb nodejs
       - name: Compile
         run: /usr/bin/python3 -m compileall -q src tools tests
       - name: Regression checks
         run: /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py' -v
       - name: MPRIS source routing
         run: dbus-run-session -- /usr/bin/python3 tests/mpris_smoke.py
+      - name: Apple Music adapters
+        run: |
+          node tests/apple_web_test.js
+          node tests/apple_browser_test.js
       - name: GTK layout and controls
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/gui_smoke.py

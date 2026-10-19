@@ -10,9 +10,9 @@
 
 ## Your music, a little warmer.
 
-A warm desktop companion for **Spotify and Apple Music on the web**, with audio-reactive gas-discharge tubes and controls that feel like a small piece of hi-fi equipment.
+A warm desktop companion for **Spotify, Apple Music and YouTube**, with audio-reactive gas-discharge tubes and controls that feel like a small piece of hi-fi equipment.
 
-- **Choose your source.** Switch between Spotify and Apple Music; the selector is available in mini mode too. [Apple Music setup →](docs/APPLE_MUSIC.md)
+- **Choose your source.** Spotify, Apple Music or YouTube, including in mini mode. Apple Music has an in-widget library, song search and playback. [Apple Music setup →](docs/APPLE_MUSIC.md)
 - **Music without the window juggling.** Artwork, track details, seeking and transport controls beside your work.
 - **Real sound, warm light.** Nine frequency bands from the selected application’s audio stream, with smooth, critically damped motion.
 - **Tactile controls.** A metal mute toggle, a fine-adjustable volume dial, and separated playback buttons.
@@ -23,6 +23,16 @@ A warm desktop companion for **Spotify and Apple Music on the web**, with audio-
   <img src="assets/preview.gif" width="460" alt="Live GTK preview with moving gas-discharge indicators">
   <p><sub>Actual GTK interface. Original demo artwork and generated audio are used for this preview.</sub></p>
 </div>
+
+## Sign in from the player
+
+![Account centre with original artwork and demo data](assets/accounts.png)
+
+**Settings → Accounts** brings Spotify and Apple Music together: launch official sign-in, see connection status and return to your music. First launch opens this panel automatically. Apple Music includes background component checks and setup without terminal commands. [Connect your music →](docs/ACCOUNTS.md)
+
+## YouTube, without an account
+
+Select **YouTube · Search & play**, search by title or paste a YouTube/YouTube Music link. Audio plays inside the widget with cover art, a queue, seeking and the same reactive tubes. Existing browser sessions can also be selected. [Setup and details →](docs/YOUTUBE.md)
 
 ## Get started
 
@@ -39,7 +49,7 @@ cd emberbox-audio
 
 Then open **Emberbox Audio** from your applications menu. Installation uses no `sudo`, downloads no code, and does not change your desktop theme. Omit `--autostart` to launch only when you choose. To try the source without installing, use `./run.sh`.
 
-Select **Spotify** or **Apple Music** in the source menu. For Apple Music, start a song at music.apple.com and bind its browser session. [Browser setup and limits →](docs/APPLE_MUSIC.md)
+Select a source in the header. Apple Music plays through a background web engine, with playlists, albums, songs and catalogue search inside Emberbox. It requires a compatible installed DRM-capable runtime and an Apple Music subscription. [One-time setup →](docs/APPLE_MUSIC.md)
 
 Open Spotify to listen to Spotify. Basic playback uses MPRIS; the personal-picks drawer has a separate local connection. [Spotify setup →](docs/SPOTIFY.md)
 
@@ -56,20 +66,20 @@ Dark olive-charcoal surfaces, warm cream type, amber light behind glass, a smoot
 | Action | Control |
 | --- | --- |
 | Move the widget | Drag its header or cover |
-| Music source | **Spotify ⌄ / Apple Music ⌄**, or **S⌄ / A⌄** on the compact cover |
+| Music source | **Spotify / Apple Music / YouTube ⌄**, or **S⌄ / A⌄ / Y⌄** on the compact cover |
 | Compact mode | **Mini** / expand icon |
 | Volume | Wheel over the dial, or drag up/right; **Shift** for finer steps |
 | Mute | Metal toggle; the volume setting is retained |
 | Seek | Click the progress bar |
-| Browse collections | **For you**; choose a collection, then a track |
+| Browse collections | **For you** for Spotify; **Your library** for Apple Music |
 
-## What to expect in v0.2
+## What to expect in v0.3
 
-This is an early source release, built from the working desktop widgets. Use the Spotify desktop client or the Apple Music web player in an MPRIS-capable Linux browser. Browser media controls and audio streams may be shared with other tabs; see the [Apple Music limits](docs/APPLE_MUSIC.md#browser-limits). Personal recommendations use an optional, version-sensitive local desktop-client integration rather than the Spotify Web API. A client update can require an integration fix; see the setup notes.
+This is an early source release, built from the working desktop widgets. Apple Music's in-widget integration is experimental and uses Apple's website in a separately configured local engine; compatible runtime binaries are not distributed. Browser MPRIS remains an optional fallback. Spotify personal recommendations use an optional, version-sensitive local desktop-client integration. Website and client updates may require integration fixes; see the setup notes.
 
 - The widget is designed to live on the desktop, underneath ordinary app windows.
 - Position, compact mode and audio preferences are kept locally in the standard XDG directories.
-- The widget does not collect passwords, cookies or session tokens. It caches music metadata and thumbnails locally.
+- Login stays on Apple's website in an Emberbox-owned profile. Credentials are not exported to the GTK interface; music metadata and thumbnails are cached locally.
 - Network work runs outside GTK’s UI thread.
 
 [Install / uninstall](docs/INSTALL.md) · [Contribute & test](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)

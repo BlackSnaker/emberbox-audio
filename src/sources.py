@@ -1,6 +1,7 @@
 """Source selection and nonblocking MPRIS discovery. No browser credentials."""
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
+from pathlib import Path
 from urllib.parse import urlparse
 from gi.repository import Gio, GLib
 import control
@@ -35,12 +36,24 @@ class Session:
 
     @property
     def family(self):
+        # The embedded Apple engine publishes the runtime's Chromium MPRIS
+        # identity. It is already exposed by our native Apple Music source.
+        try:
+            if self.pid and Path(f'/proc/{self.pid}/exe').readlink().name == 'EmberboxApple':
+                return ''
+        except OSError:
+            pass
         return browser_family(self.desktop, self.identity, self.name)
 
     @property
     def binding(self):
         # Instance suffixes and PIDs change on every browser launch.
         return self.desktop or self.identity or self.name.split('.instance')[0]
+
+    @property
+    def youtube(self):
+        host = (urlparse(str(self.metadata.get('xesam:url', ''))).hostname or '').lower()
+        return host in ('youtube.com', 'www.youtube.com', 'm.youtube.com', 'music.youtube.com', 'youtu.be')
 
     @property
     def apple(self):
@@ -51,13 +64,16 @@ class Session:
 def choose_session(sessions, source, binding='', current=''):
     if source == 'spotify':
         candidates = [s for s in sessions if s.name.startswith(control.PREFIX)]
-    else:
-        candidates = [s for s in sessions if s.family and s.apple]
+    elif source in ('apple-music', 'youtube'):
+        is_site = lambda session: session.youtube if source == 'youtube' else session.apple
+        candidates = [s for s in sessions if s.family and is_site(s)]
         if binding:
             bound = [s for s in sessions if s.family and s.binding == binding]
             # A known non-Apple URL must never be treated as Apple Music.
-            bound = [s for s in bound if not s.metadata.get('xesam:url') or s.apple]
+            bound = [s for s in bound if not s.metadata.get('xesam:url') or is_site(s)]
             candidates = bound
+    else:
+        return None
     if not candidates:
         return None
     if len(candidates) > 1:

@@ -1,0 +1,13 @@
+{
+  "manifest_version": 2,
+  "name": "Emberbox · Apple Music",
+  "version": "0.3.0",
+  "description": "Show your Apple Music library and play selected tracks in the local Emberbox widget.",
+  "browser_specific_settings": {
+    "gecko": {"id": "apple-music@emberbox.local", "strict_min_version": "128.0"}
+  },
+  "permissions": ["nativeMessaging", "scripting", "https://music.apple.com/*"],
+  "background": {"scripts": ["page.js", "background.js"]},
+  "browser_action": {"default_title": "Connect Apple Music to Emberbox"},
+  "icons": {"48": "icon.png"}
+}

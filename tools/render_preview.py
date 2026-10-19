@@ -18,12 +18,17 @@ VIDEO = (ROOT / 'src/youtube.py').exists()
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output', type=Path, required=True)
 parser.add_argument('--frames', type=int, default=48)
-parser.add_argument('--source', choices=('spotify', 'apple-music'), default='spotify')
+parser.add_argument('--library', action='store_true')
+parser.add_argument('--settings', action='store_true')
+parser.add_argument('--accounts', action='store_true')
+parser.add_argument('--source', choices=('spotify', 'apple-music', 'youtube'), default='spotify')
 args = parser.parse_args()
 args.output.mkdir(parents=True, exist_ok=True)
 temporary = tempfile.TemporaryDirectory(prefix='emberbox-preview-')
 os.environ['XDG_CONFIG_HOME'] = str(Path(temporary.name) / 'config')
 os.environ['XDG_CACHE_HOME'] = str(Path(temporary.name) / 'cache')
+os.environ['XDG_RUNTIME_DIR'] = str(Path(temporary.name) / 'runtime')
+Path(os.environ['XDG_RUNTIME_DIR']).mkdir(mode=0o700)
 sys.path.insert(0, str(ROOT / 'src'))
 
 import gi
@@ -86,6 +91,20 @@ else:
     widget.SpotifyVolume = DemoSound
     widget.SpotifyAudioMeter.start = lambda self: None
     widget.Artwork.load = image_load
+    class DemoAppleWeb:
+        native = True
+        connected, enabled, pid, error = True, True, 0, ''
+        def __init__(self, changed):
+            self.state = {'ready':True,'authorized':True,'title':'Afterglow','artist':'Emberbox Sessions',
+                          'album':'Vol. 01 · Slow Evenings','duration':242,'position':82,'image':'demo',
+                          'playing':True,'canNext':True,'canPrevious':True}
+        def set_enabled(self, enabled): self.enabled=enabled
+        def ensure_started(self): pass
+        def poll(self): pass
+        def action(self,*args,**kwargs): pass
+        def request(self,*args,**kwargs): return {'items':[],'tracks':[],'next':None}
+        def close(self): pass
+    widget.AppleWeb = DemoAppleWeb
     from sources import Session
     class DemoMonitor:
         def __init__(self, connection, changed): self.changed=changed
@@ -104,6 +123,38 @@ else:
     widget.STATE.write_text(json.dumps({'x': 40, 'y': 30, 'expanded': False, 'compact': False, 'source': args.source}))
     app = widget.Widget()
     app.panel.open = lambda: None
+    if args.accounts:
+        app.accounts.refresh = lambda:None
+        app.accounts.spotify_checked = True
+        app.accounts.spotify = ['fixture-spotify']
+        app.show_accounts()
+    if args.source == 'youtube':
+        item={'id':'jNQXAC9IVRw','url':'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+              'title':'Afterglow · Evening Session','channel':'Emberbox Sessions','duration':242}
+        queue=[dict(item,id=ident,title=title) for ident,title in (
+            ('jNQXAC9IVRw','Afterglow · Evening Session'),('mNLJMTRvyj8','Warm Frequencies · Live'),
+            ('p5qSg2wjCZA','The Quiet Hours · Jazz'),('hMbf-VPD3ck','Golden Hour · Acoustic'))]
+        app.youtube.current=item
+        app.youtube.queue=queue
+        app.youtube.index=0
+        app.youtube.loaded=True
+        app.youtube.paused=False
+        app.youtube.duration=242
+        app.youtube.position=82
+        app.youtube_panel.entry.set_text('Emberbox evening sessions')
+        app.youtube_panel.on_results(queue,None)
+        app.expanded=True
+        app.apply_layout()
+        app.render_youtube()
+    if args.library:
+        from types import SimpleNamespace
+        items=[{'id':'p.demo'+str(n),'kind':'library-playlists','title':title,'subtitle':'Emberbox Sessions',
+                'uri':'apple:library-playlists:p.demo'+str(n),'image':'demo'}
+               for n,title in enumerate(('Slow Evenings','Warm Frequencies','After Midnight','Golden Hour'))]
+        app.apple_panel.bridge=SimpleNamespace(connected=True,native=True,state={'authorized':True},request=lambda *a,**k:{'items':items,'next':None})
+        app.expanded=True
+        app.apply_layout()
+        app.apple_panel.open()
 
 started = time.monotonic()
 counter = 0
@@ -155,7 +206,26 @@ def mini():
     return False
 
 
+def show_settings():
+    app.show_settings(app.settings_button)
+    GLib.timeout_add(350, capture_settings)
+    return False
+
+
+def capture_settings():
+    x, y = app.window.get_position()
+    width, height = app.window.get_size()
+    Gdk.pixbuf_get_from_window(Gdk.get_default_root_window(), x, y, width, height).savev(
+        str(args.output / 'settings.png'), 'png', [], [])
+    app.settings.popover.popdown()
+    GLib.timeout_add(300, lambda: (GLib.timeout_add(60, frame), False)[1])
+    return False
+
+
 GLib.timeout_add(35, measure)
-GLib.timeout_add(1700, lambda: (GLib.timeout_add(60, frame), False)[1])
+if args.settings and not VIDEO:
+    GLib.timeout_add(1700, show_settings)
+else:
+    GLib.timeout_add(1700, lambda: (GLib.timeout_add(60, frame), False)[1])
 Gtk.main()
 print(args.output)

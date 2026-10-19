@@ -22,6 +22,14 @@ class Artwork:
         self.placeholder = Path(__file__).parent / 'placeholder.png'
         self.placeholders = {}
 
+    def cached_uri(self,widget):
+        token = getattr(widget,'_art_token',None)
+        if token:
+            path = self.folder/(hashlib.sha256(repr(token).encode()).hexdigest()+'.png')
+            if path.is_file():
+                return path.as_uri()
+        return ''
+
     def load(self, widget, url, size, radius=8, preserve=False, on_loaded=None):
         existing = widget.get_pixbuf() if preserve else None
         widget.set_size_request(size, size)

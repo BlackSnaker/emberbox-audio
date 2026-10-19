@@ -1,5 +1,7 @@
 """Small tactile source selector, also reachable on the compact cover."""
 import os
+import gi
+gi.require_version('Gtk', '3.0')
 from gi.repository import Gtk, Pango
 
 RU = os.environ.get('EMBERBOX_LANGUAGE', os.environ.get('LANG', 'en')).startswith('ru')
@@ -10,11 +12,12 @@ def text(en, ru):
 
 
 class SourcePicker:
-    def __init__(self, changed, launch):
+    def __init__(self, changed, launch, accounts=None):
         self.changed, self.launch = changed, launch
+        self.accounts = accounts
         self.popover = None
 
-    def show(self, anchor, source, sessions, binding):
+    def show(self, anchor, source, sessions, binding, youtube_binding='', youtube_mode='native'):
         if self.popover:
             self.popover.destroy()
         popup = self.popover = Gtk.Popover.new(anchor)
@@ -32,28 +35,35 @@ class SourcePicker:
             box.pack_start(item, False, False, 0)
             return item
 
-        for key, name in [('spotify', 'Spotify'), ('apple-music', 'Apple Music')]:
+        for key, name in [('spotify', 'Spotify'), ('apple-music', 'Apple Music · '+text('Your library','медиатека')), ('youtube', 'YouTube · '+text('Search & play', 'поиск и музыка'))]:
             button(('●  ' if source == key else '○  ') + name,
                    lambda k=key: self.changed(k, None))
-        label = Gtk.Label(label=text('Apple Music · browser session', 'Apple Music · сеанс браузера'))
-        label.get_style_context().add_class('caption')
-        box.pack_start(label, False, False, 3)
         browsers = [session for session in sessions if session.family]
+        if browsers:
+            label = Gtk.Label(label=text('Browser sessions · Apple Music / YouTube', 'Сеансы браузера · Apple Music / YouTube'))
+            label.get_style_context().add_class('caption')
+            box.pack_start(label, False, False, 3)
         for session in browsers:
             title = str(session.metadata.get('xesam:title', ''))[:34]
-            name = ('✓  ' if binding == session.binding else '') + session.identity
+            site = 'youtube' if session.youtube else 'apple-music' if session.apple else 'youtube' if source == 'youtube' else 'apple-music'
+            selected_binding = youtube_binding if site == 'youtube' else binding
+            prefix = 'YouTube' if site == 'youtube' else 'Apple Music'
+            name = ('✓  ' if selected_binding == session.binding else '') + prefix + ' · ' + session.identity
             if title:
                 name += '\n' + title
-            button(name, lambda s=session: self.changed('apple-music', s))
+            button(name, lambda s=session, service=site: self.changed(service, s))
         hint = Gtk.Label(label=text(
-            'Start a song at music.apple.com, then select its browser here.\n'
+            'Apple Music and YouTube play inside Emberbox. You can also select a browser session.\n'
             'Browser controls and sound may be shared with other tabs.',
-            'Включи трек на music.apple.com и выбери его браузер здесь.\n'
-            'Управление и звук браузера могут быть общими для вкладок.'))
+            'Apple Music и YouTube играют прямо в плеере. Можно также выбрать сеанс браузера.\n'
+            'Управление и звук браузера могут быть общими для вкладок.') if browsers else text(
+                'Apple Music and YouTube play inside Emberbox.',
+                'Apple Music и YouTube играют прямо в плеере.'))
         hint.set_line_wrap(True)
         hint.set_max_width_chars(34)
         hint.get_style_context().add_class('caption')
         box.pack_start(hint, False, False, 3)
-        button(text('Open Apple Music ↗', 'Открыть Apple Music ↗'), self.launch)
+        if self.accounts:
+            button(text('Connect accounts…','Подключить аккаунты…'),self.accounts)
         popup.show_all()
         popup.popup()

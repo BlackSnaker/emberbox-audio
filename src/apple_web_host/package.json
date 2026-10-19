@@ -1,0 +1,7 @@
+{
+  "name": "emberbox-audio",
+  "productName": "Emberbox Audio",
+  "version": "0.3.0",
+  "private": true,
+  "main": "main.cjs"
+}

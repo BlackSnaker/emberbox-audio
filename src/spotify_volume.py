@@ -114,6 +114,12 @@ class SpotifyVolume:
         if self.target and self.configured:
             self.saved[self.target.source] = {'volume': self.volume, 'muted': self.muted}
 
+    def flush(self):
+        if self.save_timer:
+            GLib.source_remove(self.save_timer)
+            self.save_timer = 0
+        self._save()
+
     def _save(self):
         self._remember()
         self.save_timer = 0

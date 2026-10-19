@@ -20,6 +20,9 @@ class InstallerTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
             target=folder/'data with spaces'/APP
             self.assertTrue((target/'src/widget.py').exists())
+            self.assertTrue((target/'src/apple_web_host/main.cjs').exists())
+            self.assertTrue((target/'tools/apple_player.py').exists())
+            self.assertTrue((target/'docs/APPLE_MUSIC.ru.md').exists())
             self.assertTrue((target/'.emberbox-install.json').exists())
             self.assertNotIn('__pycache__', [p.name for p in target.rglob('*')])
             preference=folder/'config'/APP/'prefs.json'

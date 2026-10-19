@@ -1,6 +1,7 @@
 #!/usr/bin/python
 """A draggable, directly clickable Gruvbox music desktop widget."""
 
+import os
 import json
 import math
 import subprocess
@@ -29,6 +30,17 @@ from spotify_volume import SpotifyVolume
 from sources import Monitor, choose_session
 from stream_target import Target
 from source_picker import SourcePicker, text
+from apple_bridge import AppleBridge
+from apple_library import AppleLibraryPanel
+from apple_web import AppleWeb
+from accounts import Accounts
+from account_panel import AccountPanel
+from ember_mpris import EmberMpris
+from desktop_launch import launch as launch_desktop
+from widget_settings import SettingsMenu, settings_button
+import widget_restart
+from youtube_audio import YouTubeAudio
+from youtube_panel import YouTubePanel
 
 
 ROOT = Path(__file__).parent
@@ -139,6 +151,19 @@ entry.track-search { background-color: #252721; color: #ebdbb2; border: none; bo
 button.source-button { font-size: 10px; min-height: 22px; padding: 2px 7px; }
 .source-popover button, .source-popover button:focus { outline-style: none; outline-width: 0; }
 .source-popover { background-color: #2c2c29; color: #ebdbb2; border-radius: 16px; border-color: #504945; }
+button.settings-button { min-width: 18px; min-height: 18px; padding: 3px; border-radius: 12px; color: #bdae93; }
+button.settings-button:hover { color: #fabd2f; }
+.settings-popover { background-color: #2c2c29; color: #ebdbb2; border-radius: 16px; border: 1px solid #504945; box-shadow: none; }
+.settings-popover button, .settings-popover button:focus { outline-style: none; outline-width: 0; }
+.settings-popover button.settings-action { min-height: 24px; padding: 7px 12px; border-radius: 11px; }
+.settings-popover .drawer-heading { font-size: 14px; }
+.account-card { background-color: #30302b; border-radius: 15px; padding: 13px;
+  box-shadow: -2px -2px 5px rgba(255,241,206,0.035), 3px 3px 7px rgba(0,0,0,0.24); }
+.account-title { color: #fbf1c7; font-size: 15px; font-weight: bold; }
+.account-status { color: #b8bb26; font-size: 10px; }
+.account-spotify { color: #b8bb26; font-size: 17px; }
+.account-apple { color: #d3869b; font-size: 17px; }
+.account-card button { border-radius: 10px; padding: 6px 10px; }
 button.mode-button { font-size: 10px; min-width: 30px; min-height: 20px; padding: 3px 7px; }
 .card.compact { border-radius: 18px; }
 .compact .cover-surface { padding: 4px; border-radius: 14px; }
@@ -162,7 +187,11 @@ class Widget:
             Gdk.Screen.get_default(), provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
 
+        self.apple = AppleBridge()
+        self.apple_web = AppleWeb(self.on_apple_changed)
+        self.apple_was_connected = False
         self.connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+        self.mpris = EmberMpris(self.connection,self.system_action,self.seek_to,self.system_volume)
         self.player = None
         self.session = None
         self.sessions = []
@@ -180,11 +209,23 @@ class Widget:
         except (OSError, ValueError):
             saved = {}
         self.source = saved.get('source', 'spotify')
-        if self.source not in ('spotify', 'apple-music'):
+        if self.source not in ('spotify', 'apple-music', 'youtube'):
             self.source = 'spotify'
         self.browser_binding = str(saved.get('apple_browser', ''))
+        self.apple_mode = 'browser' if saved.get('apple_mode') == 'browser' else 'native'
+        self.youtube_binding = str(saved.get('youtube_browser', ''))
+        self.youtube_mode = 'browser' if saved.get('youtube_mode') == 'browser' else 'native'
+        self.youtube_render_timer = 0
+        self.youtube_last_sound = 0.
+        self.youtube = YouTubeAudio(self.on_youtube_changed)
         self.monitor = Monitor(self.connection, self.on_sessions)
-        self.source_picker = SourcePicker(self.select_source, self.launch_apple)
+        self.accounts_visible = False
+        self.accounts = Accounts(self.apple_web,self.on_accounts_changed,self.open_spotify_login,
+                                 self.connect_for_discovery,self.account_source)
+        self.source_picker = SourcePicker(self.select_source, self.launch_apple,self.show_accounts)
+        self.settings = SettingsMenu(lambda: self.toggle_compact(None), self.reconnect_player, self.restart_widget,self.show_accounts)
+        self.restarting = False
+        self.resources_closed = False
         self.expanded = bool(saved.get('expanded', False))
         self.compact = bool(saved.get('compact', False))
         self.visual_levels = [0.0] * 9
@@ -261,6 +302,8 @@ class Widget:
         self.mini_button.get_accessible().set_description('Компактный режим: обложка, кнопки и лампы')
         self.mini_button.connect('clicked', self.toggle_compact)
         header_row.pack_end(self.mini_button, False, False, 0)
+        self.settings_button = settings_button(self.show_settings)
+        header_row.pack_end(self.settings_button, False, False, 0)
         header_row.pack_end(neon_caption, False, False, 0)
 
         body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=13)
@@ -298,6 +341,12 @@ class Widget:
         self.compact_source.get_accessible().set_name(text('Switch music source', 'Выбрать источник музыки'))
         self.compact_source.connect('clicked', self.show_sources)
         cover_overlay.add_overlay(self.compact_source)
+        self.compact_settings = settings_button(self.show_settings)
+        self.compact_settings.set_halign(Gtk.Align.END)
+        self.compact_settings.set_valign(Gtk.Align.END)
+        self.compact_settings.set_margin_end(2)
+        self.compact_settings.set_margin_bottom(2)
+        cover_overlay.add_overlay(self.compact_settings)
         body.pack_start(cover_overlay, False, False, 0)
 
         details = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
@@ -387,18 +436,35 @@ class Widget:
         self.drawer = Gtk.Revealer()
         self.drawer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
         self.drawer.set_transition_duration(240)
-        self.panel = DiscoveryPanel(self.artwork, self.play_uri, self.connect_for_discovery)
+        self.panel = DiscoveryPanel(self.artwork, self.play_uri, lambda:self.show_accounts('spotify'))
         self.panel.layout_changed = self.reflow
-        self.drawer.add(self.panel)
+        self.apple_panel = AppleLibraryPanel(self.artwork, self.apple_web if self.apple_mode == 'native' else self.apple, self.play_apple_uri, self.setup_apple_library)
+        self.apple_panel.layout_changed = self.reflow
+        self.library_stack = Gtk.Stack()
+        self.library_stack.set_homogeneous(False)
+        self.library_stack.add_named(self.panel, 'spotify')
+        self.library_stack.add_named(self.apple_panel, 'apple-music')
+        self.account_panel = AccountPanel(self.accounts,self.hide_accounts,lambda:self.window,
+                                        lambda:self.reflow() if self.accounts_visible else False)
+        self.library_stack.add_named(self.account_panel,'accounts')
+        self.youtube_panel = YouTubePanel(self.artwork, self.play_youtube, self.youtube_status, lambda:self.youtube.queue)
+        self.youtube_panel.layout_changed = self.reflow
+        self.library_stack.add_named(self.youtube_panel, 'youtube')
+        self.drawer.add(self.library_stack)
         card.pack_start(self.drawer, False, False, 0)
         self.drawer.connect('notify::child-revealed', lambda *_args: self.reflow())
 
         self.window.show_all()
         self.panel.show_home()
+        self.apple_panel.show_home()
+        self.youtube.set_enabled(self.source == 'youtube' and self.youtube_mode == 'native')
+        self.apple_web.set_enabled(self.apple_native())
         self.apply_layout()
         self.update_source_ui()
-        if self.expanded and not self.compact and self.source == 'spotify':
-            GLib.idle_add(self.panel.open)
+        if self.expanded and not self.compact:
+            GLib.idle_add(self.active_panel().open)
+        if not saved:
+            GLib.idle_add(self.show_accounts)
         GLib.idle_add(self.place_window)
         self.refresh()
         GLib.timeout_add_seconds(1, self.refresh)
@@ -421,11 +487,86 @@ class Widget:
         return False
 
     def on_destroy(self, _window):
+        self.close_resources()
+        Gtk.main_quit()
+
+    def close_resources(self):
+        if self.resources_closed:
+            return
+        self.resources_closed = True
+        self.youtube_panel.close()
+        self.youtube.close()
+        self.accounts.close()
+        self.mpris.close()
+        self.apple.close()
+        self.apple_web.close()
         self.monitor.close()
         self.meter.stop()
         self.sound.close()
         self.artwork.pool.shutdown(wait=False, cancel_futures=True)
-        Gtk.main_quit()
+
+    def show_settings(self, button):
+        self.drag_offset = None
+        self.settings.show(button, self.compact, {'spotify':'Spotify','apple-music':'Apple Music','youtube':'YouTube'}[self.source])
+
+    def show_accounts(self, service=None):
+        if self.compact:
+            self.toggle_compact(None)
+        self.accounts_visible = True
+        self.expanded = True
+        self.update_source_ui()
+        self.drawer.set_reveal_child(True)
+        self.account_panel.open()
+        self.reflow()
+        return False
+
+    def hide_accounts(self):
+        self.accounts_visible = False
+        self.update_source_ui()
+        self.active_panel().open()
+        self.reflow()
+
+    def on_accounts_changed(self):
+        if hasattr(self,'account_panel') and not getattr(self,'resources_closed',True):
+            self.account_panel.update()
+
+    def account_source(self,source):
+        self.select_source(source)
+        self.expanded = True
+        self.drawer.set_reveal_child(True)
+        self.active_panel().open()
+        self.reflow()
+
+    def reconnect_player(self):
+        self.play_request += 1
+        self.meter.stop()
+        self.visual_levels = [0.] * 9
+        self.visual_velocity = [0.] * 9
+        self.equalizer.set_levels(self.visual_levels)
+        self.monitor.poll()
+        if self.apple_native():
+            self.apple_web.ensure_started()
+            self.apple_web.poll()
+        if self.expanded and not self.compact:
+            panel = self.active_panel()
+            panel.on_refresh(None)
+
+    def restart_widget(self):
+        if self.restarting:
+            return
+        self.restarting = True
+        self.drag_offset = None
+        self.save_position()
+        self.youtube.save()
+        self.sound.flush()
+        try:
+            if widget_restart.service_restart():
+                return
+            self.close_resources()
+            widget_restart.replace_process(ROOT / 'widget.py')
+        except OSError as error:
+            self.restarting = False
+            print(f'Widget restart failed: {error}', flush=True)
 
     def layout_width(self):
         return COMPACT_WIDTH if self.compact else WIDTH
@@ -452,6 +593,7 @@ class Widget:
                       self.progress_event, self.time, self.open, self.discovery_button):
             child.set_visible(not self.compact)
         self.compact_source.set_visible(self.compact)
+        self.compact_settings.set_visible(self.compact)
         self.restore_button.set_visible(self.compact)
         self.equalizer.set_compact(self.compact)
         if self.compact:
@@ -459,7 +601,7 @@ class Widget:
             self.drawer.hide()
         else:
             self.drawer.show()
-            self.drawer.set_reveal_child(self.expanded and self.source == 'spotify')
+            self.drawer.set_reveal_child(self.expanded)
         self.load_cover(preserve=True)
         self.window.set_size_request(self.layout_width(), 1 if self.compact else HEIGHT)
         self.reflow()
@@ -467,22 +609,19 @@ class Widget:
     def toggle_compact(self, _button):
         self.compact = not self.compact
         self.apply_layout()
-        if not self.compact and self.expanded and self.source == 'spotify':
-            self.panel.open()
+        if not self.compact and self.expanded:
+            self.active_panel().open()
         if self.positioned:
             self.save_position()
 
     def toggle_discovery(self, _button):
-        if self.source == 'apple-music':
-            self.launch_apple()
-            return
         if self.compact:
             return
         self.expanded = not self.expanded
         self.chevron.set_text('⌃' if self.expanded else '⌄')
-        self.drawer.set_reveal_child(self.expanded and self.source == 'spotify')
+        self.drawer.set_reveal_child(self.expanded)
         if self.expanded:
-            self.panel.open()
+            self.active_panel().open()
         self.save_position()
 
     def reflow(self):
@@ -506,45 +645,225 @@ class Widget:
 
     def show_sources(self, button):
         self.monitor.poll()
-        self.source_picker.show(button, self.source, self.sessions, self.browser_binding)
+        self.source_picker.show(button, self.source, self.sessions, self.browser_binding, self.youtube_binding, self.youtube_mode)
 
     def select_source(self, source, session=None):
+        self.accounts_visible = False
         previous = self.session
+        if not (self.youtube_native() and source == 'youtube' and session is None):
+            self.youtube.set_enabled(False)
         self.source = source
+        if source == 'youtube':
+            self.youtube_mode = 'browser' if session else 'native'
+        if source == 'apple-music':
+            self.apple_mode = 'browser' if session else 'native'
+        self.apple_web.set_enabled(self.apple_native())
+        apple_bridge = self.apple_web if self.apple_mode == 'native' else self.apple
+        if self.apple_panel.bridge is not apple_bridge:
+            self.apple_panel.pages = {}
+            self.apple_panel.selected = None
+        self.apple_panel.bridge = apple_bridge
+        self.apple_panel.native = self.apple_mode == 'native'
+        self.apple_panel.reconnect.set_label(text('Sign in to Apple Music','Войти в Apple Music') if self.apple_panel.native else text('Connect Firefox companion','Подключить Firefox'))
         if session:
-            self.browser_binding = session.binding
+            if source == 'youtube':
+                self.youtube_binding = session.binding
+            else:
+                self.browser_binding = session.binding
             self.player = session.name
         else:
             self.player = None
         self.play_request += 1
         # A deliberate change pauses the previous source; it never autoplays
         # the next one. Closing a popover cannot start music or open a window.
-        selected = choose_session(self.sessions, self.source, self.browser_binding, self.player or '')
+        binding = self.youtube_binding if source == 'youtube' else self.browser_binding
+        selected = choose_session(self.sessions, self.source, binding, self.player or '') if not (self.youtube_native() or self.apple_native()) else None
         if previous and previous.properties.get('PlaybackStatus') == 'Playing':
             if not selected or previous.name != selected.name:
                 self.monitor.call(previous, 'Pause')
         self.meter.stop()
         self.visual_levels = [0.] * 9
         self.visual_velocity = [0.] * 9
+        self.youtube.set_enabled(self.youtube_native())
         self.update_source_ui()
         self.apply_layout()
         self.apply_sessions()
+        if self.expanded and not self.compact:
+            self.active_panel().open()
         self.save_position()
         self.monitor.poll()
+        if self.youtube_native() and not self.youtube.current:
+            self.show_youtube_search()
+        if self.apple_native() and not self.apple_web.state.get('title'):
+            self.show_apple_library()
 
     def update_source_ui(self):
-        spotify = self.source == 'spotify'
-        self.source_button.set_label('●  ' + ('SPOTIFY' if spotify else 'APPLE MUSIC') + '  ⌄')
-        self.compact_source.set_label('S⌄' if spotify else 'A⌄')
-        self.open.get_accessible().set_name('Open Spotify' if spotify else 'Open Apple Music')
-        self.discovery_name.set_text(text('✦  For you', '✦  Для тебя') if spotify else '♫  Apple Music')
-        self.discovery_hint.set_text(text('Mixes · discoveries · tracks', 'Миксы · открытия · треки') if spotify
-                                     else text('Library and picks in your browser ↗', 'Медиатека и подборки в браузере ↗'))
-        self.chevron.set_visible(spotify)
+        names = {'spotify':'SPOTIFY', 'apple-music':'APPLE MUSIC', 'youtube':'YOUTUBE'}
+        self.source_button.set_label('●  ' + names[self.source] + '  ⌄')
+        self.compact_source.set_label({'spotify':'S⌄','apple-music':'A⌄','youtube':'Y⌄'}[self.source])
+        self.open.get_accessible().set_name({'spotify':'Open Spotify','apple-music':'Open Apple Music',
+                                            'youtube':'Open YouTube'}[self.source])
+        self.library_stack.set_visible_child_name('accounts' if self.accounts_visible else self.source)
+        if self.accounts_visible:
+            name,hint = text('◎  Accounts','◎  Аккаунты'),'Spotify · Apple Music'
+        elif self.source == 'spotify':
+            name, hint = text('✦  For you', '✦  Для тебя'), text('Mixes · discoveries · tracks','Миксы · открытия · треки')
+        elif self.source == 'apple-music':
+            name, hint = text('♫  Your library','♫  Медиатека'), text('Playlists · albums · songs','Плейлисты · альбомы · треки')
+        else:
+            name, hint = '♫  YouTube', text('Search · links · queue','Поиск · ссылки · очередь')
+        self.discovery_name.set_text(name)
+        self.discovery_hint.set_text(hint)
+        self.chevron.set_visible(True)
+
+    def active_panel(self):
+        if self.accounts_visible:
+            return self.account_panel
+        return {'spotify':self.panel,'apple-music':self.apple_panel,'youtube':self.youtube_panel}[self.source]
+
+    def youtube_native(self):
+        return self.source == 'youtube' and self.youtube_mode == 'native'
+
+    def apple_native(self):
+        return self.source == 'apple-music' and self.apple_mode == 'native'
+
+    def show_apple_library(self):
+        if self.compact:
+            self.toggle_compact(None)
+        self.expanded = True
+        self.chevron.set_text('⌃')
+        self.drawer.set_reveal_child(True)
+        self.apple_panel.open()
+        self.save_position()
+
+    def on_apple_changed(self):
+        if not getattr(self,'resources_closed',True):
+            self.accounts.update(self.sessions)
+        if not getattr(self, 'resources_closed', True) and self.apple_native():
+            self.render_apple()
+
+    def render_apple(self):
+        if not self.apple_native() or self.resources_closed:
+            return False
+        apple, state = self.apple_web, self.apple_web.state
+        self.session = None
+        self.player = 'apple-native' if apple.connected else None
+        target = Target('apple-music', apple.pid, '', self.player or '')
+        self.sound.refresh(target)
+        self.meter.set_target(target)
+        self.playing = bool(apple.enabled and state.get('playing'))
+        self.meter.start() if self.playing else self.meter.stop()
+        self.length = int(max(0, float(state.get('duration') or 0))*1_000_000)
+        self.position = int(max(0, float(state.get('position') or 0))*1_000_000)
+        self.track_id = None
+        authorized = state.get('authorized', False)
+        self.title.set_text(state.get('title') or 'Apple Music')
+        self.artist.set_text(state.get('artist') or (text('Your library is inside Emberbox','Медиатека внутри плеера') if authorized else text('Connecting your music…','Подключаю твою музыку…')))
+        self.album.set_text(apple.error or state.get('album') or '')
+        self.time.set_text(f'{stamp(self.position)}  /  {stamp(self.length)}')
+        self.progress.set_fraction(max(0.,min(1.,self.position/self.length)) if self.length else 0.)
+        self.progress_event.set_sensitive(bool(authorized and self.length))
+        self.previous.set_sensitive(bool(authorized and state.get('canPrevious') and state.get('title')))
+        self.next.set_sensitive(bool(authorized and state.get('canNext') and state.get('title')))
+        self.play.set_sensitive(True)
+        self.play.set_label('Ⅱ' if self.playing else '▶')
+        self.set_art(state.get('image') or None)
+        return False
+
+    def show_youtube_search(self):
+        if self.compact:
+            self.toggle_compact(None)
+        self.expanded = True
+        self.chevron.set_text('⌃')
+        self.drawer.set_reveal_child(True)
+        self.youtube_panel.open()
+        self.youtube_panel.entry.grab_focus()
+        self.save_position()
+
+    def play_youtube(self, item, queue, start=0):
+        if self.source != 'youtube' or self.youtube_mode != 'native':
+            self.select_source('youtube')
+        self.youtube.set_enabled(True)
+        self.youtube_panel.search.cancel()
+        self.youtube.play(item, queue, start)
+        self.render_youtube()
+
+    def youtube_status(self, message):
+        self.youtube_panel.notice.set_text(message)
+
+    def on_youtube_changed(self):
+        if not self.resources_closed and not self.youtube_render_timer:
+            self.youtube_render_timer = GLib.timeout_add(80, self.render_youtube)
+
+    def render_youtube(self):
+        self.youtube_render_timer = 0
+        if not self.youtube_native() or self.resources_closed:
+            return False
+        audio, item = self.youtube, self.youtube.current
+        self.session = None
+        self.player = 'youtube-native' if item else None
+        target = Target('youtube', os.getpid(), '', self.player or '')
+        if time.monotonic() - self.youtube_last_sound >= .8 or getattr(self.sound, 'target', None) != target:
+            self.sound.refresh(target)
+            self.youtube_last_sound = time.monotonic()
+        self.meter.set_target(target)
+        self.playing = bool(item and audio.loaded and not audio.paused and not audio.eof)
+        self.meter.start() if self.playing else self.meter.stop()
+        self.length, self.position = int(audio.duration*1_000_000), int(audio.position*1_000_000)
+        self.track_id = None
+        self.title.set_text(str(item.get('title') if item else text('Find your next song','Найди свой следующий трек')))
+        self.artist.set_text(str(item.get('channel') or 'YouTube') if item else text('Search or paste a YouTube link','Поиск или ссылка YouTube'))
+        self.album.set_text(audio.error or (text('Loading audio…','Загружаю музыку…') if audio.loading else 'YouTube · '+text('audio','музыка')))
+        self.time.set_text(f'{stamp(self.position)}  /  {stamp(self.length)}' if self.length else 'LIVE' if audio.loaded else '0:00  /  0:00')
+        self.progress.set_fraction(max(0.,min(1.,self.position/self.length)) if self.length else 0.)
+        self.progress_event.set_sensitive(bool(audio.loaded and self.length))
+        self.previous.set_sensitive(bool(item and (audio.index > 0 or audio.position > 3)))
+        self.next.set_sensitive(bool(item and audio.index+1 < len(audio.queue)))
+        self.play.set_sensitive(True)
+        self.play.set_label('Ⅱ' if self.playing else '▶')
+        self.set_art(f"https://i.ytimg.com/vi/{item['id']}/hqdefault.jpg" if item else None)
+        self.youtube_panel.update_current(item['id'] if item else '')
+        if audio.error:
+            self.youtube_status(audio.error)
+        elif audio.loading:
+            self.youtube_status(text('Opening audio…','Открываю музыку…'))
+        elif not self.youtube_panel.search.process:
+            self.youtube_status('')
+        return False
+
+    def setup_apple_library(self):
+        if self.apple_native():
+            self.show_accounts('apple-music')
+            return
+        instructions = ROOT / 'browser' / 'apple-music' / 'SETUP.html'
+        if not instructions.exists():
+            instructions = ROOT.parent / 'browser' / 'apple-music' / 'SETUP.html'
+        if instructions.exists():
+            launch_desktop(['xdg-open', instructions.as_uri()])
+        else:
+            self.apple_panel.notice.set_text(text('See docs/APPLE_MUSIC.md to connect Firefox.',
+                                                  'Подключение Firefox: см. docs/APPLE_MUSIC.ru.md'))
+
+    def play_apple_uri(self, uri):
+        if self.source != 'apple-music' or not uri.startswith('apple:'):
+            return
+        parts = uri.split(':', 2)
+        if len(parts) != 3:
+            return
+        params = {'kind':parts[1],'id':parts[2]}
+        if self.apple_native() and parts[1] in ('library-songs','songs'):
+            tracks = (self.apple_panel.track_data or {}).get('tracks',[])
+            queue = [item['uri'].split(':',2)[2] for item in tracks if item.get('uri','').startswith('apple:'+parts[1]+':')]
+            if len(queue)>1:
+                params['queue'] = queue[:100]
+        self.apple_panel._request(lambda:self.apple_panel.bridge.request('play',**params),
+                                  lambda _result:GLib.timeout_add(200,self.refresh_once))
 
     def launch_apple(self):
-        subprocess.Popen(['xdg-open', 'https://music.apple.com/'],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if self.apple_native():
+            self.show_apple_library()
+        else:
+            launch_desktop(['xdg-open', 'https://music.apple.com/'])
 
     def launch_spotify(self, uri=None):
         flags = ['--remote-debugging-port=43827', '--remote-debugging-address=127.0.0.1']
@@ -557,7 +876,14 @@ class Widget:
             return
         if uri:
             command.append(uri)
-        subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        launch_desktop(command)
+
+    def open_spotify_login(self):
+        session = self.accounts.spotify_session()
+        if session:
+            self.monitor.call(session,'Raise',root=True)
+        elif self.accounts.spotify:
+            launch_desktop(list(self.accounts.spotify))
 
     def connect_for_discovery(self):
         def work():
@@ -668,7 +994,9 @@ class Widget:
         STATE.parent.mkdir(parents=True, exist_ok=True)
         STATE.write_text(json.dumps({'x': x, 'y': y, 'expanded': self.expanded,
                                      'compact': self.compact, 'source': self.source,
-                                     'apple_browser': self.browser_binding}) + '\n')
+                                     'apple_browser': self.browser_binding, 'youtube_mode': self.youtube_mode,
+                                     'apple_mode': self.apple_mode,
+                                     'youtube_browser': self.youtube_binding}) + '\n')
         return False
 
     def on_drag(self, _box, event):
@@ -694,6 +1022,18 @@ class Widget:
         return False
 
     def on_seek(self, _box, event):
+        if self.apple_native():
+            if event.button == 1 and self.length:
+                fraction = max(0.,min(1.,event.x/max(1,self.progress_event.get_allocated_width())))
+                self.apple_web.action('seek',position=fraction*self.length/1_000_000)
+                return True
+            return False
+        if self.youtube_native():
+            if event.button == 1 and self.youtube.loaded and self.youtube.duration:
+                fraction = max(0.,min(1.,event.x/max(1,self.progress_event.get_allocated_width())))
+                self.youtube.seek(fraction*self.youtube.duration)
+                return True
+            return False
         if event.button != 1 or not self.player or not self.length or not self.track_id:
             return False
         width = max(1, self.progress_event.get_allocated_width())
@@ -703,6 +1043,23 @@ class Widget:
         return True
 
     def on_action(self, _button, action):
+        if self.apple_native():
+            if action == 'open' or (action == 'toggle' and not self.apple_web.state.get('title')):
+                self.show_apple_library()
+            elif action in ('toggle','previous','next'):
+                self.apple_web.action('transport',action=action)
+            return
+        if self.source == 'youtube':
+            if action == 'open':
+                url = self.youtube.current['url'] if self.youtube_native() and self.youtube.current else 'https://www.youtube.com/'
+                launch_desktop(['xdg-open',url])
+                return
+            if self.youtube_native():
+                if action == 'toggle':
+                    self.youtube.toggle() if self.youtube.current else self.show_youtube_search()
+                elif action in ('previous','next'):
+                    self.youtube.skip(-1 if action == 'previous' else 1)
+                return
         if action == 'open':
             if self.source == 'apple-music':
                 self.launch_apple()
@@ -713,7 +1070,7 @@ class Widget:
             return
         if not self.session:
             if action == 'toggle':
-                if self.source == 'apple-music':
+                if self.source in ('apple-music','youtube'):
                     self.show_sources(self.compact_source if self.compact else self.source_button)
                 else:
                     self.launch_spotify()
@@ -754,16 +1111,68 @@ class Widget:
         self.mute_toggle.set_state(sound.volume, sound.muted, sound.available)
         self.volume_knob.set_state(sound.volume, sound.muted, sound.available)
 
+    def system_volume(self,value):
+        if self.sound.muted and value>0:
+            self.sound.toggle_mute()
+        self.sound.set_volume(value)
+
+    def seek_to(self,seconds):
+        if self.apple_native():
+            self.apple_web.action('seek',position=seconds)
+        elif self.youtube_native():
+            self.youtube.seek(seconds)
+
+    def system_action(self,method,uri=None):
+        if method=='OpenUri' and self.apple_native():
+            self.play_apple_uri(uri)
+            return
+        if method=='Play' and self.playing or method in ('Pause','Stop') and not self.playing:
+            return
+        action = {'Next':'next','Previous':'previous','Play':'toggle','PlayPause':'toggle','Pause':'toggle','Stop':'toggle'}.get(method)
+        if action:
+            self.on_action(None,action)
+
+    def publish_mpris(self):
+        state = {'active':False}
+        if self.apple_native():
+            item = self.apple_web.state
+            state = {**item,'active':bool(item.get('authorized') and self.apple_web.connected),'source':'apple-music',
+                     'next':item.get('canNext'),'previous':item.get('canPrevious')}
+        elif self.youtube_native() and self.youtube.current:
+            item = self.youtube.current
+            state = {'active':True,'source':'youtube','id':item['id'],'title':item.get('title',''),
+                     'artist':item.get('channel',''),'image':item.get('image',item.get('thumbnail','')),
+                     'next':self.youtube.index<len(self.youtube.queue)-1,'previous':self.youtube.index>0}
+        state.update(duration=self.length,position=self.position,playing=self.playing)
+        if state.get('active'):
+            state['image'] = self.artwork.cached_uri(self.cover) or state.get('image','')
+        if hasattr(self,'sound'):
+            state['volume'] = 0. if self.sound.muted else self.sound.volume
+        self.mpris.publish(state)
+
     def refresh(self):
+        self.publish_mpris()
+        connected = bool(self.apple_web.state.get('ready') and self.apple_web.state.get('authorized')) if self.apple_native() else self.apple.connected
+        if connected and not self.apple_was_connected and self.source == 'apple-music' and self.expanded and not self.compact:
+            self.apple_panel.open()
+        self.apple_was_connected = connected
         self.monitor.poll()
         return True
 
     def on_sessions(self, sessions):
         self.sessions = sessions
+        self.accounts.update(sessions)
         self.apply_sessions()
 
     def apply_sessions(self):
-        session = choose_session(self.sessions, self.source, self.browser_binding, self.player or '')
+        if self.apple_native():
+            self.render_apple()
+            return
+        if self.youtube_native():
+            self.render_youtube()
+            return
+        binding = self.youtube_binding if self.source == 'youtube' else self.browser_binding
+        session = choose_session(self.sessions, self.source, binding, self.player or '')
         self.session = session
         self.player = session.name if session else None
         target = Target(self.source, session.pid if session else 0,
@@ -776,6 +1185,7 @@ class Widget:
             self.length, self.position, self.track_id = 0, 0, None
             self.title.set_text(text('Ready when you are', 'Готов играть'))
             self.artist.set_text(text('Open Spotify to begin', 'Открой Spotify') if self.source == 'spotify'
+                                 else text('Start YouTube · choose its browser','Включи YouTube · выбери браузер') if self.source == 'youtube'
                                  else text('Start Apple Music · choose its browser', 'Включи Apple Music · выбери браузер'))
             self.album.set_text('')
             self.time.set_text('0:00  /  0:00')
@@ -796,7 +1206,7 @@ class Widget:
         self.length = int(metadata.get('mpris:length') or 0)
         self.track_id = metadata.get('mpris:trackid')
         self.position = int(props.get('Position') or 0)
-        self.title.set_text(str(metadata.get('xesam:title') or ('Spotify' if self.source == 'spotify' else 'Apple Music')))
+        self.title.set_text(str(metadata.get('xesam:title') or {'spotify':'Spotify','apple-music':'Apple Music','youtube':'YouTube'}[self.source]))
         artists = metadata.get('xesam:artist') or []
         self.artist.set_text(', '.join(artists) if artists else text('Music', 'Музыка'))
         self.album.set_text(str(metadata.get('xesam:album') or ''))

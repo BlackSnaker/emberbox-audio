@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><title>Emberbox · Apple Music</title>
+<style>body{max-width:720px;margin:8vh auto;padding:28px;background:#282828;color:#ebdbb2;font:17px/1.65 system-ui}h1{color:#fabd2f}code{color:#b8bb26;background:#32302f;padding:3px 6px;border-radius:5px}a{color:#fabd2f}.en{color:#bdae93}li{margin:14px 0}</style>
+<h1>Apple Music внутри Emberbox</h1>
+<p>Модуль передаёт из уже открытой вкладки Apple Music названия, обложки, альбомы, плейлисты и команды воспроизведения в локальный виджет. Доступ ограничен <b>music.apple.com</b>. Cookies, пароли и токены не копируются. Сторонним серверам данные не отправляются.</p>
+<ol><li>Для установки из исходников сначала выполни <code>python3 tools/apple_browser.py install</code>. В настроенной локальной версии этот шаг уже выполнен.</li>
+<li>Открой в Firefox <code>about:debugging#/runtime/this-firefox</code>.</li>
+<li>Нажми <b>«Загрузить временное дополнение…»</b> / <b>Load Temporary Add-on…</b>.</li>
+<li>Выбери <code>manifest.json</code> из этой папки: <b>browser/apple-music</b>.</li>
+<li>Оставь вкладку Apple Music открытой. В Emberbox открой <b>«Медиатека»</b> и нажми <b>↻</b>.</li></ol>
+<p>Это неподписанная версия для разработки. Firefox удаляет временные дополнения после перезапуска. Для постоянной установки потребуется подпись Mozilla; проверки подписей отключать не нужно.</p>
+<hr><h2>English</h2><p class="en">Register the native host with <code>python3 tools/apple_browser.py install</code>. Open <code>about:debugging#/runtime/this-firefox</code>, choose <b>Load Temporary Add-on</b>, select this folder’s <code>manifest.json</code>, then refresh the library inside Emberbox. Only music.apple.com is accessed; credentials stay in the browser. Temporary add-ons last until Firefox restarts. A signed Mozilla distribution is required for persistent installation.</p>

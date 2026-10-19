@@ -36,6 +36,7 @@ def main(argv=None):
     target = data / APP
     unit = config / 'systemd/user' / f'{APP}.service'
     desktop = data / 'applications' / f'{APP}.desktop'
+    media_desktop = data / 'applications' / 'emberbox-audio-player.desktop'
     launcher = args.bin_dir / APP
     autostart = config / 'autostart' / f'{APP}.desktop'
     manifest = target / '.emberbox-install.json'
@@ -53,6 +54,7 @@ def main(argv=None):
     if args.action == 'uninstall':
         previous = json.loads(manifest.read_text())
         if previous['systemd']:
+            service('stop', f'{APP}-apple.service')
             service('disable', '--now', f'{APP}.service')
         for value in previous['files']:
             Path(value).unlink(missing_ok=True)
@@ -68,19 +70,26 @@ def main(argv=None):
             return result.returncode
     if use_systemd and not shutil.which('systemctl'):
         parser.error('systemctl is missing. Use --no-systemd for a direct launcher.')
-    for file in (unit, desktop, launcher):
+    for file in (unit, desktop, media_desktop, launcher):
         if file.exists() and not manifest.exists():
             parser.error(f'Refusing to overwrite an unmanaged file: {file}')
     was_running = use_systemd and service('is-active', '--quiet', f'{APP}.service').returncode == 0
     if was_running:
         service('stop', f'{APP}.service', check=True)
+        service('stop', f'{APP}-apple.service')
     target.mkdir(parents=True, exist_ok=True)
     if (target / 'src').exists():
         shutil.rmtree(target / 'src')
     shutil.copytree(ROOT / 'src', target / 'src', ignore=shutil.ignore_patterns('__pycache__', '*.pyc'))
-    (target / 'assets').mkdir(exist_ok=True)
-    shutil.copy2(ROOT / 'assets/icon.svg', target / 'assets/icon.svg')
-    for name in ('README.md', 'LICENSE', 'VERSION'):
+    if (target / 'browser').exists():
+        shutil.rmtree(target / 'browser')
+    shutil.copytree(ROOT / 'browser', target / 'browser')
+    (target / 'tools').mkdir(exist_ok=True)
+    shutil.copy2(ROOT / 'tools/apple_browser.py', target / 'tools/apple_browser.py')
+    shutil.copy2(ROOT / 'tools/apple_player.py', target / 'tools/apple_player.py')
+    shutil.copytree(ROOT / 'docs', target / 'docs', dirs_exist_ok=True)
+    shutil.copytree(ROOT / 'assets', target / 'assets', dirs_exist_ok=True)
+    for name in ('README.md', 'README.ru.md', 'LICENSE', 'VERSION'):
         shutil.copy2(ROOT / name, target / name)
 
     direct = f'export GDK_BACKEND=x11\nexec {shlex.quote(sys.executable)} {shlex.quote(str(target / "src/widget.py"))} "$@"\n'
@@ -94,7 +103,8 @@ def main(argv=None):
                     f'Icon={target / "assets/icon.svg"}\nTerminal=false\n'
                     'Categories=AudioVideo;Player;\nStartupNotify=false\n')
     desktop.write_text(desktop_text)
-    files = [str(launcher), str(desktop)]
+    media_desktop.write_text(desktop_text.replace(f'Name={TITLE}', 'Name=Ember')+'NoDisplay=true\n')
+    files = [str(launcher), str(desktop),str(media_desktop)]
     if use_systemd:
         unit.parent.mkdir(parents=True, exist_ok=True)
         unit.write_text(f'''[Unit]

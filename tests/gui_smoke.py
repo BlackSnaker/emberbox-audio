@@ -5,11 +5,14 @@ from pathlib import Path
 import sys
 import tempfile
 import time
+from unittest.mock import patch
 
 ROOT=Path(__file__).resolve().parents[1]
 fixture=tempfile.TemporaryDirectory(prefix='emberbox-gui-')
 os.environ['XDG_CONFIG_HOME']=str(Path(fixture.name)/'config')
 os.environ['XDG_CACHE_HOME']=str(Path(fixture.name)/'cache')
+os.environ['XDG_RUNTIME_DIR'] = str(Path(fixture.name) / 'runtime')
+Path(os.environ['XDG_RUNTIME_DIR']).mkdir(mode=0o700)
 sys.path.insert(0,str(ROOT/'src'))
 import gi
 gi.require_version('Gtk','3.0')
@@ -27,11 +30,13 @@ def settle():
 class DummySound:
     def __init__(self,changed):
         self.volume=.6;self.muted=False;self.available=False;self.changed=changed
-    def refresh(self,_player):pass
+    def refresh(self,_player):self.target=_player
     def set_volume(self,_value):pass
     def toggle_mute(self):pass
     def close(self):pass
+    def flush(self):self.flushed=True
 widget.SpotifyVolume=DummySound
+widget.Artwork.load=lambda self,image,url,size,radius=8,preserve=False,on_loaded=None:image.set_size_request(size,size)
 from sources import Session
 class DummyMonitor:
     def __init__(self, connection, changed): self.changed=changed;self.calls=[]
@@ -40,10 +45,36 @@ class DummyMonitor:
     def close(self): pass
 widget.Monitor=DummyMonitor
 widget.SpotifyAudioMeter.start=lambda self:None
+class DummyAppleWeb:
+    native=True
+    def __init__(self,changed):
+        self.state={};self.enabled=False;self.connected=True;self.pid=12345;self.error='';self.calls=[]
+    def set_enabled(self,value):self.enabled=value
+    def ensure_started(self):pass
+    def poll(self):pass
+    def action(self,method,**params):self.calls.append((method,params))
+    def request(self,method,**params):
+        self.calls.append((method,params));return {'items':[],'tracks':[],'next':None}
+    def close(self):pass
+widget.AppleWeb=DummyAppleWeb
 app=widget.Widget()
 try:
     settle()
     assert app.window.get_size().width==460
+    assert app.settings_button.get_visible()
+    app.settings_button.clicked()
+    settle()
+    assert app.settings.popover.get_visible()
+    app.settings.mode_button.clicked()
+    settle()
+    assert app.compact and app.compact_settings.get_visible()
+    assert app.window.get_size().width==320
+    app.compact_settings.clicked()
+    settle()
+    assert app.settings.popover.get_visible()
+    app.settings.mode_button.clicked()
+    settle()
+    assert not app.compact
     app.toggle_compact(None)
     settle()
     assert app.window.get_size().width==320
@@ -51,12 +82,36 @@ try:
     app.toggle_compact(None)
     settle()
     assert app.window.get_size().width==460
+    app.show_accounts()
+    assert app.library_stack.get_visible_child() is app.account_panel
+    app.accounts.spotify=['fixture-spotify'];app.accounts.spotify_checked=True
+    with patch.object(app.accounts,'open_spotify') as open_spotify, patch('accounts.launch') as external:
+        app.accounts.connect('spotify')
+        open_spotify.assert_called_once()
+        external.assert_not_called()
+    before=app.source
+    app.accounts.connect('apple-music')
+    assert app.apple_web.calls[-1]==('show',{})
+    app.apple_web.state={'ready':True,'authorized':True}
+    app.on_apple_changed()
+    assert app.apple_web.calls[-1]==('hide',{}) and not app.accounts.pending['apple-music']
+    assert app.source==before  # Signing in never pauses or switches playback.
+    app.account_panel.update()
+    assert app.account_panel.cards['apple-music']['listen'].get_visible()
+    app.account_panel.cards['apple-music']['listen'].clicked()
+    assert app.apple_native() and not app.accounts_visible
+    app.select_source('spotify')
     spotify=Session('org.mpris.MediaPlayer2.spotify', 'Spotify', 'spotify', 1,
         {'PlaybackStatus':'Playing','Metadata':{'xesam:title':'Spotify track'}})
     browser=Session('org.mpris.MediaPlayer2.firefox.instance123', 'Firefox', 'firefox', 2,
         {'PlaybackStatus':'Paused','Metadata':{'xesam:title':'Apple track'}})
     app.on_sessions([spotify,browser])
     assert app.title.get_text()=='Spotify track'
+    with patch('widget.launch_desktop') as launch:
+        app.open_spotify_login()
+        assert app.monitor.calls[-1]==(spotify.name,'Raise')
+        launch.assert_not_called()
+    app.monitor.calls.clear()
     app.select_source('apple-music',browser)
     assert app.title.get_text()=='Apple track'
     assert app.monitor.calls==[(spotify.name,'Pause')]
@@ -77,8 +132,9 @@ try:
     assert not app.source_picker.popover.get_visible()
     app.expanded=True;app.apply_layout()
     app.select_source('apple-music',browser)
-    assert not app.drawer.get_reveal_child()
-    assert app.discovery_name.get_text()=='♫  Apple Music'
+    assert app.drawer.get_reveal_child()
+    assert app.library_stack.get_visible_child() is app.apple_panel
+    assert 'library' in app.discovery_name.get_text().lower()
     app.select_source('spotify')
     assert app.drawer.get_reveal_child()
     panel=app.panel
@@ -91,9 +147,68 @@ try:
     panel.select_shelf(chips[0],0)
     assert panel._active_shelf==0
     assert chips[0].get_active() and not chips[1].get_active()
-    print('PASS compact layout and non-recursive category switching')
+    app.select_source('youtube')
+    settle()
+    assert app.youtube_native() and app.expanded and not app.compact
+    assert app.library_stack.get_visible_child() is app.youtube_panel
+    first={'id':'jNQXAC9IVRw','url':'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+           'title':'YouTube fixture','channel':'Fixture','duration':19}
+    with patch.object(app.youtube,'_ensure_player',return_value=False), patch('widget.launch_desktop') as launch:
+        app.youtube_panel.on_results([first],None)
+        app.youtube_panel.buttons[0][0].clicked()
+        assert app.youtube.current['id']==first['id']
+        assert app.title.get_text()=='YouTube fixture'
+        launch.assert_not_called()
+        app.youtube_panel.entry.set_text('https://youtu.be/jNQXAC9IVRw?t=4')
+        app.youtube_panel.submit()
+        assert app.youtube.position==4
+        launch.assert_not_called()
+    app.toggle_compact(None)
+    settle()
+    assert app.window.get_size().width==320 and app.compact_source.get_label()=='Y⌄'
+    app.select_source('spotify')
+    assert not app.youtube.enabled and app.youtube.paused
+    app.select_source('apple-music')
+    settle()
+    assert app.apple_native() and app.apple_web.enabled
+    assert app.apple_panel.bridge is app.apple_web and app.apple_panel.native
+    assert app.library_stack.get_visible_child() is app.apple_panel and app.expanded
+    app.apple_web.state={'ready':True,'authorized':True,'title':'Apple fixture','artist':'Fixture artist',
+                         'duration':200,'position':20,'playing':True,'canNext':True,'canPrevious':True}
+    app.render_apple()
+    assert app.title.get_text()=='Apple fixture' and app.playing
+    assert app.sound.target.pid==12345 and app.sound.target.source=='apple-music'
+    assert app.sound.target.family==''
+    with patch('widget.launch_desktop') as launch:
+        app.on_action(None,'toggle');app.on_action(None,'next')
+        assert app.apple_web.calls[-2:]==[('transport',{'action':'toggle'}),('transport',{'action':'next'})]
+        app.apple_panel.category='songs'
+        song={'id':'i.fixture','kind':'library-songs','title':'Fixture song','artist':'Artist',
+              'duration_ms':200000,'uri':'apple:library-songs:i.fixture','image':''}
+        app.apple_panel.pages={'songs':{'items':[song],'next':None}}
+        app.apple_panel.render_page()
+        app.apple_panel.track_buttons[0][0].clicked()
+        settle()
+        assert ('play',{'kind':'library-songs','id':'i.fixture'}) in app.apple_web.calls
+        launch.assert_not_called()
+    app.toggle_compact(None);settle()
+    assert app.window.get_size().width==320 and app.compact_source.get_label()=='A⌄'
+    app.select_source('spotify')
+    assert not app.apple_web.enabled
+    app.source='apple-music';app.browser_binding='firefox';app.compact=True
+    app.show_settings(app.settings_button)
+    with patch('widget.widget_restart.service_restart',return_value=True) as restart:
+        app.settings.restart_button.clicked()
+        assert restart.call_count==1
+        assert app.sound.flushed
+        app.restart_widget()
+        assert restart.call_count==1
+    saved=json.loads(widget.STATE.read_text())
+    assert saved['source']=='apple-music' and saved['apple_browser']=='firefox' and saved['compact']
+    print('PASS settings in both layouts, restart state retention and category switching')
 finally:
     # Gtk.main() is not entered by this synchronous harness.
-    app.meter.stop();app.sound.close()
+    app.accounts.close();app.mpris.close()
+    app.youtube_panel.close();app.youtube.close();app.apple.close();app.apple_web.close();app.monitor.close();app.meter.stop();app.sound.close()
     app.artwork.pool.shutdown(wait=False,cancel_futures=True)
 
