@@ -89,7 +89,7 @@ class FixtureLyrics:
 cover = GdkPixbuf.Pixbuf.new_from_file(str(ROOT/'assets/demo-cover.png'))
 
 
-def image_load(_loader, image, url, size, radius=8, preserve=False, on_loaded=None):
+def image_load(_loader, image, url, size, radius=8, preserve=False, on_loaded=None, **_options):
     image.set_size_request(size, size)
     image.set_from_pixbuf(cover.scale_simple(size, size, GdkPixbuf.InterpType.BILINEAR))
     if on_loaded:

@@ -15,7 +15,7 @@ jobs:
       - name: System dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y python3-gi gir1.2-gtk-3.0 python3-numpy python3-pil python3-websocket python3-mpv mpv dbus-x11 xvfb nodejs
+          sudo apt-get install -y python3-gi gir1.2-gtk-3.0 python3-numpy python3-pil python3-websocket python3-mpv mpv ffmpeg dbus-x11 xvfb nodejs
       - name: Compile
         run: /usr/bin/python3 -m compileall -q src tools tests
       - name: Regression checks
@@ -31,3 +31,5 @@ jobs:
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/gui_smoke.py
       - name: Fullscreen listening room
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/fullscreen_smoke.py
+      - name: Silent motion artwork
+        run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/motion_smoke.py

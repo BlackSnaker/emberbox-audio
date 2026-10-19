@@ -24,6 +24,9 @@ const call = (method,params={})=>context.emberboxAppleCommand({method,params});
 (async()=>{
   let result = await call('status');
   assert.equal(result.title,'Fixture');assert.equal(result.playing,false);
+  resource.attributes.playParams.catalogId='12345';resource.attributes.url='https://music.apple.com/us/album/fixture/45678?i=12345';
+  result=await call('status');assert.equal(result.catalogId,'12345');
+  assert.equal(result.url,'https://music.apple.com/us/album/fixture/45678');
   assert(!JSON.stringify(result).includes('NEVER_EXPORT'));
   result = await call('browse',{category:'songs'});
   assert.equal(calls.at(-1).path,'/v1/me/library/songs');

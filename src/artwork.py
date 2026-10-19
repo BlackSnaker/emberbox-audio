@@ -12,6 +12,7 @@ from paths import CACHE_DIR, CONFIG_DIR
 
 from gi.repository import GdkPixbuf, GLib
 from PIL import Image, ImageDraw, ImageOps
+from cover_sources import still_candidates
 
 
 class Artwork:
@@ -30,10 +31,10 @@ class Artwork:
                 return path.as_uri()
         return ''
 
-    def load(self, widget, url, size, radius=8, preserve=False, on_loaded=None):
+    def load(self, widget, url, size, radius=8, preserve=False, on_loaded=None, high_quality=False):
         existing = widget.get_pixbuf() if preserve else None
         widget.set_size_request(size, size)
-        token = (url, size, radius)
+        token = (url, size, radius) + (('original-v1',) if high_quality else ())
         widget._art_token = token
         if not getattr(widget, '_art_destroy_connected', False):
             widget.connect('destroy', lambda target: setattr(target, '_art_token', None))
@@ -54,15 +55,36 @@ class Artwork:
     def _fetch(self, widget, token, on_loaded):
         if getattr(widget, '_art_token', None) != token:
             return
-        url, size, radius = token
+        url, size, radius = token[:3]
         name = hashlib.sha256(repr(token).encode()).hexdigest() + '.png'
         path = self.folder / name
         try:
             if not path.exists() or time.time() - path.stat().st_mtime > 86400:
                 if url.startswith('https://'):
-                    with urllib.request.urlopen(url, timeout=7) as response:
-                        raw = response.read(5_000_000)
-                    source = Image.open(io.BytesIO(raw))
+                    source = None
+                    candidates = still_candidates(url, max(1200, size*2)) if len(token)>3 else [url]
+                    for candidate in candidates:
+                        if getattr(widget, '_art_token', None) != token:
+                            return
+                        try:
+                            with urllib.request.urlopen(candidate, timeout=7) as response:
+                                raw = response.read(15_000_001)
+                            if len(raw)>15_000_000:
+                                continue
+                            item = Image.open(io.BytesIO(raw))
+                            if item.width*item.height>20_000_000:
+                                continue
+                            item.load()
+                            # Some CDNs return a tiny placeholder with HTTP 200.
+                            # Retain the real larger response rather than stretching it.
+                            if source is None or min(item.size)>min(source.size):
+                                source = item
+                            if min(item.size)>=size:
+                                break
+                        except (OSError, ValueError, Image.DecompressionBombError):
+                            continue
+                    if source is None:
+                        return
                 elif url.startswith('file://') and urlparse(url).netloc in ('', 'localhost'):
                     local = Path(unquote(urlparse(url).path))
                     if local.stat().st_size > 5_000_000:
@@ -70,9 +92,11 @@ class Artwork:
                     source = Image.open(local)
                 else:
                     source = Image.open(self.placeholder)
-                image = ImageOps.fit(source.convert('RGBA'), (size, size), Image.Resampling.LANCZOS)
-                mask = Image.new('L', (size, size))
-                ImageDraw.Draw(mask).rounded_rectangle((0, 0, size - 1, size - 1), radius, fill=255)
+                source = ImageOps.exif_transpose(source).convert('RGBA')
+                image = (ImageOps.pad if len(token)>3 else ImageOps.fit)(source, (size, size), Image.Resampling.LANCZOS)
+                mask = Image.new('L', (size*3, size*3))
+                ImageDraw.Draw(mask).rounded_rectangle((0, 0, size*3 - 1, size*3 - 1), radius*3, fill=255)
+                mask = mask.resize((size,size),Image.Resampling.LANCZOS)
                 image.putalpha(mask)
                 temp = path.with_suffix(f'.{threading.get_ident()}.next.png')
                 image.save(temp)

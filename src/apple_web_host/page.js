@@ -21,7 +21,8 @@ async function emberboxAppleCommand(request) {
       duration:Number.isFinite(duration)&&duration>0?duration:Number(a.durationInMillis||0)/1000,
       title:String(a.name || a.title || metadata?.title || ''), artist:String(a.artistName || metadata?.artist || ''),
       album:String(a.albumName || metadata?.album || ''), image:image(a.artwork) || String(metadata?.artwork?.[0]?.src || ''),
-      id:String(current?.id || a.playParams?.id || ''), canNext:!!music, canPrevious:!!music};
+      id:String(current?.id || a.playParams?.id || ''), catalogId:String(a.playParams?.catalogId || ''),
+      url:publicUrl(a.url), canNext:!!music, canPrevious:!!music};
   }
   if (!music?.api) throw Error('MusicKit is not ready. Reload the Apple Music tab and sign in.');
   if (!music.isAuthorized) throw Error('Sign in to Apple Music in this browser first.');
@@ -32,6 +33,11 @@ async function emberboxAppleCommand(request) {
   const category = String(params.category || 'playlists');
   const offset = Math.max(0, Math.min(100000, Number(params.offset) || 0));
   const safeId = /^[\w.-]{1,200}$/;
+
+  function publicUrl(value) {
+    try { const u=new URL(value);return u.protocol==='https:'&&u.hostname==='music.apple.com'&&!u.username&&!u.password
+      ? u.origin+u.pathname : ''; } catch { return ''; }
+  }
 
   function image(art) {
     const value = String(art?.url || '').replace('{w}', '180').replace('{h}', '180').replace('{f}', 'jpg');

@@ -14,6 +14,7 @@ node tests/apple_browser_test.js
 node tests/yandex_web_test.js
 GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a python3 tests/gui_smoke.py
 GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' python3 tests/fullscreen_smoke.py
+GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a python3 tests/motion_smoke.py
 ```
 
 The GUI smoke test uses isolated XDG folders, fixture metadata and muted/offline components. It does not control a real Spotify client or desktop playback. Live media checks still need a desktop session and PipeWire.

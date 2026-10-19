@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.6.0 — 2026-10-19
+
+- Large original fullscreen covers instead of enlarged thumbnails, preserving aspect ratio with soft rounded corners.
+- Automatic original Apple Music motion covers for supported catalog songs: silent loops that pause with music.
+- Video decoding outside GTK, cleanup on exit, and static fallback when animation is unavailable. Optional FFmpeg is required.
+- Checks for source resolution, unavailable large assets, exact album selection, track changes, and real video decoding.
+
 ## 0.5.0 — 2026-10-19
 
 - Fullscreen listening room with large artwork, cover-coloured atmosphere, tactile controls and live gas-discharge tubes.

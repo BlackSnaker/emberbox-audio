@@ -36,6 +36,8 @@ def main():
         print('See docs/INSTALL.md for system packages. Nothing was installed.')
         return 1
     if not VIDEO:
+        print('  OK  Optional motion covers: FFmpeg' if shutil.which('ffmpeg') else
+              '  --  Optional animated Apple Music covers need ffmpeg; still artwork remains available.')
         try:
             importlib.import_module('mpv')
             if not shutil.which('yt-dlp') and not (Path.home()/'.local/bin/yt-dlp').is_file():

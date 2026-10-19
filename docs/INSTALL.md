@@ -37,6 +37,8 @@ python3 tools/check_dependencies.py
 
 Use a system Python that can import `gi`. A virtual environment must be created with `--system-site-packages` if you choose to use one. Native GTK and audio dependencies are not installed by `requirements.txt`.
 
+Optional animated Apple Music covers need `ffmpeg`: install it with `sudo pacman -S ffmpeg` or `sudo apt install ffmpeg`. Static original-size covers work without it. [Motion cover details](FULLSCREEN.md).
+
 ## Per-user installation
 
 ```sh

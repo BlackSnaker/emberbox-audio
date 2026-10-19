@@ -36,3 +36,15 @@ Some songs have no matching text, are instrumental, or only have plain lyrics. A
 ## Visual character
 
 The cover becomes the focal point, with an understated colour wash behind the scene. Cream type, amber light, shallow relief and tactile transport controls carry over from the [Grunesphism design language](DESIGN.md). Lyrics have room to breathe and stay secondary to the currently sung line.
+
+## Original-size covers
+
+Fullscreen requests a separate large source: Apple Music at 1200×1200, Spotify's available large variant, Yandex Music at 1000×1000, and YouTube maxres where available. If the CDN does not supply the larger asset, the available source is retained. Artwork keeps its aspect ratio instead of cropping its edges to fill the square.
+
+### Authentic Apple Music motion artwork
+
+When the current catalog song has a public animated album cover, fullscreen automatically loops it silently. This is the album's original animation, not a motion effect applied to a still image. Pausing music freezes the cover; leaving fullscreen stops its decoder. Loading errors, missing video art, or unsupported catalog IDs retain the static cover.
+
+Animation needs optional **FFmpeg**: `sudo pacman -S ffmpeg` on Arch or `sudo apt install ffmpeg` on Ubuntu/Debian. Static covers and the player work without it. Support currently covers public Apple Music motion artwork, not Spotify Canvas or every service's animations.
+
+**Network requests:** only while fullscreen is open, the player fetches the public page of the exact Apple Music song and its linked album, then streams cover video from Apple's CDN. It does not search for similarly named releases. No account passwords, cookies, or tokens are sent. Known cover CDNs receive a request for the larger image size.

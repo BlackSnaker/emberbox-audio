@@ -8,6 +8,8 @@ from hardware_controls import MuteToggle, VolumeKnob
 from nixie_spectrum import NixieSpectrum
 from source_picker import SourcePicker, text
 from lyrics import LyricsClient, active_line
+from cover_sources import AppleMotion, apple_page
+from motion_artwork import MotionCover
 
 
 CSS = b'''
@@ -164,7 +166,13 @@ class FullscreenPlayer:
         self.left.set_halign(Gtk.Align.START);self.left.set_valign(Gtk.Align.CENTER)
         art_shell=Gtk.Box();art_shell.get_style_context().add_class('stage-art-shell')
         art_shell.set_halign(Gtk.Align.START)
-        self.cover=Gtk.Image();art_shell.pack_start(self.cover,False,False,0)
+        art_layers=Gtk.Overlay();art_shell.pack_start(art_layers,False,False,0)
+        self.cover=Gtk.Image();art_layers.add(self.cover)
+        self.motion_image=Gtk.Image();self.motion_image.set_no_show_all(True)
+        art_layers.add_overlay(self.motion_image);art_layers.set_overlay_pass_through(self.motion_image,True)
+        self.motion=MotionCover(self.motion_image)
+        self.motion_url=''
+        self.motion_lookup=AppleMotion(self.on_motion)
         self.left.pack_start(art_shell,False,False,0)
         self.title=label('','stage-track-title',True);self.title.set_lines(2);self.title.set_ellipsize(Pango.EllipsizeMode.END)
         self.left.pack_start(self.title,False,False,0)
@@ -276,6 +284,8 @@ class FullscreenPlayer:
         self.visible=False
         self.track=None
         self.lyrics.set_track('','')
+        self.motion_lookup.set_track('')
+        self.motion.stop()
         self.window.unfullscreen();self.window.hide()
         if self.timer:GLib.source_remove(self.timer);self.timer=0
         if self.tick:self.window.remove_tick_callback(self.tick);self.tick=0
@@ -286,6 +296,7 @@ class FullscreenPlayer:
         if self.closed:return
         self.hide();self.closed=True
         self.lyrics.close()
+        self.motion_lookup.close()
         self.artwork.pool.shutdown(wait=False,cancel_futures=True)
         Gtk.StyleContext.remove_provider_for_screen(self.window.get_screen(),self.provider)
         self.window.destroy()
@@ -325,7 +336,28 @@ class FullscreenPlayer:
         key=(url,self.art_size)
         if key==self.art_key:return
         self.art_key=key
-        self.artwork.load(self.cover,url,self.art_size,22,preserve=True,on_loaded=self.on_art)
+        self.motion.stop()
+        self.artwork.load(self.cover,url,self.art_size,22,preserve=True,on_loaded=self.on_art,high_quality=True)
+        if self.motion_url:self.motion.set_source(self.motion_url,self.art_size,playing=self.host.playing)
+
+    def motion_page(self):
+        h=self.host
+        if h.source!='apple-music':return ''
+        if getattr(h,'apple_native',lambda:False)():
+            state=h.apple_web.state
+            page=apple_page(state.get('url'))
+            if page:return page
+            identifier=str(state.get('catalogId') or state.get('id') or '')
+            if identifier.isdecimal() and len(identifier)<=20:
+                return 'https://music.apple.com/us/song/'+identifier
+        session=getattr(h,'session',None)
+        metadata=session.properties.get('Metadata',{}) if session else {}
+        return apple_page(metadata.get('xesam:url'))
+
+    def on_motion(self,url):
+        self.motion_url=url
+        if self.visible and not self.closed:
+            self.motion.set_source(url,self.art_size,playing=self.host.playing)
 
     def on_art(self,pixbuf):
         if self.closed:return
@@ -392,6 +424,8 @@ class FullscreenPlayer:
         self.mute.set_state(h.sound.volume,h.sound.muted,h.sound.available)
         self.knob.set_state(h.sound.volume,h.sound.muted,h.sound.available)
         self.load_art()
+        self.motion_lookup.set_track(self.motion_page() if self.motion.executable else '',h.art_url or '')
+        self.motion.set_playing(h.playing)
         identity=(h.source,title,artist,album,round(h.length/1e6))
         if identity!=self.track:
             self.track=identity;self.current_line=-2;self.manual_until=0.;self.last_position=None
@@ -491,6 +525,7 @@ class FullscreenPlayer:
             if abs(b.get_opacity()-opacity)>.015:b.set_opacity(opacity)
 
     def animate(self,_window,clock):
+        self.motion.tick()
         now=clock.get_frame_time()
         dt=min(.05,(now-self.frame_time)/1e6) if self.frame_time else 1/60
         self.frame_time=now

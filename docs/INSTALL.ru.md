@@ -37,6 +37,8 @@ python3 tools/check_dependencies.py
 
 Нужен Python, которому доступен модуль `gi`. Для виртуального окружения используй `--system-site-packages`. Нативные GTK- и аудиозависимости не устанавливаются через `requirements.txt`.
 
+Для необязательных видеообложек Apple Music нужен `ffmpeg`: `sudo pacman -S ffmpeg` или `sudo apt install ffmpeg`. Крупные статичные обложки работают без него. [Подробнее](FULLSCREEN.ru.md).
+
 ## Установка для текущего пользователя
 
 ```sh
