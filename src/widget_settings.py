@@ -16,9 +16,9 @@ def settings_button(callback):
 
 
 class SettingsMenu:
-    def __init__(self, compact, refresh, restart, accounts=None):
+    def __init__(self, compact, refresh, restart, accounts=None, fullscreen=None):
         self.compact, self.refresh, self.restart = compact, refresh, restart
-        self.accounts = accounts
+        self.accounts,self.fullscreen = accounts,fullscreen
         self.popover = None
 
     def show(self, anchor, compact, source):
@@ -48,6 +48,8 @@ class SettingsMenu:
             box.pack_start(button, False, False, 0)
             return button
 
+        if self.fullscreen:
+            self.fullscreen_button = action(text('Listening room · Fullscreen','Комната прослушивания · На весь экран'),self.fullscreen)
         if self.accounts:
             self.accounts_button = action(text('Accounts · Spotify / Apple / Yandex','Аккаунты · Spotify / Apple / Яндекс'),self.accounts)
         self.mode_button = action(

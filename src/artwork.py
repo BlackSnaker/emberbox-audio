@@ -77,7 +77,7 @@ class Artwork:
                 temp = path.with_suffix(f'.{threading.get_ident()}.next.png')
                 image.save(temp)
                 temp.replace(path)
-            GLib.idle_add(self._apply, widget, token, str(path), on_loaded)
+            GLib.idle_add(self._apply, widget, token, str(path), on_loaded, priority=GLib.PRIORITY_DEFAULT)
         except Exception:
             pass
 

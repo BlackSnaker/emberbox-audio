@@ -39,6 +39,7 @@ from accounts import Accounts
 from account_panel import AccountPanel
 from ember_mpris import EmberMpris
 from frame_health import FrameHealth
+from fullscreen import FullscreenPlayer
 from desktop_launch import launch as launch_desktop
 from widget_settings import SettingsMenu, settings_button
 import widget_restart
@@ -228,7 +229,8 @@ class Widget:
         self.accounts = Accounts(self.apple_web,self.on_accounts_changed,self.open_spotify_login,
                                  self.connect_for_discovery,self.account_source,self.yandex_web)
         self.source_picker = SourcePicker(self.select_source, self.launch_apple,self.show_accounts)
-        self.settings = SettingsMenu(lambda: self.toggle_compact(None), self.reconnect_player, self.restart_widget,self.show_accounts)
+        self.fullscreen = None
+        self.settings = SettingsMenu(lambda: self.toggle_compact(None), self.reconnect_player, self.restart_widget,self.show_accounts,self.show_fullscreen)
         self.restarting = False
         self.resources_closed = False
         self.expanded = bool(saved.get('expanded', False))
@@ -257,6 +259,7 @@ class Widget:
         self.window.connect('delete-event', lambda *_args: True)
         self.window.connect('destroy', self.on_destroy)
         self.window.connect('configure-event', self.on_configure)
+        self.window.connect('key-press-event',self.on_stage_key)
         screen = self.window.get_screen()
         visual = screen.get_rgba_visual()
         if visual:
@@ -309,6 +312,14 @@ class Widget:
         header_row.pack_end(self.mini_button, False, False, 0)
         self.settings_button = settings_button(self.show_settings)
         header_row.pack_end(self.settings_button, False, False, 0)
+        self.fullscreen_button = Gtk.Button()
+        icon=Gtk.Image.new_from_icon_name('view-fullscreen-symbolic',Gtk.IconSize.MENU)
+        icon.set_pixel_size(14);self.fullscreen_button.add(icon)
+        self.fullscreen_button.get_style_context().add_class('mini-button')
+        self.fullscreen_button.get_style_context().add_class('settings-button')
+        self.fullscreen_button.get_accessible().set_name(text('Listening room · Fullscreen','Комната прослушивания · На весь экран'))
+        self.fullscreen_button.connect('clicked',lambda _b:self.show_fullscreen())
+        header_row.pack_end(self.fullscreen_button,False,False,0)
         header_row.pack_end(neon_caption, False, False, 0)
 
         body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=13)
@@ -504,6 +515,7 @@ class Widget:
             return
         self.resources_closed = True
         self.frame_health.close()
+        if self.fullscreen:self.fullscreen.close()
         self.youtube_panel.close()
         self.youtube.close()
         self.accounts.close()
@@ -516,6 +528,14 @@ class Widget:
         self.meter.stop()
         self.sound.close()
         self.artwork.pool.shutdown(wait=False, cancel_futures=True)
+
+    def show_fullscreen(self):
+        if self.fullscreen is None:self.fullscreen=FullscreenPlayer(self)
+        self.fullscreen.open()
+
+    def on_stage_key(self,_window,event):
+        if Gdk.keyval_name(event.keyval)=='F11':self.show_fullscreen();return True
+        return False
 
     def show_settings(self, button):
         self.drag_offset = None
@@ -1167,6 +1187,10 @@ class Widget:
             self.native_web().action('seek',position=seconds)
         elif self.youtube_native():
             self.youtube.seek(seconds)
+        elif self.session and self.track_id and self.length>0 and self.session.properties.get('CanSeek',True):
+            position=round(max(0,min(self.length/1e6,seconds))*1e6)
+            self.call('SetPosition',GLib.Variant('(ox)',(self.track_id,position)))
+            GLib.timeout_add(150,self.refresh_once)
 
     def system_action(self,method,uri=None):
         if method=='OpenUri' and self.apple_native():

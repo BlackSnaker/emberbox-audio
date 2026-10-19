@@ -103,11 +103,18 @@ try:
     assert app.apple_native() and not app.accounts_visible
     app.select_source('spotify')
     spotify=Session('org.mpris.MediaPlayer2.spotify', 'Spotify', 'spotify', 1,
-        {'PlaybackStatus':'Playing','Metadata':{'xesam:title':'Spotify track'}})
+        {'PlaybackStatus':'Playing','CanSeek':True,'Metadata':{'xesam:title':'Spotify track',
+        'mpris:trackid':'/org/fixture/spotify','mpris:length':200000000}})
     browser=Session('org.mpris.MediaPlayer2.firefox.instance123', 'Firefox', 'firefox', 2,
         {'PlaybackStatus':'Paused','Metadata':{'xesam:title':'Apple track'}})
     app.on_sessions([spotify,browser])
     assert app.title.get_text()=='Spotify track'
+    app.seek_to(17)
+    assert app.monitor.calls[-1]==(spotify.name,'SetPosition')
+    spotify.properties['CanSeek']=False
+    count=len(app.monitor.calls);app.seek_to(22)
+    assert len(app.monitor.calls)==count
+    spotify.properties['CanSeek']=True
     with patch('widget.launch_desktop') as launch:
         app.open_spotify_login()
         assert app.monitor.calls[-1]==(spotify.name,'Raise')
@@ -257,6 +264,11 @@ try:
     app.select_source('apple-music')
     assert not app.yandex_web.enabled and app.apple_web.enabled
     app.source='apple-music';app.browser_binding='firefox';app.compact=True
+    with patch('widget.FullscreenPlayer') as stage:
+        app.fullscreen_button.clicked();app.show_settings(app.settings_button)
+        app.settings.fullscreen_button.clicked()
+        assert stage.call_count==1 and stage.return_value.open.call_count==2
+        app.fullscreen=None
     app.show_settings(app.settings_button)
     with patch('widget.widget_restart.service_restart',return_value=True) as restart:
         app.settings.restart_button.clicked()

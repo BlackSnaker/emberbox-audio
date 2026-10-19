@@ -21,8 +21,11 @@ parser.add_argument('--frames', type=int, default=48)
 parser.add_argument('--library', action='store_true')
 parser.add_argument('--settings', action='store_true')
 parser.add_argument('--accounts', action='store_true')
+parser.add_argument('--fullscreen', action='store_true')
+parser.add_argument('--language', choices=('en','ru'), default='en')
 parser.add_argument('--source', choices=('spotify', 'apple-music', 'youtube','yandex-music'), default='spotify')
 args = parser.parse_args()
+os.environ['EMBERBOX_LANGUAGE']=args.language
 args.output.mkdir(parents=True, exist_ok=True)
 temporary = tempfile.TemporaryDirectory(prefix='emberbox-preview-')
 os.environ['XDG_CONFIG_HOME'] = str(Path(temporary.name) / 'config')
@@ -162,14 +165,43 @@ else:
         app.apply_layout()
         app.apple_panel.open()
 
+if args.fullscreen and not VIDEO:
+    import fullscreen
+    from lyrics import LyricsState,LyricLine
+    class DemoLyrics:
+        def __init__(self,changed):self.changed=changed;self.state=LyricsState();self.key=None
+        def set_track(self,title,artist,album='',duration=0,**options):
+            if self.key==(title,artist):return
+            self.key=title,artist
+            # Original demonstration verse, never lyrics from an existing song.
+            verses=(
+                ('The city slows beyond the glass.','Тише город за окном.'),
+                ('Let the evening find us here.','Тёплый свет касается ладоней.'),
+                ('Leave the hurry in the past.','Мы оставим шум на потом.'),
+                ('Only music, warm and clear.','Пусть сегодня музыка нас помнит.'),
+                ('Golden threads across the night.','В этом свете время не спешит.'),
+                ('Every note a place to stay.','Ночь рисует золотые нити.'),
+                ('We are carried by the light.','Всё, что нужно, рядом и звучит.'),
+                ('Let the last sound drift away.','Оставайся. Просто послушай.'))
+            self.state=LyricsState('ready',tuple(LyricLine(t,verse[1 if args.language=='ru' else 0])
+                for t,verse in zip((0,30,60,90,120,150,180,210),verses))) if title else LyricsState()
+            GLib.idle_add(lambda:(self.changed(),False)[1],priority=GLib.PRIORITY_DEFAULT)
+        def close(self):pass
+    fullscreen.LyricsClient=DemoLyrics
+    app.fullscreen=fullscreen.FullscreenPlayer(app)
+    app.fullscreen.open()
+    app.fullscreen.window.unfullscreen()
+    app.fullscreen.window.resize(1920,1080)
+
 started = time.monotonic()
 counter = 0
 phase = 'full'
 
 
 def capture(path):
-    width, height = app.window.get_size()
-    Gdk.pixbuf_get_from_window(app.window.get_window(), 0, 0, width, height).savev(str(path), 'png', [], [])
+    window=app.fullscreen.window if args.fullscreen and not VIDEO else app.window
+    width, height = window.get_size()
+    Gdk.pixbuf_get_from_window(window.get_window(), 0, 0, width, height).savev(str(path), 'png', [], [])
 
 
 def measure():
@@ -196,6 +228,8 @@ def frame():
             capture(args.output / 'full.png')
         counter += 1
         if counter >= args.frames:
+            if args.fullscreen and not VIDEO:
+                app.window.destroy();return False
             phase = 'mini'
             app.toggle_compact() if VIDEO else app.toggle_compact(None)
             GLib.timeout_add(450, mini)

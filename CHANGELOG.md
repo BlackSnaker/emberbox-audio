@@ -2,6 +2,14 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.5.0 — 2026-10-19
+
+- Fullscreen listening room with large artwork, cover-coloured atmosphere, tactile controls and live gas-discharge tubes.
+- Optional LRCLIB synchronized/plain lyrics, smooth active-line follow, click-to-seek, cache and graceful missing/instrumental states.
+- Header/settings/F11 entry, Escape return, keyboard controls and original desktop geometry preserved across modes.
+- Responsive small-screen layouts, per-source transport/volume and artwork/lyrics delivery that remains responsive during continuous audio animation.
+- Original English/Russian previews, setup notes and offline fullscreen/lyrics regression checks.
+
 ## 0.4.0 — 2026-10-19
 
 - Experimental Yandex Music source with in-player My Wave, like/dislike, search and loaded collection/queue tracks.

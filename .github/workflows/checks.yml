@@ -29,3 +29,5 @@ jobs:
           node tests/yandex_web_test.js
       - name: GTK layout and controls
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/gui_smoke.py
+      - name: Fullscreen listening room
+        run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/fullscreen_smoke.py
