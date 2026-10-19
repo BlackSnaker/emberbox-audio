@@ -36,6 +36,7 @@ from apple_web import AppleWeb
 from accounts import Accounts
 from account_panel import AccountPanel
 from ember_mpris import EmberMpris
+from frame_health import FrameHealth
 from desktop_launch import launch as launch_desktop
 from widget_settings import SettingsMenu, settings_button
 import widget_restart
@@ -468,7 +469,7 @@ class Widget:
         GLib.idle_add(self.place_window)
         self.refresh()
         GLib.timeout_add_seconds(1, self.refresh)
-        self.window.add_tick_callback(self.animate)
+        self.frame_health = FrameHealth(self.window,self.animate)
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, self.quit)
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, self.quit)
 
@@ -494,6 +495,7 @@ class Widget:
         if self.resources_closed:
             return
         self.resources_closed = True
+        self.frame_health.close()
         self.youtube_panel.close()
         self.youtube.close()
         self.accounts.close()
@@ -1093,6 +1095,8 @@ class Widget:
             return
         self.art_url = url
         self.load_cover()
+        if hasattr(self,'frame_health'):
+            self.frame_health.request_frame()
 
     def load_cover(self, preserve=False):
         if not self.art_url:
@@ -1106,6 +1110,8 @@ class Widget:
         if self.art_url and self.tint_art_url != self.art_url:
             self.cover_tint.set_cover(pixbuf)
             self.tint_art_url = self.art_url
+            if hasattr(self,'frame_health'):
+                self.frame_health.request_frame()
 
     def on_volume_changed(self, sound):
         self.mute_toggle.set_state(sound.volume, sound.muted, sound.available)

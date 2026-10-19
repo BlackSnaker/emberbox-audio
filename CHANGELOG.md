@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.3.1 — 2026-10-19
+
+- Move spectrum recorder cleanup off the GTK thread during track and audio-stream changes.
+- Give replacement recorders separate PipeWire node names to prevent overlapping stream links.
+- Refresh cover/layout painting and recover a stopped frame callback without restarting music.
+- Regression checks for Apple Music transitions, slow recorder shutdown and frame recovery.
+
 ## 0.3.0 — 2026-10-19
 
 - In-player Spotify and Apple Music account centre with first-launch onboarding and live connection status.

@@ -1,6 +1,6 @@
 [project]
 name = "emberbox-audio"
-version = "0.2.0"
+version = "0.3.1"
 description = "A warm Gruvbox desktop companion for Spotify and Apple Music on the web"
 readme = "README.md"
 requires-python = ">=3.10"

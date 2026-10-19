@@ -179,6 +179,38 @@ try:
     assert app.title.get_text()=='Apple fixture' and app.playing
     assert app.sound.target.pid==12345 and app.sound.target.source=='apple-music'
     assert app.sound.target.family==''
+    # Natural track changes briefly report empty/paused metadata. Cached cover
+    # replacement, tint transitions and spectrum updates must keep painting.
+    paints=app.frame_health.paints
+    cover=widget.GdkPixbuf.Pixbuf.new(widget.GdkPixbuf.Colorspace.RGB,False,8,24,24)
+    for index in range(3):
+        app.apple_web.state={'ready':True,'authorized':True,'playing':False}
+        app.render_apple();settle()
+        app.apple_web.state={'ready':True,'authorized':True,'playing':True,
+            'title':f'Next fixture {index}','duration':180,'position':1,
+            'image':f'fixture:{index}','canNext':True,'canPrevious':True}
+        app.render_apple()
+        cover.fill((0xd79921ff,0x83a598ff,0xb16286ff)[index])
+        app.on_cover_loaded(cover)
+        settle()
+        assert app.title.get_text()==f'Next fixture {index}' and app.playing
+        assert app.frame_health.paints>paints
+        paints=app.frame_health.paints
+    # A lost frame callback is repaired by a GLib timer, while fully obscured
+    # desktop windows are left asleep. This works without pycairo installed.
+    app.window.remove_tick_callback(app.frame_health.tick)
+    app.frame_health.tick=0
+    app.frame_health.last_frame=time.monotonic()-3
+    app.frame_health.obscured=True
+    recovered=app.frame_health.recoveries
+    app.frame_health.check()
+    assert app.frame_health.recoveries==recovered
+    app.frame_health.obscured=False
+    app.frame_health.check()
+    settle()
+    assert app.frame_health.recoveries==recovered+1
+    assert app.frame_health.paints>paints
+    assert time.monotonic()-app.frame_health.last_frame<.3
     with patch('widget.launch_desktop') as launch:
         app.on_action(None,'toggle');app.on_action(None,'next')
         assert app.apple_web.calls[-2:]==[('transport',{'action':'toggle'}),('transport',{'action':'next'})]
@@ -208,6 +240,7 @@ try:
     print('PASS settings in both layouts, restart state retention and category switching')
 finally:
     # Gtk.main() is not entered by this synchronous harness.
+    app.frame_health.close()
     app.accounts.close();app.mpris.close()
     app.youtube_panel.close();app.youtube.close();app.apple.close();app.apple_web.close();app.monitor.close();app.meter.stop();app.sound.close()
     app.artwork.pool.shutdown(wait=False,cancel_futures=True)

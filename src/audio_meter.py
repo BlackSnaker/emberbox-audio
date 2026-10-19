@@ -34,6 +34,7 @@ class SpotifyAudioMeter:
         self.thread = None
         self.levels = (0.0,) * 9
         self.last_sample = 0.0
+        self.generation = 0
 
     def set_target(self, target):
         if target != self.target:
@@ -44,12 +45,14 @@ class SpotifyAudioMeter:
         if self.process and self.process.poll() is None:
             return
         self.stop()
-        properties = f'{{ node.name = {self.node_name} application.name = "Emberbox Audio" }}'
+        self.generation += 1
+        node_name = f'{self.node_name}-{self.generation}'
+        properties = f'{{ node.name = {node_name} application.name = "Emberbox Audio" }}'
         self.process = subprocess.Popen(
             ['pw-record', '--target', '0', '-P', properties, '--latency', '50ms',
              '--raw', '--format', 'f32', '--rate', str(RATE), '--channels', '2', '-'],
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
-        self.thread = threading.Thread(target=self._read, args=(self.process, self.target), daemon=True)
+        self.thread = threading.Thread(target=self._read, args=(self.process, self.target, node_name), daemon=True)
         self.thread.start()
 
     def stop(self):
@@ -58,6 +61,14 @@ class SpotifyAudioMeter:
         self.levels = (0.0,) * 9
         self.last_sample = 0.0
         if process:
+            # A track transition may replace the output stream. Reaping the
+            # old recorder must never wait inside GTK's event/paint callbacks.
+            threading.Thread(target=self._reap,args=(process,),daemon=True,
+                             name='audio-recorder-cleanup').start()
+
+    @staticmethod
+    def _reap(process):
+        try:
             if process.poll() is None:
                 process.terminate()
             try:
@@ -67,14 +78,16 @@ class SpotifyAudioMeter:
                 process.wait(timeout=0.5)
             if process.stdout:
                 process.stdout.close()
+        except (OSError,subprocess.SubprocessError):
+            pass
 
-    def _link_player(self, process, target, linked):
+    def _link_player(self, process, target, linked, node_name):
         try:
             graph = json.loads(subprocess.run(['pw-dump'], capture_output=True, text=True,
                                               timeout=2, check=True).stdout)
             sources = output_nodes(graph, target)
             targets = {str(item['id']) for item in graph
-                       if item.get('info', {}).get('props', {}).get('node.name') == self.node_name}
+                       if item.get('info', {}).get('props', {}).get('node.name') == node_name}
             inputs, outputs = {}, []
             for item in graph:
                 props = item.get('info', {}).get('props', {})
@@ -100,14 +113,14 @@ class SpotifyAudioMeter:
         except (OSError, ValueError, subprocess.SubprocessError):
             return linked
 
-    def _read(self, process, target):
+    def _read(self, process, target, node_name):
         buffer = bytearray()
         last_link = 0.0
         linked = set()
         while self.process is process and process.poll() is None:
             now = time.monotonic()
             if now - last_link > 0.8:
-                linked = self._link_player(process, target, linked)
+                linked = self._link_player(process, target, linked, node_name)
                 last_link = now
             try:
                 readable, _, _ = select.select([process.stdout], [], [], 0.25)

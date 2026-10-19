@@ -1,12 +1,52 @@
 from pathlib import Path
 import sys
 import unittest
+import threading
+import time
+from unittest.mock import patch
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 import audio_meter
 
 
 class SpectrumTests(unittest.TestCase):
+    def test_slow_recorder_cleanup_never_blocks_a_track_transition(self):
+        entered, release, finished = (threading.Event() for _ in range(3))
+        class SlowRecorder:
+            stdout = None
+            def poll(self):return None
+            def terminate(self):pass
+            def wait(self, timeout):
+                entered.set()
+                release.wait(2)
+                finished.set()
+        meter=audio_meter.SpotifyAudioMeter()
+        meter.process=SlowRecorder()
+        meter.levels=(1.,)*9
+        start=time.monotonic()
+        try:
+            meter.stop()
+            self.assertLess(time.monotonic()-start,.15)
+            self.assertTrue(entered.wait(.5))
+            self.assertIsNone(meter.process)
+            self.assertEqual(meter.levels,(0.,)*9)
+            self.assertFalse(finished.is_set())
+        finally:
+            release.set()
+            self.assertTrue(finished.wait(.5))
+
+    def test_replacement_recorders_have_distinct_pipewire_nodes(self):
+        class Recorder:
+            stdout=None
+            def poll(self):return 0
+            def wait(self,timeout):pass
+        meter=audio_meter.SpotifyAudioMeter()
+        with patch('audio_meter.subprocess.Popen',side_effect=lambda *a,**kw:Recorder()) as spawn:
+            meter.start();meter.start();meter.stop()
+        properties=[call.args[0][4] for call in spawn.call_args_list]
+        self.assertEqual(len(properties),2)
+        self.assertNotEqual(properties[0],properties[1])
+
     def test_silence_and_frequency_separation(self):
         meter=audio_meter.SpotifyAudioMeter()
         samples=np.zeros((audio_meter.FRAMES,2),dtype='<f4')
