@@ -9,14 +9,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
-      XDG_DATA_HOME: ${{ runner.temp }}/emberbox-installer/data
-      XDG_CONFIG_HOME: ${{ runner.temp }}/emberbox-installer/config
-      XDG_CACHE_HOME: ${{ runner.temp }}/emberbox-installer/cache
       XDG_SESSION_TYPE: wayland
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+      - name: Isolate installation folders
+        run: |
+          printf 'XDG_DATA_HOME=%s/emberbox-installer/data\nXDG_CONFIG_HOME=%s/emberbox-installer/config\nXDG_CACHE_HOME=%s/emberbox-installer/cache\n' "$RUNNER_TEMP" "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Test display infrastructure
         run: |
           sudo apt-get update -qq
