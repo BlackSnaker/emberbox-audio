@@ -11,6 +11,7 @@ from gi.repository import GLib
 from apple_bridge import AppleBridge, BridgeUnavailable
 from paths import APP_ID, CONFIG_DIR
 from source_picker import text
+from gui_session import systemd_environment
 
 ENGINE_CONFIG = CONFIG_DIR/'apple-engine.json'
 
@@ -59,7 +60,7 @@ class AppleWeb:
                        '--profile',config.get('profile',str(CONFIG_DIR/'apple-web-profile')),
                        '--socket',str(self.bridge.path)]
             subprocess.run(['systemd-run','--user','--collect','--service-type=exec',
-                            '--unit='+APP_ID+'-apple',*command],check=True,
+                            '--unit='+APP_ID+'-apple',*systemd_environment(),*command],check=True,
                            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=5)
 
     def _started(self, future):

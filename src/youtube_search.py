@@ -18,6 +18,24 @@ def yt_dlp_executable():
     return found or (str(local) if local.is_file() else 'yt-dlp')
 
 
+def js_runtime_args():
+    # yt-dlp enables Deno by default, but needs an explicit opt-in for Node.
+    # Its worker checks runtime versions; never launch a version probe in GTK.
+    node = shutil.which('node')
+    return ['--js-runtimes', 'node:'+node] if node else []
+
+
+def mpv_quoted(value):
+    return '%'+str(len(value.encode('utf-8')))+'%'+value
+
+
+def ytdl_raw_options():
+    value='socket-timeout=12,retries=1,extractor-retries=1'
+    runtime=js_runtime_args()
+    if runtime:value+=',js-runtimes='+mpv_quoted(runtime[1])
+    return value
+
+
 def video_url(text):
     """Return a canonical video URL plus optional start, or None for a search."""
     text = text.strip()
@@ -81,7 +99,7 @@ class Search:
                 process = subprocess.Popen([
                     yt_dlp_executable(), '--ignore-config', '--flat-playlist',
                     '--dump-single-json', '--no-warnings', '--socket-timeout', '12',
-                    '--retries', '1', '--extractor-retries', '1', '--', f'ytsearch8:{query}'],
+                    '--retries', '1', '--extractor-retries', '1', *js_runtime_args(), '--', f'ytsearch8:{query}'],
                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 self.process = process
             stdout, stderr = process.communicate(timeout=38)

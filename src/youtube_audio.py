@@ -5,7 +5,7 @@ import threading
 from gi.repository import GLib
 from paths import CONFIG_DIR
 from source_picker import text
-from youtube_search import yt_dlp_executable
+from youtube_search import yt_dlp_executable, ytdl_raw_options, mpv_quoted
 
 STATE = CONFIG_DIR / 'youtube.json'
 CLIENT_NAME = 'Emberbox Audio YouTube'
@@ -55,8 +55,8 @@ class YouTubeAudio:
                 ao='pulse', volume=100, volume_max=100, mute=False,
                 audio_client_name=CLIENT_NAME,
                 ytdl=True, ytdl_format='bestaudio/best',
-                script_opts='ytdl_hook-ytdl_path='+yt_dlp_executable(),
-                ytdl_raw_options='socket-timeout=12,retries=1,extractor-retries=1')
+                script_opts='ytdl_hook-ytdl_path='+mpv_quoted(yt_dlp_executable()),
+                ytdl_raw_options=ytdl_raw_options())
             for name in ('time-pos', 'duration', 'pause', 'eof-reached',
                          'paused-for-cache', 'media-title', 'metadata'):
                 self.mpv.observe_property(name, self._property)

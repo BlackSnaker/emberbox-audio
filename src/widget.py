@@ -41,6 +41,8 @@ from ember_mpris import EmberMpris
 from frame_health import FrameHealth
 from fullscreen import FullscreenPlayer
 from desktop_launch import launch as launch_desktop
+import desktop_window
+from kwin_desktop import KWinDesktop
 from widget_settings import SettingsMenu, settings_button
 import widget_restart
 from youtube_audio import YouTubeAudio
@@ -230,6 +232,7 @@ class Widget:
                                  self.connect_for_discovery,self.account_source,self.yandex_web)
         self.source_picker = SourcePicker(self.select_source, self.launch_apple,self.show_accounts)
         self.fullscreen = None
+        self.kwin_desktop = None
         self.settings = SettingsMenu(lambda: self.toggle_compact(None), self.reconnect_player, self.restart_widget,self.show_accounts,self.show_fullscreen)
         self.restarting = False
         self.resources_closed = False
@@ -247,19 +250,15 @@ class Widget:
         self.window.set_name('emberbox-audio')
         self.window.set_decorated(False)
         self.window.set_deletable(False)
-        self.window.set_focus_on_map(False)
         self.window.set_resizable(False)
         self.window.set_default_size(WIDTH, HEIGHT)
         self.window.set_size_request(WIDTH, HEIGHT)
-        self.window.set_skip_taskbar_hint(True)
-        self.window.set_skip_pager_hint(True)
-        self.window.set_keep_below(True)
-        self.window.set_type_hint(Gdk.WindowTypeHint.DESKTOP)
-        self.window.stick()
+        self.desktop_mode = desktop_window.configure(self.window)
         self.window.connect('delete-event', lambda *_args: True)
         self.window.connect('destroy', self.on_destroy)
         self.window.connect('configure-event', self.on_configure)
         self.window.connect('key-press-event',self.on_stage_key)
+        self.window.get_screen().connect('monitors-changed', lambda *_args: GLib.idle_add(self.fit_window))
         screen = self.window.get_screen()
         visual = screen.get_rgba_visual()
         if visual:
@@ -489,6 +488,8 @@ class Widget:
         self.refresh()
         GLib.timeout_add_seconds(1, self.refresh)
         self.frame_health = FrameHealth(self.window,self.animate)
+        if self.desktop_mode == 'normal':
+            self.kwin_desktop = KWinDesktop()
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, self.quit)
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, self.quit)
 
@@ -514,6 +515,7 @@ class Widget:
         if self.resources_closed:
             return
         self.resources_closed = True
+        if self.kwin_desktop:self.kwin_desktop.close()
         self.frame_health.close()
         if self.fullscreen:self.fullscreen.close()
         self.youtube_panel.close()
@@ -666,11 +668,10 @@ class Widget:
             return False
         width, height = self.window.get_size()
         x, y = self.window.get_position()
-        monitor = self.window.get_display().get_monitor_at_point(x + width // 2, y + 40)
+        monitor = desktop_window.monitor_for(self.window)
         if monitor:
-            area = monitor.get_geometry()
-            target_x = max(area.x, min(x, area.x + area.width - width))
-            target_y = max(area.y + 34, min(y, area.y + area.height - height - 10))
+            area = desktop_window.usable_area(monitor)
+            target_x, target_y = desktop_window.clamp_position(x, y, width, height, area)
             if (x, y) != (target_x, target_y):
                 self.window.move(target_x, target_y)
         return False
@@ -1009,15 +1010,13 @@ class Widget:
             data = json.loads(STATE.read_text())
             x, y = int(data['x']), int(data['y'])
         except (OSError, ValueError, KeyError, TypeError):
-            screen = self.window.get_screen()
-            index = screen.get_primary_monitor()
-            if index < 0:
-                index = 0
-            area = screen.get_monitor_geometry(index)
+            display = self.window.get_display()
+            monitor = display.get_primary_monitor() or display.get_monitor(0)
+            area = desktop_window.usable_area(monitor)
             x = area.x + area.width - self.layout_width() - 30
             y = area.y + area.height - (164 if self.compact else HEIGHT) - 40
         self.window.move(x, y)
-        # Mutter finishes placing a newly mapped window asynchronously.
+        # The window manager finishes placing a new window asynchronously.
         # Wait for the drawer's first layout before enabling position updates.
         GLib.timeout_add(500, self.finish_initial_position, x, y)
         return False
@@ -1074,6 +1073,7 @@ class Widget:
     def on_drag_end(self, _box, event):
         if event.button == 1 and self.drag_offset is not None:
             self.drag_offset = None
+            self.fit_window()
             self.save_position()
             return True
         return False

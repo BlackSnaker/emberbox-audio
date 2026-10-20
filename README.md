@@ -54,10 +54,9 @@ Select **YouTube · Search & play**, search by title or paste a YouTube/YouTube 
 
 ## Get started
 
-**Linux desktop + PipeWire required.** Tested on LunaOS (Arch based), GNOME 50, Wayland with XWayland. Other desktop environments are currently best effort; Windows and macOS are not supported.
+**Linux desktop + PipeWire required.** GNOME 50 with Wayland + XWayland is the original tested desktop. KWin 6.7.5 has also been checked in a nested Wayland/XWayland session; full Plasma Shell testing remains on the [KDE tester checklist](docs/KDE.md). Windows and macOS are not supported.
 
-1. Install the [system dependencies](docs/INSTALL.md).
-2. Clone and install for your user:
+Clone and run the installer as your normal user:
 
 ```sh
 git clone https://github.com/BlackSnaker/emberbox-audio.git
@@ -65,7 +64,11 @@ cd emberbox-audio
 ./install.sh --autostart
 ```
 
-Then open **Emberbox Audio** from your applications menu. Installation uses no `sudo`, downloads no code, and does not change your desktop theme. Omit `--autostart` to launch only when you choose. To try the source without installing, use `./run.sh`.
+The installer checks existing components and prepares the missing ones: GTK and audio tools, YouTube playback with its JavaScript support, and FFmpeg for motion covers. It supports **Arch, Debian/Ubuntu, Fedora and openSUSE**, uses `sudo` only for missing system packages with the package manager's confirmation, and keeps Python extras in an isolated app-managed runtime. Your desktop theme and audio services are kept as configured.
+
+Then open **Emberbox Audio** from your applications menu. Omit `--autostart` to launch only when you choose. The same launcher supports GNOME and KDE; without a user service manager it falls back to direct launch. **`./install.sh --check`** previews checks and commands without changes. `--no-deps` requires dependencies to be present; `--yes` explicitly accepts package confirmations. [Install options, plain output and troubleshooting →](docs/INSTALL.md)
+
+To run from the checkout after dependencies are ready, use `./run.sh`.
 
 Select a source in the header. Apple Music plays through a background web engine, with playlists, albums, songs and catalogue search inside Emberbox. It requires a compatible installed DRM-capable runtime and an Apple Music subscription. [One-time setup →](docs/APPLE_MUSIC.md)
 
@@ -91,7 +94,7 @@ Dark olive-charcoal surfaces, warm cream type, amber light behind glass, a smoot
 | Seek | Click the progress bar |
 | Browse collections | **For you** for Spotify; **Your library** for Apple Music |
 
-## What to expect in v0.6
+## What to expect in v0.7
 
 This is an early source release, built from the working desktop widgets. Apple Music's in-widget integration is experimental and uses Apple's website in a separately configured local engine; compatible runtime binaries are not distributed. Browser MPRIS remains an optional fallback. Spotify personal recommendations use an optional, version-sensitive local desktop-client integration. Website and client updates may require integration fixes; see the setup notes.
 

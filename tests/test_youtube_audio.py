@@ -76,3 +76,17 @@ class YouTubeAudioTests(unittest.TestCase):
         target=Target('youtube',os.getpid(),'','youtube-native')
         self.assertTrue(matches({'application.process.id':os.getpid(),'application.name':youtube_audio.CLIENT_NAME},target))
         self.assertFalse(matches({'application.process.id':99999999,'application.name':'Emberbox Video'},target))
+
+    def test_node_runtime_and_paths_survive_libmpv_suboption_parsing(self):
+        try:import mpv
+        except (ImportError,OSError):self.skipTest('libmpv is optional in this test environment')
+        from youtube_search import ytdl_raw_options,mpv_quoted
+        node='/tmp/тёплый, runtime/node'
+        with patch('youtube_search.shutil.which',return_value=node):
+            player=mpv.MPV(config=False,idle=True,vo='null',ao='null',
+                ytdl_raw_options=ytdl_raw_options(),
+                script_opts='ytdl_hook-ytdl_path='+mpv_quoted('/tmp/space and, comma/yt-dlp'))
+        try:
+            self.assertEqual(player['ytdl-raw-options']['js-runtimes'],'node:'+node)
+            self.assertEqual(player['script-opts']['ytdl_hook-ytdl_path'],'/tmp/space and, comma/yt-dlp')
+        finally:player.terminate()

@@ -26,3 +26,5 @@ GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a python3 tools/render_preview.py 
 ```
 
 Design changes should preserve the [Grunesphism principles](docs/DESIGN.md), readable contrast, separated compact controls and keyboard-accessible actions. Run fullscreen checks against the video’s actual allocation, not only the top-level window size.
+
+Installer checks use temporary XDG directories and mocked package managers. `./install.sh --check --plain` is read-only. Never run provisioning tests against a personal desktop or invoke real sudo in unit tests. Optional `tests/kde_window_smoke.py` requires a private nested KWin/XWayland session and rejects the normal desktop; see [KDE verification](docs/KDE.md).

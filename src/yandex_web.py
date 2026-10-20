@@ -10,6 +10,7 @@ from apple_bridge import BridgeUnavailable
 import apple_setup
 from paths import APP_ID, CONFIG_DIR
 from source_picker import text
+from gui_session import systemd_environment
 
 ENGINE_CONFIG = CONFIG_DIR/'yandex-engine.json'
 
@@ -43,7 +44,7 @@ class YandexWeb(AppleWeb):
                 '--profile',config.get('profile',str(CONFIG_DIR/'yandex-web-profile')),
                 '--socket',str(self.bridge.path)]
             subprocess.run(['systemd-run','--user','--collect','--service-type=exec',
-                '--unit='+APP_ID+'-yandex',*command],check=True,timeout=5,
+                '--unit='+APP_ID+'-yandex',*systemd_environment(),*command],check=True,timeout=5,
                 stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
 
     def _started(self,future):

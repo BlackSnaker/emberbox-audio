@@ -10,7 +10,7 @@ Open **Settings → Accounts · Spotify / Apple / Yandex**, or **Connect account
 2. Play any song. Emberbox detects the player and shows **Connected** automatically.
 3. Click **Listen** to return to music. **Connect personal picks** enables the optional collections drawer; this may restart Spotify once.
 
-If Spotify is missing, **Get Spotify** opens its official Linux download page. Emberbox does not install system packages. Both native and Flatpak installations are detected.
+If Spotify is missing, **Get Spotify** opens its official Linux download page. The Emberbox installer can prepare its own dependencies, but the Spotify client is installed separately. Both native and Flatpak installations are detected.
 
 ## Apple Music
 
@@ -18,7 +18,7 @@ If Spotify is missing, **Get Spotify** opens its official Linux download page. E
 2. Complete Apple Account sign-in in Apple's own window. The player recognises completion and hides that window.
 3. Click **Listen**. Playlists, albums, songs and catalogue search are inside Emberbox.
 
-A compatible DRM-capable engine and installed Widevine are required. If automatic detection cannot find working components, the panel explains what is missing and offers file/folder selectors. No terminal commands or Node.js installation are needed for the in-player setup. See [compatibility and optional manual setup](APPLE_MUSIC.md).
+A compatible DRM-capable engine and installed Widevine are required. The installer reports their availability separately from the core app dependencies; missing DRM does not mean all music sources are ready. If automatic detection cannot find working components, the panel explains what is missing and offers file/folder selectors. No terminal commands or Node.js installation are needed for the in-player setup. See [compatibility and optional manual setup](APPLE_MUSIC.md).
 
 ## Yandex Music
 

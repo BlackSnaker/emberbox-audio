@@ -2,6 +2,15 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.7.0 — 2026-10-20
+
+- Dependency-aware installer for Arch, Debian/Ubuntu, Fedora and openSUSE, with a warm terminal interface, read-only checks, and missing-package installation.
+- Managed Python runtimes, full YouTube EJS/JavaScript checks, FFmpeg and safe update rollback; no system pip or audio-service replacement.
+- Desktop-session launch environment and XDG autostart, including automatic direct-launch fallback when user systemd is unavailable.
+- KWin-specific placement, alpha-preserving window type, app-scoped all-workspaces integration, and panel-aware geometry.
+- Verified with real isolated KWin 6.7.5/XWayland input, pixel and fullscreen checks; full Plasma Shell and physical multi-monitor testing remain with testers.
+- Bilingual setup/KDE documentation and explicit DRM readiness, independently of account/subscription status.
+
 ## 0.6.0 — 2026-10-19
 
 - Large original fullscreen covers instead of enlarged thumbnails, preserving aspect ratio with soft rounded corners.

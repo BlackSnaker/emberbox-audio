@@ -1,53 +1,36 @@
 #!/usr/bin/env python3
-"""Check requirements without installing packages or changing the desktop."""
-import importlib
+"""Read-only dependency report for Emberbox Audio."""
+import argparse
+import json
 from pathlib import Path
-import shutil
 import sys
 
-VIDEO = (Path(__file__).resolve().parents[1] / 'src/youtube.py').exists()
+sys.dont_write_bytecode=True
+if sys.version_info<(3,10):raise SystemExit('Emberbox needs Python 3.10 or newer.')
+import dependencies
+from installer_ui import Terminal
 
 
-def main():
-    missing = []
-    modules = ['numpy', 'PIL', 'mpv', 'yt_dlp'] if VIDEO else ['numpy', 'PIL', 'websocket']
-    for module in modules:
-        try:
-            importlib.import_module(module)
-            print(f'  OK  Python {module}')
-        except (ImportError, OSError):
-            missing.append(f'Python {module}')
-    try:
-        import gi
-        gi.require_version('Gtk', '3.0')
-        gi.require_version('GdkX11', '3.0')
-        from gi.repository import Gtk, GdkX11  # noqa: F401
-        print('  OK  GTK 3 / PyGObject / X11')
-    except (ImportError, ValueError):
-        missing.append('GTK 3 / PyGObject / X11')
-    commands = ['pw-record', 'pw-link', 'pw-dump'] + (['yt-dlp', 'mpv'] if VIDEO else ['pactl'])
-    for command in commands:
-        if shutil.which(command):
-            print(f'  OK  {command}')
-        else:
-            missing.append(command)
-    if missing:
-        print('\nMissing: ' + ', '.join(missing))
-        print('See docs/INSTALL.md for system packages. Nothing was installed.')
-        return 1
-    if not VIDEO:
-        print('  OK  Optional motion covers: FFmpeg' if shutil.which('ffmpeg') else
-              '  --  Optional animated Apple Music covers need ffmpeg; still artwork remains available.')
-        try:
-            importlib.import_module('mpv')
-            if not shutil.which('yt-dlp') and not (Path.home()/'.local/bin/yt-dlp').is_file():
-                raise ImportError('yt-dlp')
-            print('  OK  Optional YouTube audio: libmpv / python-mpv / yt-dlp')
-        except (ImportError, OSError):
-            print('  --  Optional YouTube search/playback needs libmpv, python-mpv and yt-dlp.')
-    print('\nDependencies found. A running desktop session and PipeWire are required.')
-    return 0
+def main(argv=None):
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--lang',choices=('auto','en','ru'),default='auto')
+    parser.add_argument('--plain',action='store_true')
+    parser.add_argument('--json',action='store_true',help='Machine-readable report without account data')
+    args=parser.parse_args(argv)
+    report=dependencies.inspect()
+    if args.json:
+        print(json.dumps({'ready':report.ready,'distribution':report.distribution.name,
+            'family':report.distribution.family,'supported':report.distribution.supported,
+            'checks':report.checks,'missing':list(report.missing),'versions':report.versions},indent=2))
+    else:
+        ui=Terminal(language=args.lang,plain=args.plain)
+        ui.banner((Path(__file__).resolve().parents[1]/'VERSION').read_text().strip())
+        ui.item(report.distribution.name)
+        for key,value in report.checks.items():ui.item(dependencies.LABELS.get(key,key),value)
+        if report.ready:ui.success('Dependencies are ready. No changes made.','Компоненты готовы. Ничего не изменено.')
+        else:ui.warning('Run ./install.sh to prepare missing dependencies. No changes made.',
+                        'Запусти ./install.sh для установки недостающего. Ничего не изменено.')
+    return 0 if report.ready else 1
 
 
-if __name__ == '__main__':
-    sys.exit(main())
+if __name__=='__main__':raise SystemExit(main())
