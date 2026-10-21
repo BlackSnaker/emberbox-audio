@@ -95,7 +95,19 @@ function makeWindow(show=true) {
   });
   return win;
 }
-async function command(win, request) {
+function yandexRoute(route) {
+  if(typeof route!=='string'||route.length>2500)return '';
+  try {
+    const url=new URL(route,service.origin);
+    if(url.origin!==new URL(service.origin).origin||url.hash)return '';
+    const page=url.pathname;
+    if((page==='/'||page==='/collection'||page==='/collection/playlists')&&!url.search)return page;
+    if(page==='/search'&&[...url.searchParams.keys()].every(key=>key==='text')&&url.searchParams.get('text')?.length<=200)return page+url.search;
+    if(!url.search&&(/^\/playlists\/[a-zA-Z0-9-]{1,100}$/.test(page)||/^\/users\/[\w.@-]{1,100}\/playlists\/\d{1,20}$/.test(page)))return page;
+  }catch{}
+  return '';
+}
+async function command(win, request, navigations=0) {
   const params=request.params||{};
   if(request.method==='show'){win.show();win.focus();record({windowVisible:true});return {shown:true};}
   if(request.method==='hide'){win.hide();record({windowVisible:false});return {hidden:true};}
@@ -110,7 +122,7 @@ async function command(win, request) {
   if(!methods.includes(request.method)) throw Error('UNSUPPORTED');
   if(!win.webContents.getURL().startsWith(service.origin)) {
     if(yandex&&request.method!=='status')throw Error('SIGN_IN_REQUIRED');
-    return {ready:false,authorized:false};
+    return {ready:false,authorized:false,integrationVersion:yandex?3:2};
   }
   const reasons=['CONTENT_EQUIVALENT','CONTENT_UNAVAILABLE','CONTENT_UNSUPPORTED','DEVICE_LIMIT','GEO_BLOCK',
     'INVALID_ARGUMENTS','MEDIA_LICENSE','MEDIA_KEY','MEDIA_PLAYBACK','NETWORK_ERROR','SUBSCRIPTION_ERROR','TypeError','ReferenceError','Error',
@@ -118,11 +130,18 @@ async function command(win, request) {
     'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND','REGION_UNAVAILABLE','SUBSCRIPTION_REQUIRED','ADAPTER_UNAVAILABLE','YANDEX_REQUEST_FAILED'];
   const source='(async()=>{window.__emberboxPlaybackAllowed='+JSON.stringify(enabled)+';'+pageCommand+
     ';try{return await '+service.command+'('+JSON.stringify(request)+');}catch(e){'+
+    (yandex?'if(e.emberboxRoute)return {__emberboxNavigate:e.emberboxRoute};':'')+
     'const code='+ (yandex?'String(e.message||e.name)': 'String(e.message||"").includes("Sign in to Apple Music")?"SIGN_IN_REQUIRED":String(e.message||"").includes("MusicKit is not ready")?"NOT_READY":e.errorCode||e.reason||e.name')+';const hints=["is not a function","Invalid queue","No playable","storefront","not writable","undefined","not supported","user interaction"];'+
     'return {__emberboxError:'+JSON.stringify(reasons)+'.includes(code)?code:'+JSON.stringify(service.error)+','+
     'stage:["storefront","queue","start"].includes(e.emberboxStage)?e.emberboxStage:"other",'+
     'hint:hints.find(h=>String(e.message||"").includes(h))||"other"};}})()';
   const result=await win.webContents.executeJavaScript(source,['play','transport','wave','feedback'].includes(request.method));
+  if(yandex&&result?.__emberboxNavigate) {
+    const route=yandexRoute(result.__emberboxNavigate);
+    if(!route||navigations>=1)throw Error('ADAPTER_UNAVAILABLE');
+    await win.loadURL(new URL(route,service.origin).href);
+    return command(win,request,navigations+1);
+  }
   if(result?.__emberboxError){
     diagnostic((yandex?'yandex-api-':'apple-api-')+result.stage+'-'+result.hint);
     throw Error(result.__emberboxError);
@@ -130,7 +149,10 @@ async function command(win, request) {
   if(request.method==='status')record({ready:!!result.ready,authorized:!!result.authorized,
     playing:!!result.playing,position:Number(result.position)||0,duration:Number(result.duration)||0,
     hasTrack:!!result.title,windowVisible:win.isVisible()});
-  if(request.method==='status')result.integrationVersion=2;
+  if(request.method==='status') {
+    result.integrationVersion=yandex?3:2;
+    if(yandex)record({capabilities:Object.fromEntries(['player','wave','navigation','metadata','store','legacy'].map(key=>[key,result.capabilities?.[key]===true]))});
+  }
   return result;
 }
 function connectBridge(win) {

@@ -17,16 +17,24 @@ A Yandex Plus subscription and service availability in your region are required.
 
 - A fourth source in full and compact modes, with separate application volume/mute and selected-process PipeWire spectrum.
 - An in-widget My Wave start button and reactions, metadata/artwork, seeking, previous/next and standard **Ember** desktop media controls.
-- Search, collection and currently loaded queue tracks rendered in the widget. Lists are limited to 50 loaded rows; paginated/virtualized content is not a complete library export.
+- Search, playlist cards with in-widget track drill-down, and currently loaded queue tracks. Lists are limited to 50 loaded rows; paginated/virtualized content is not a complete library export.
 - An independent background engine, session profile and private local socket. Changing sources pauses the previous source and does not start the new one automatically.
 
 ## Playback components
 
-The account panel can discover and check an installed compatible Electron/Chromium engine and a public Widevine module. If Apple Music is already configured, Emberbox can reuse those runtime/module paths; Yandex authentication gets its **own** profile. Runtime binaries are not bundled or downloaded by Emberbox.
+The account panel can discover and check an installed compatible Electron/Chromium engine and a public Widevine module. If Apple Music is already configured, Emberbox reuses its current runtime/module paths while preserving Yandex’s **separate** existing profile. Apple credentials and sessions are not copied. Runtime binaries are not bundled or downloaded by Emberbox.
 
 If detection fails, use the engine and Widevine chooser in the Yandex account card. The required capabilities and installed-runtime limitations are the same as [Apple Music](APPLE_MUSIC.md).
 
 Configuration: `$XDG_CONFIG_HOME/emberbox-audio/yandex-engine.json` (normally `~/.config/emberbox-audio/`). Profile: `yandex-web-profile/`. The background service is `emberbox-audio-yandex.service`.
+
+## Updating to 0.7.3
+
+Update the checkout and run `./install.sh`. An older background Yandex adapter is replaced separately, retaining its signed-in profile. The Apple Music playback process is not restarted.
+
+Select Yandex Music: playlists load when opening its panel. Click a playlist to see its tracks, and use **All playlists** to return. Plus and service availability are still required for playback. Account sign-in is now shown separately from player readiness.
+
+If sign-in succeeds but music or lists are still missing, open the official window through its account card and test the same track there. Report your Emberbox version, the widget error and, if present, `$XDG_RUNTIME_DIR/emberbox-yandex-web/electron-status.json`. That file contains engine versions, readiness flags and error categories; it does not record cookies, tokens or track titles. Do not share the browser profile itself.
 
 ## Test checklist
 

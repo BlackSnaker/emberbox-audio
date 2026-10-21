@@ -1,6 +1,6 @@
 [project]
 name = "emberbox-audio"
-version = "0.7.2"
+version = "0.7.3"
 description = "A warm Gruvbox music widget for Spotify, Apple Music, YouTube and Yandex Music"
 readme = "README.md"
 requires-python = ">=3.10"

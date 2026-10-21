@@ -65,7 +65,7 @@ class Accounts:
             self.pending['spotify'] = False
         for source,service in (('apple-music',self.apple),('yandex-music',self.yandex)):
             if not service:continue
-            if self.pending[source] and service.connected and service.state.get('authorized'):
+            if self.pending[source] and service.connected and service.state.get('authorized') and (source!='yandex-music' or service.state.get('ready')):
                 self.pending[source] = False
                 service.action('hide')
             elif self.pending[source] and not service.connected and time.monotonic()-self.waiting_since>30:
@@ -97,6 +97,8 @@ class Accounts:
         is_yandex = source=='yandex-music'
         name = text('Yandex Music','Яндекс Музыка') if is_yandex else 'Apple Music'
         ready = bool(service and service.connected and service.state.get('authorized'))
+        signed_in=ready
+        if is_yandex:ready=ready and bool(service.state.get('ready'))
         preparing = self.preparing and self.preparing_source==source
         error = self.error if not self.error_source or self.error_source==source else ''
         errors = {
@@ -107,9 +109,12 @@ class Accounts:
             'START_FAILED':text('Could not open '+name+'. Check the playback setup and retry.',
                                 'Не удалось открыть '+name+'. Проверь настройку воспроизведения и повтори.')}
         return {'ready':ready,'busy':preparing,'status':text('Connected','Подключён') if ready else
+                text('Signed in · connecting player','Вход выполнен · подключаю плеер') if is_yandex and signed_in else
                 text('Preparing…','Подготавливаю…') if preparing else
                 text('Finish sign-in','Заверши вход') if self.pending[source] else text('Not connected','Не подключён'),
-                'description':errors.get(error) or (text('Your library, search and music are ready inside Emberbox.',
+                'description':errors.get(error) or (text('Sign-in succeeded. Waiting for the site player; open its window if this persists.',
+                    'Вход выполнен. Ожидаю плеер сайта; если это не проходит, открой его окно.') if is_yandex and signed_in and not ready else
+                    text('Your library, search and music are ready inside Emberbox.',
                     'Медиатека, поиск и музыка доступны внутри Emberbox.') if ready else
                     text('Sign in with Yandex ID to listen to My Wave. A Yandex Plus subscription is required.',
                          'Войди в Яндекс ID, чтобы слушать Мою волну. Нужна подписка Яндекс Плюс.') if is_yandex else

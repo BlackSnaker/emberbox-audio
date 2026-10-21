@@ -17,14 +17,14 @@ ENGINE_CONFIG = CONFIG_DIR/'yandex-engine.json'
 
 def prepare(runtime=None,module=None):
     existing=apple_setup.configured(ENGINE_CONFIG)
-    if existing and not runtime and not module:
-        return existing
     shared=apple_setup.configured()
     if shared and not runtime and not module:
         config={key:shared[key] for key in ('runtime','cdm_module')}
-        config['profile']=str(CONFIG_DIR/'yandex-web-profile')
+        config['profile']=(existing or {}).get('profile',str(CONFIG_DIR/'yandex-web-profile'))
+        if config==existing:return existing
         apple_setup.save(config,ENGINE_CONFIG)
         return config
+    if existing and not runtime and not module:return existing
     return apple_setup.prepare(runtime,module,config_path=ENGINE_CONFIG,profile_name='yandex-web-profile')
 
 
@@ -61,7 +61,15 @@ class YandexWeb(AppleWeb):
         while not self.connected and not self.closed and time.monotonic()<until:
             if self.error:raise BridgeUnavailable(self.error)
             time.sleep(.1)
-        try:return self.bridge.request(method,**params)
+        try:
+            starts_playback=method in ('wave','play') or method=='transport' and params.get('action')!='pause'
+            if starts_playback:
+                if not self.enabled:return {'skipped':True}
+                # Source selection and a first Play can arrive concurrently.
+                # Wait for the engine's acknowledgement before starting audio.
+                self.bridge.request('enable',enabled=True)
+                if not self.enabled:return {'skipped':True}
+            return self.bridge.request(method,**params)
         except BridgeUnavailable as error:
             messages={
                 'SIGN_IN_REQUIRED':text('Sign in with Yandex ID in Accounts.','Войди в Яндекс ID в разделе аккаунтов.'),
@@ -69,6 +77,12 @@ class YandexWeb(AppleWeb):
                 'REGION_UNAVAILABLE':text('Yandex Music is unavailable in this region.','Яндекс Музыка недоступна в этом регионе.'),
                 'ADAPTER_UNAVAILABLE':text('The website controls have changed. Open Yandex Music to continue.',
                     'Элементы сайта изменились. Открой окно Яндекс Музыки для продолжения.'),
+                'TypeError':text('The Yandex Music controls could not be connected. Reconnect in Accounts.',
+                    'Не удалось подключить управление Яндекс Музыкой. Переподключи её в Аккаунтах.'),
+                'ReferenceError':text('The Yandex Music controls could not be connected. Reconnect in Accounts.',
+                    'Не удалось подключить управление Яндекс Музыкой. Переподключи её в Аккаунтах.'),
+                'MEDIA_PLAYBACK':text('The site could not start audio. Open Yandex Music and check the playback engine.',
+                    'Сайт не смог запустить звук. Открой Яндекс Музыку и проверь движок воспроизведения.'),
                 'NOT_READY':text('Yandex Music is loading. Try again shortly.','Яндекс Музыка загружается. Попробуй чуть позже.'),
                 'TIMEOUT':text('Yandex Music took too long. Retry.','Яндекс Музыка долго отвечает. Повтори попытку.')}
             raise BridgeUnavailable(messages.get(str(error),text('Yandex Music did not respond. Reconnect in settings.',
@@ -84,7 +98,42 @@ class YandexWeb(AppleWeb):
     def _status_done(self,future):
         self.busy=False
         if not self.closed:
-            try:self.state=future.result();self.error=''
+            try:
+                self.state=future.result()
+                if self.state.get('integrationVersion') in (1,2) and not self.upgrade_attempted:
+                    self.upgrade_attempted=self.upgrading=True
+                    self.pool.submit(self._upgrade_adapter,dict(self.state)).add_done_callback(lambda item:GLib.idle_add(self._adapter_upgraded,item))
             except Exception:self.state={}
             self.changed()
+        return False
+
+    def _upgrade_adapter(self,previous):
+        # Replace only Yandex's older page adapter; its own signed-in profile
+        # is kept, and the Apple Music playback process is never restarted.
+        prepare()
+        subprocess.run(['systemctl','--user','stop',APP_ID+'-yandex.service'],check=True,timeout=8,
+                       stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        self._start_engine()
+        until=time.monotonic()+30
+        while not self.closed and time.monotonic()<until:
+            if self.connected:
+                try:
+                    status=self.bridge.request('status')
+                    if status.get('integrationVersion',0)>=3 and (status.get('ready') or not previous.get('playing')):
+                        self.bridge.request('enable',enabled=self.enabled)
+                        if self.enabled and previous.get('playing') and status.get('authorized'):
+                            if previous.get('wave'):self.bridge.request('wave')
+                            else:self.bridge.request('transport',action='play')
+                        return
+                except BridgeUnavailable:pass
+            time.sleep(.3)
+        raise BridgeUnavailable('Yandex adapter update timed out')
+
+    def _adapter_upgraded(self,future):
+        self.upgrading=False
+        if not self.closed:
+            try:future.result();self.error=''
+            except Exception:self.error=text('Reconnect Yandex Music in Accounts to finish the update.',
+                'Переподключи Яндекс Музыку в Аккаунтах для завершения обновления.')
+            self.poll();self.changed()
         return False

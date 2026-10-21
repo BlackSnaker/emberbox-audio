@@ -14,15 +14,17 @@ const location={origin:'https://music.yandex.ru',pathname:'/',search:''};
 const router={replace(){},prefetch(){},push(route){const u=new URL(route,location.origin);location.pathname=u.pathname;location.search=u.search;calls.push({route});}};
 const fiber={memoizedProps:{value:store},return:{memoizedProps:{value:engine},return:{memoizedProps:{value:router}}}};
 const root={__reactFiber$fixture:fiber};
-const control={disabled:false,getAttribute:()=>null,getClientRects:()=>[{}],click:()=>calls.push('click')};
+let hoverControls=true;
+const control={matches:()=>true,querySelector:()=>null,disabled:false,getAttribute:()=>null,getClientRects:()=>[{}],click:()=>calls.push('click')};
 const title={textContent:'Fixture track',matches:()=>true,getAttribute:()=>'/album/456/track/123',
   closest:()=>row,parentElement:null};
-const row={isConnected:true,querySelector:selector=>selector.includes('PLAY_BUTTON')?control:null,
+const row={isConnected:true,querySelector:selector=>selector.includes('PLAY_BUTTON')?(hoverControls?control:null):selector.includes('TRACK_TITLE')?title:null,
   querySelectorAll:()=>[],parentElement:null};
+const playlistTitle={textContent:'Evening playlist',matches:()=>true,getAttribute:()=>'/playlists/fixture-123',closest:()=>({querySelector:()=>({src:'https://avatars.yandex.net/playlist/400x400'})})};
 const document={readyState:'complete',body:{textContent:'Музыка'},
-  querySelector:selector=>selector.includes('TRACK_TITLE')||selector.includes('a[href*=')?title:
+  querySelector:selector=>selector.includes('PLAYLIST_TITLE')?playlistTitle:selector.includes('TRACK_TITLE')||selector.includes('a[href*=')?title:
     selector.includes('LIKE_BUTTON')||selector.includes('DISLIKE_BUTTON')?control:null,
-  querySelectorAll:selector=>selector.startsWith('main,')?[root]:selector.includes('TRACK_TITLE')?[title]:[]};
+  querySelectorAll:selector=>selector.startsWith('main,')||selector.includes('PLAYERBAR_DESKTOP')?[root]:selector.includes('PLAYLIST_TITLE')?[playlistTitle]:selector.includes('TRACK_TITLE')?[title]:[]};
 const context=vm.createContext({window:{__emberboxPlaybackAllowed:true},document,location,
   navigator:{mediaSession:{metadata:null,playbackState:'none'}},URL,Map,setTimeout});
 vm.runInContext(fs.readFileSync('src/apple_web_host/yandex.js','utf8'),context);
@@ -49,7 +51,18 @@ const call=(method,params={})=>context.emberboxYandexCommand({method,params});
   assert.equal(search.items[0].id,'123');assert.equal(search.items[0].uri,'yandex:track:123');
   assert(!JSON.stringify(search).includes('NEVER_EXPORT'));
   await call('play',{id:'123'});assert.equal(calls.at(-1),'click');
-  await call('browse',{category:'collection'});assert.equal(calls.at(-1).route,'/collection');
+  const collection=await call('browse',{category:'collection'});assert.equal(calls.at(-1).route,'/collection/playlists');
+  assert.equal(collection.items[0].kind,'playlist');assert.equal(collection.items[0].id,'/playlists/fixture-123');
+  const tracks=await call('tracks',{id:collection.items[0].id});assert.equal(calls.at(-1).route,'/playlists/fixture-123');
+  assert.equal(tracks.items[0].id,'123');
+  for(const id of ['https://example.invalid/playlists/123','/account','/playlists/../account','javascript:alert(1)'])await assert.rejects(call('tracks',{id}),/INVALID_ARGUMENTS/);
+  hoverControls=false;
+  const contextParams={contextData:{type:'album',meta:{id:'456'}},queueParams:{entityId:'123:456'}};
+  title.__reactFiber$track={memoizedProps:{playContextParams:contextParams}};
+  await call('search',{term:'No hover buttons'});
+  assert.equal((await call('search',{term:'No hover buttons'})).items.length,1);
+  await call('play',{id:'123'});assert.deepEqual(calls.at(-1).context,contextParams);
+  hoverControls=true;
   await assert.rejects(call('play',{id:'../../account'}),/INVALID_ARGUMENTS/);
   await assert.rejects(call('seek',{position:-1}),/INVALID_ARGUMENTS/);
   await assert.rejects(call('feedback',{action:'delete'}),/INVALID_ARGUMENTS/);
@@ -68,6 +81,18 @@ const call=(method,params={})=>context.emberboxYandexCommand({method,params});
   document.body.textContent='Яндекс Музыка недоступна в вашем регионе';
   assert.equal((await call('status')).regionBlocked,true);
   await assert.rejects(call('wave'),/REGION_UNAVAILABLE/);
+  document.body.textContent='Музыка';store.user.isAuthorized=true;store.user.hasPlus=true;
+  root.__reactFiber$fixture={memoizedProps:{},dependencies:{firstContext:{memoizedValue:store,next:{memoizedValue:engine,next:{memoizedValue:router}}}}};
+  delete context.window.__emberboxYandex;
+  assert.equal((await call('status')).capabilities.player,true);
+  assert.equal((await call('status')).authorized,true);
+  store.user.isAuthorized=false;
+  const signedIn={...store,user:{isAuthorized:true,hasPlus:true},sonataState:{...store.sonataState,entityMeta:{...store.sonataState.entityMeta,title:'After login'}}};
+  root.__reactFiber$fixture.dependencies.firstContext.memoizedValue=signedIn;
+  assert.equal((await call('status')).title,'After login');assert.equal((await call('status')).authorized,true);
+  delete context.window.__emberboxYandex;
+  root.__reactFiber$fixture={memoizedProps:{value:signedIn},return:{memoizedProps:{value:engine}}};
+  await assert.rejects(call('browse',{category:'collection'}),error=>error.emberboxRoute==='/collection/playlists');
   location.origin='https://example.invalid';
   await assert.rejects(call('status'),/NOT_READY/);
   console.log('PASS Yandex My Wave, metadata privacy, search, reactions, controls and source switching');

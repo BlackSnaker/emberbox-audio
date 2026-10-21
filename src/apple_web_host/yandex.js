@@ -4,7 +4,7 @@
  */
 async function emberboxYandexCommand(request) {
   if (location.origin !== 'https://music.yandex.ru') throw Error('NOT_READY');
-  const allowed=['status','wave','browse','search','play','transport','seek','feedback'];
+  const allowed=['status','wave','browse','tracks','search','play','transport','seek','feedback'];
   if(!allowed.includes(request.method)) throw Error('UNSUPPORTED');
   const p=request.params||{};
   const state=window.__emberboxYandex||(window.__emberboxYandex={items:new Map()});
@@ -31,18 +31,34 @@ async function emberboxYandexCommand(request) {
   const wait=async work=>{for(let i=0;i<45;i++){const result=work();if(result)return result;await new Promise(resolve=>setTimeout(resolve,200));}throw Error('NOT_READY');};
   // The site's React providers expose its router and player view model.
   // Inspect only these named capabilities; never enumerate or export user data.
-  function context() {
-    if(state.store&&state.router&&state.engine)return;
-    for(const element of Array.from(document.querySelectorAll('main,main *,body > div')).slice(0,45)) {
-      const key=Object.keys(element).find(key=>key.startsWith('__reactFiber$'));
-      let fiber=key&&element[key];
-      for(let depth=0;fiber&&depth<100;depth++,fiber=fiber.return) {
-        const value=fiber.memoizedProps?.value;
-        if(value?.user&&value?.sonataState)state.store=value;
-        if(value&&typeof value.togglePause==='function'&&typeof value.playContext==='function')state.engine=value;
-        if(value&&typeof value.push==='function'&&typeof value.replace==='function'&&typeof value.prefetch==='function')state.router=value;
-      }
+  function fibers(element,visit) {
+    const key=Object.keys(element||{}).find(key=>key.startsWith('__reactFiber$')||key.startsWith('__reactInternalInstance$'));
+    let fiber=key&&element[key];
+    for(let depth=0;fiber&&depth<180;depth++,fiber=fiber.return) {
+      const props=fiber.memoizedProps||{};
+      visit(props.value,props);
+      // useContext consumers retain their provider values here, even when
+      // the provider itself is above the inspected DOM subtree.
+      let dependency=fiber.dependencies?.firstContext;
+      for(let i=0;dependency&&i<24;i++,dependency=dependency.next)
+        visit(dependency.memoizedValue,props);
     }
+  }
+  function context() {
+    const found={};
+    const accept=value=>{
+      try {
+        if(value?.user&&value?.sonataState)found.store=value;
+        if(value&&typeof value.togglePause==='function'&&typeof value.playContext==='function')found.engine=value;
+        if(value&&typeof value.push==='function'&&typeof value.replace==='function'&&typeof value.prefetch==='function')found.router=value;
+      }catch{} // A detached MobX provider must not hide the live provider.
+    };
+    // Start with the actual player, which can be outside <main>. Re-read
+    // contexts after login/navigation instead of keeping the guest store.
+    const anchors=[...document.querySelectorAll('[data-test-id$="PLAYERBAR_DESKTOP"], [data-test-id$="VIBE_PLAYERBAR"], [class*="PlayerBar_root"], [class*="PlayerBarDesktop_root"], main, body > div')];
+    const nodes=[...anchors,...Array.from(document.querySelectorAll('main,main *,body > div')).slice(0,120)];
+    for(const element of new Set(nodes))fibers(element,accept);
+    Object.assign(state,found);
   }
   context();
   const view=state.store?.sonataState;
@@ -68,11 +84,11 @@ async function emberboxYandexCommand(request) {
   const bodyText=text(document.body); // region banners are short; do not export text.
   const region=/недоступна в вашем регионе|not available in your (country|region)/i.test(bodyText);
   const user=state.store?.user;
-  const authorized=typeof user?.isAuthorized==='boolean'?user.isAuthorized:!!test('USER_PROFILE_USERNAME');
+  const authorized=user?.isAuthorized===true||!!test('USER_PROFILE_USERNAME');
   const subscribed=typeof user?.hasPlus==='boolean'?user.hasPlus:null;
-  const status={ready:document.readyState==='complete'&&!!state.store,authorized,subscribed,regionBlocked:region,
+  const status={ready:document.readyState==='complete'&&!!(state.store||external||bar||button('MY_VIBE_PLAY_BUTTON')||test('USER_PROFILE_USERNAME')),authorized,subscribed,regionBlocked:region,
     capabilities:{player:!!state.engine,wave:!!state.engine?.playContext||!!button('MY_VIBE_PLAY_BUTTON'),
-      navigation:!!state.router,metadata:!!view},
+      navigation:!!state.router,metadata:!!(view||meta||extTrack),store:!!state.store,legacy:!!external},
     playing:!!playing,title,artist,album:String(meta?.album||track?.mainAlbum?.title||extTrack?.album?.title||'').slice(0,300),
     id:String(track?.id||extTrack?.id||title).slice(0,300),image:cover(rawCover),duration,position,
     canNext:!!view?.canMoveForward||!!button('NEXT_TRACK_BUTTON')||!!external?.next,
@@ -81,13 +97,23 @@ async function emberboxYandexCommand(request) {
   if(request.method==='status')return status;
   if(region)throw Error('REGION_UNAVAILABLE');
   if(!authorized)throw Error('SIGN_IN_REQUIRED');
+  const playlistRoute=value=>{
+    if(typeof value!=='string')return '';
+    try {
+      const url=new URL(value,location.origin);
+      if(url.origin!==location.origin||url.search||url.hash)return '';
+      return /^\/playlists\/[a-zA-Z0-9-]{1,100}$/.test(url.pathname)||
+        /^\/users\/[\w.@-]{1,100}\/playlists\/\d{1,20}$/.test(url.pathname)?url.pathname:'';
+    }catch{return '';}
+  };
   async function navigate(route) {
     if(location.pathname+location.search===route)return;
     context();
     if(state.router){state.router.push(route);await wait(()=>location.pathname+location.search===route);return;}
     const link=Array.from(document.querySelectorAll('a[href]')).find(a=>a.getAttribute('href')===route);
     if(link){link.click();await wait(()=>location.pathname+location.search===route);return;}
-    throw Error('ADAPTER_UNAVAILABLE');
+    // The host reloads the same official site, then reinjects this adapter.
+    const error=Error('NAVIGATION_REQUIRED');error.emberboxRoute=route;throw error;
   }
   const playbackAllowed=()=>window.__emberboxPlaybackAllowed===true;
   if(request.method==='transport') {
@@ -127,6 +153,8 @@ async function emberboxYandexCommand(request) {
     if(!playbackAllowed())return {skipped:true};
     if(subscribed===false)throw Error('SUBSCRIPTION_REQUIRED');
     if(status.wave&&playing)return {ok:true};
+    const waveControl=button('MY_VIBE_PLAY_BUTTON');
+    if(waveControl){waveControl.click();return {ok:true};}
     if(state.engine) {
       if(status.wave){await state.engine.resume();return {ok:true};}
       await state.engine.playContext({contextData:{type:'vibe',meta:{id:'user:onyourwave'},
@@ -145,18 +173,18 @@ async function emberboxYandexCommand(request) {
     if(!control)throw Error('ADAPTER_UNAVAILABLE');
     control.click();return {ok:true};
   }
-  function items() {
+  const listRoot=()=>document.querySelector('main')||document;
+  function items(root=listRoot()) {
     const result=[];const seen=new Set();state.items.clear();
-    for(const node of document.querySelectorAll('[data-test-id$="TRACK_TITLE"], [class*="titleLink"][href*="/track/"], a[href*="/track/"]')) {
+    for(const node of root.querySelectorAll('[data-test-id$="TRACK_TITLE"], [class*="titleLink"][href*="/track/"], a[href*="/track/"]')) {
       const link=node.matches('a[href]')?node:node.querySelector('a[href]');
       let row=node.closest('[role="row"], [class*="HorizontalTrack_root"], [class*="HorizontalCardContainer_root"]')||node.parentElement;
-      for(let depth=0;row&&depth<8;depth++,row=row.parentElement)if(button('PLAY_BUTTON',row)||button('PLAY_BUTTON_WITH_COVER',row))break;
       if(!row)continue;
       const url=link?.getAttribute('href')||row.querySelector('a[href*="/track/"]')?.getAttribute('href')||'';
       const match=url.match(/(?:\/track\/|\/tracks\/)(\d+)/);if(!match||seen.has(match[1]))continue;
       const id=match[1],name=text(node);if(!name)continue;seen.add(id);
       const artists=Array.from(row.querySelectorAll('a[href*="/artist/"]')).map(text).filter(Boolean);
-      const image=row.querySelector('img');const item={id,title:name,artist:[...new Set(artists)].join(', '),image:cover(image?.src),uri:'yandex:track:'+id};
+      const image=row.querySelector('img');const item={id,kind:'track',title:name,artist:[...new Set(artists)].join(', '),image:cover(image?.src),uri:'yandex:track:'+id};
       state.items.set(id,row);result.push(item);if(result.length>=50)break;
     }
     return result;
@@ -167,21 +195,56 @@ async function emberboxYandexCommand(request) {
     const row=state.items.get(String(p.id));
     if(!row?.isConnected)throw Error('NOT_FOUND');
     const control=button('PLAY_BUTTON',row)||button('PLAY_BUTTON_WITH_COVER',row);
-    if(!control)throw Error('ADAPTER_UNAVAILABLE');
-    control.click();return {ok:true};
+    if(control){
+      // PLAY_BUTTON_WITH_COVER is a wrapper on the modern site.
+      const target=control.matches?.('button')?control:control.querySelector('button');
+      if(visible(target)){target.click();return {ok:true};}
+      const propsKey=Object.keys(control).find(key=>key.startsWith('__reactProps$'));
+      if(typeof control[propsKey]?.onClick==='function'){control.click();return {ok:true};}
+    }
+    let params=null;
+    const titleNode=row.querySelector('[data-test-id$="TRACK_TITLE"], a[href*="/track/"]')||row;
+    fibers(titleNode,(_value,props)=>{if(!params&&props.playContextParams)params=props.playContextParams;});
+    if(params&&state.engine){await state.engine.playContext(params);if(!playbackAllowed())await state.engine.pause();return {ok:true};}
+    throw Error('ADAPTER_UNAVAILABLE');
+  }
+  function playlists() {
+    const result=[],seen=new Set();
+    for(const node of listRoot().querySelectorAll('[data-test-id$="PLAYLIST_TITLE"], a[href*="/playlists/"]')) {
+      const link=node.matches('a[href]')?node:node.querySelector('a[href]');
+      const route=playlistRoute(link?.getAttribute('href'));if(!route||seen.has(route))continue;
+      const name=text(node);if(!name)continue;seen.add(route);
+      const row=node.closest('[data-test-id$="PLAYLIST_ITEM"], [data-test-id$="PLAYLIST_CARD"], [class*="PlaylistCard_root"], [class*="HorizontalCardContainer_root"]')||node.parentElement;
+      const image=row?.querySelector('img');
+      result.push({id:route,kind:'playlist',title:name,artist:'',image:cover(image?.src)});
+      if(result.length>=50)break;
+    }
+    return result;
+  }
+  const trackSelector='a[href*="/track/"], [data-test-id$="TRACK_TITLE"]';
+  const emptyTracks=()=>document.querySelector('[class*="SearchEmpty"], [class*="CollectionEmpty"], [data-test-id$="EMPTY_TITLE"], [data-test-id$="EMPTY_ROOT"]')||test('SEARCH_EMPTY_CONTAINER')||test('COLLECTION_PLAYLIST_WITH_LIKES_EMPTY_BLOCK');
+  if(request.method==='tracks') {
+    const route=playlistRoute(p.id);if(!route)throw Error('INVALID_ARGUMENTS');
+    await navigate(route);
+    await wait(()=>listRoot().querySelector(trackSelector)||emptyTracks());
+    return {items:items()};
   }
   if(request.method==='search') {
     if(typeof p.term!=='string'||!p.term.trim()||p.term.length>200)throw Error('INVALID_ARGUMENTS');
     await navigate('/search?text='+encodeURIComponent(p.term.trim()));
-    await wait(()=>document.querySelector('a[href*="/track/"], [data-test-id$="TRACK_TITLE"], [class*="SearchEmpty"]')||test('SEARCH_EMPTY_CONTAINER'));
+    await wait(()=>listRoot().querySelector('a[href*="/track/"], [data-test-id$="TRACK_TITLE"], [class*="SearchEmpty"]')||test('SEARCH_EMPTY_CONTAINER'));
     return {items:items()};
   }
   if(request.method==='browse') {
     if(!['collection','queue'].includes(p.category))throw Error('INVALID_ARGUMENTS');
-    if(p.category==='collection')await navigate('/collection');
-    else {const queue=button('PLAY_QUEUE_BUTTON',bar||document);if(queue)queue.click();}
-    await wait(()=>document.querySelector('a[href*="/track/"], [data-test-id$="TRACK_TITLE"], [class*="CollectionEmpty"]')||test('COLLECTION_PLAYLIST_WITH_LIKES_EMPTY_BLOCK'));
-    return {items:items()};
+    if(p.category==='collection') {
+      await navigate('/collection/playlists');
+      await wait(()=>listRoot().querySelector('[data-test-id$="PLAYLIST_TITLE"], a[href*="/playlists/"], [class*="CollectionEmpty"], [data-test-id$="EMPTY_TITLE"], [data-test-id$="EMPTY_ROOT"]'));
+      return {items:playlists()};
+    }
+    const queue=button('PLAY_QUEUE_BUTTON',bar||document);if(queue)queue.click();
+    await wait(()=>document.querySelector(trackSelector)||emptyTracks());
+    return {items:items(document)};
   }
   throw Error('UNSUPPORTED');
 }

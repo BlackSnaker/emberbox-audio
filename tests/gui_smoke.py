@@ -265,6 +265,12 @@ try:
     app.yandex_panel.render([{'id':'123','title':'Fixture','artist':'Artist','image':''}])
     app.yandex_panel.track_buttons[0].clicked();settle()
     assert ('play',{'id':'123'}) in app.yandex_web.calls
+    app.yandex_panel.render([{'id':'/playlists/fixture','kind':'playlist','title':'Evening','image':''}])
+    app.yandex_panel.track_buttons[0].clicked();settle()
+    assert ('tracks',{'id':'/playlists/fixture'}) in app.yandex_web.calls
+    assert app.yandex_panel.back.get_visible()
+    app.yandex_panel.back.clicked();settle()
+    assert app.yandex_panel.category=='collection' and not app.yandex_panel.back.get_visible()
     app.toggle_compact(None);settle()
     assert app.window.get_size().width==320 and app.compact_source.get_label()=='Я⌄'
     app.toggle_compact(None);settle()

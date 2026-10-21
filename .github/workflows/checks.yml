@@ -76,6 +76,7 @@ jobs:
           node tests/apple_web_test.js
           node tests/apple_browser_test.js
           node tests/yandex_web_test.js
+          node tests/web_host_test.js
       - name: GTK layout and controls
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/gui_smoke.py
       - name: Fullscreen listening room

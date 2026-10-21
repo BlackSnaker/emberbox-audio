@@ -5,13 +5,48 @@ import tempfile
 import threading
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch,Mock
+from concurrent.futures import Future
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 import yandex_web
 from stream_target import Target,matches
 
 
 class YandexTests(unittest.TestCase):
+    def test_existing_profile_reuses_updated_apple_engine(self):
+        old={'runtime':'/old/engine','cdm_module':'/old/module','profile':'/owned/yandex-profile'}
+        shared={'runtime':'/working/apple-engine','cdm_module':'/working/module','profile':'/private/apple-profile'}
+        with patch('yandex_web.apple_setup.configured',side_effect=[old,shared]),patch('yandex_web.apple_setup.save') as save:
+            result=yandex_web.prepare()
+        self.assertEqual(result['runtime'],shared['runtime'])
+        self.assertEqual(result['profile'],old['profile'])
+        save.assert_called_once_with(result,yandex_web.ENGINE_CONFIG)
+
+    def test_first_play_waits_for_source_enable_acknowledgement(self):
+        app=yandex_web.YandexWeb.__new__(yandex_web.YandexWeb)
+        app.enabled=True;app.closed=False;app.error='';app.ensure_started=lambda:None
+        app.bridge=SimpleNamespace(connected=True,request=Mock(return_value={'ok':True}))
+        app.request('wave')
+        self.assertEqual(app.bridge.request.call_args_list[0].args,('enable',))
+        self.assertEqual(app.bridge.request.call_args_list[1].args,('wave',))
+        app.bridge.request.reset_mock();app.enabled=False
+        self.assertEqual(app.request('wave'),{'skipped':True})
+        app.bridge.request.assert_not_called()
+        app.request('transport',action='pause')
+        app.bridge.request.assert_called_once_with('transport',action='pause')
+
+    def test_old_adapter_updates_once_and_polling_preserves_action_errors(self):
+        app=yandex_web.YandexWeb.__new__(yandex_web.YandexWeb)
+        app.closed=False;app.error='Useful playback error';app.upgrade_attempted=False
+        app.pool=Mock();app.changed=Mock()
+        future=Future();future.set_result({'integrationVersion':2,'authorized':False,'ready':False})
+        app._status_done(future)
+        self.assertEqual(app.error,'Useful playback error')
+        self.assertTrue(app.upgrading)
+        app.pool.submit.assert_called_once()
+        app._status_done(future)
+        app.pool.submit.assert_called_once()
+
     def test_runtime_reuse_keeps_account_profiles_separate(self):
         shared={'runtime':'/fixture/runtime','cdm_module':'/fixture/cdm','profile':'/private/apple-profile'}
         with tempfile.TemporaryDirectory() as folder:

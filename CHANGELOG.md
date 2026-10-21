@@ -2,6 +2,14 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.7.3 — 2026-10-21
+
+- Refresh Yandex player contexts after sign-in and read context consumers outside the main content.
+- Load playlist cards, open their tracks inside the widget, and support tracks whose Play control appears only on hover.
+- Reuse Apple’s configured playback components while preserving Yandex’s separate signed-in profile; replace older Yandex adapters once.
+- Acknowledge source activation before the first Play and preserve actionable errors instead of clearing them on every status poll.
+- Add bounded official-site navigation and sanitized player-capability diagnostics. Real Plus playback remains with subscription testers.
+
 ## 0.7.2 — 2026-10-21
 
 - Automatic desktop shortcut on KDE Plasma, with localized XDG desktop folders and a remembered opt-out.
