@@ -62,10 +62,17 @@ app=widget.Widget()
 try:
     settle()
     assert app.window.get_size().width==460
+    assert app.hide_button.get_visible() and app.close_button.get_visible()
+    before=app.youtube.paused
+    app.hide_button.clicked();settle()
+    assert not app.window.get_visible() and app.youtube.paused==before
+    app.show_widget();settle()
+    assert app.window.get_visible() and app.window.get_size().width==460
     assert app.settings_button.get_visible()
     app.settings_button.clicked()
     settle()
     assert app.settings.popover.get_visible()
+    assert app.settings.hide_button.get_visible() and app.settings.quit_button.get_visible()
     app.settings.mode_button.clicked()
     settle()
     assert app.compact and app.compact_settings.get_visible()

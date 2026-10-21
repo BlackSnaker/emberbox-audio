@@ -47,6 +47,17 @@ def absolute(value):
     return path
 
 
+def desktop_directory():
+    try:
+        result=subprocess.run(['xdg-user-dir','DESKTOP'],capture_output=True,text=True,timeout=3)
+        directory=absolute(result.stdout.strip()) if result.returncode==0 and result.stdout.strip() else None
+    except (OSError,ValueError,subprocess.SubprocessError):directory=None
+    # A desktop directory equal to HOME means desktop icons were disabled.
+    if directory is None or directory==Path.home():
+        raise ValueError('No desktop folder is configured. Configure XDG_DESKTOP_DIR before adding a shortcut.')
+    return directory
+
+
 def remove(path):
     if path.is_dir() and not path.is_symlink():shutil.rmtree(path)
     else:path.unlink(missing_ok=True)
@@ -118,6 +129,9 @@ def main(argv=None):
     startup=parser.add_mutually_exclusive_group()
     startup.add_argument('--autostart',dest='autostart',action='store_true',default=None,help='Start at desktop login')
     startup.add_argument('--no-autostart',dest='autostart',action='store_false',help='Disable start at login')
+    shortcut_options=parser.add_mutually_exclusive_group()
+    shortcut_options.add_argument('--desktop-shortcut',dest='desktop_shortcut',action='store_true',default=None,help='Add a launcher to the XDG desktop folder')
+    shortcut_options.add_argument('--no-desktop-shortcut',dest='desktop_shortcut',action='store_false',help='Remove the managed desktop shortcut')
     parser.add_argument('--bin-dir',type=Path,default=Path.home()/'.local/bin')
     parser.add_argument('--no-systemd',action='store_true',help='Use a direct desktop launcher')
     parser.add_argument('--skip-check',action='store_true',help='Packaging only: skip dependency installation and validation')
@@ -150,6 +164,14 @@ def main(argv=None):
         except (OSError,ValueError):parser.error('The installation manifest is unreadable')
         if previous.get('app')!=APP:parser.error('This directory belongs to another application')
     version=(ROOT/'VERSION').read_text().strip()
+    shortcut=None
+    old_shortcut=previous.get('desktop_shortcut')
+    if old_shortcut and Path(old_shortcut).is_absolute() and Path(old_shortcut).name==APP+'.desktop':
+        shortcut=absolute(old_shortcut)
+    want_shortcut=bool(shortcut) if args.desktop_shortcut is None else args.desktop_shortcut
+    if args.action=='install' and want_shortcut and shortcut is None:
+        try:shortcut=desktop_directory()/(APP+'.desktop')
+        except ValueError as error:parser.error(str(error))
     ui.banner(version)
     if args.action=='uninstall':
         if not previous:
@@ -158,6 +180,7 @@ def main(argv=None):
             for suffix in ('-apple','-yandex',''):service('stop',APP+suffix+'.service')
             service('disable',APP+'.service')
         allowed={unit,desktop,media_desktop,launcher,autostart}
+        if shortcut:allowed.add(shortcut)
         # Previous launcher path may differ from today's --bin-dir.
         old_launcher=Path(previous.get('launcher',str(launcher)))
         if old_launcher.name==APP and old_launcher.is_absolute():allowed.add(old_launcher)
@@ -168,7 +191,7 @@ def main(argv=None):
         if previous.get('systemd'):service('daemon-reload')
         ui.success('Removed Emberbox. Your music settings and cache are kept.','Emberbox удалён. Настройки музыки и кеш сохранены.')
         return 0
-    for path in (unit,desktop,media_desktop,launcher,autostart):
+    for path in (unit,desktop,media_desktop,launcher,autostart,*([shortcut] if shortcut else [])):
         if not args.check and path.exists() and str(path) not in previous.get('files',[]):
             parser.error(f'Refusing to overwrite an unmanaged file: {path}')
     ui.step(1,'Check the system','Проверка системы')
@@ -220,7 +243,7 @@ def main(argv=None):
         ui.note('Direct launcher selected; no user service manager is required.','Будет прямой запуск — служба пользователя не требуется.')
     created=not target.exists()
     was_running=bool(previous.get('systemd')) and service('is-active','--quiet',APP+'.service').returncode==0
-    files=(unit,desktop,media_desktop,launcher,autostart,manifest)
+    files=(unit,desktop,media_desktop,launcher,autostart,manifest,*([shortcut] if shortcut else []))
     old_files=snapshot(files)
     installed=[];backed=[];stopped=False
     data.mkdir(parents=True,exist_ok=True)
@@ -259,8 +282,15 @@ def main(argv=None):
                     f'Comment=A little warmth for your desktop\nComment[ru]=Немного тепла для рабочего стола\n'
                     f'Exec={desktop_quote(launcher)}\nIcon={target/"assets/icon.svg"}\nTerminal=false\n'
                     'Categories=AudioVideo;Player;\nStartupNotify=false\nStartupWMClass=emberbox-audio\n')
+                desktop_text+=('Actions=Show;Hide;Quit;\n\n'
+                    '[Desktop Action Show]\nName=Show player\nName[ru]=Показать плеер\n'
+                    f'Exec={desktop_quote(launcher)} --show\n\n'
+                    '[Desktop Action Hide]\nName=Hide player\nName[ru]=Скрыть плеер\n'
+                    f'Exec={desktop_quote(launcher)} --hide\n\n'
+                    '[Desktop Action Quit]\nName=Close player\nName[ru]=Закрыть плеер\n'
+                    f'Exec={desktop_quote(launcher)} --quit\n')
                 desktop.write_text(desktop_text)
-                media_desktop.write_text(desktop_text.replace(f'Name={TITLE}','Name=Ember')+'NoDisplay=true\n')
+                media_desktop.write_text(desktop_text.replace(f'Name={TITLE}', 'Name=Ember\nNoDisplay=true'))
                 managed=[str(launcher),str(desktop),str(media_desktop)]
                 if use_systemd:
                     unit.parent.mkdir(parents=True,exist_ok=True)
@@ -276,8 +306,19 @@ def main(argv=None):
                     autostart.parent.mkdir(parents=True,exist_ok=True);autostart.write_text(desktop_text)
                     managed.append(str(autostart))
                 elif str(autostart) in previous.get('files',[]):autostart.unlink(missing_ok=True)
+                if want_shortcut:
+                    shortcut.parent.mkdir(parents=True,exist_ok=True)
+                    shortcut.write_text(desktop_text);shortcut.chmod(0o755)
+                    managed.append(str(shortcut))
+                    if shutil.which('gio'):
+                        try:
+                            subprocess.run(['gio','set','-t','string',str(shortcut),'metadata::trusted','true'],
+                                stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=3)
+                        except (OSError,subprocess.SubprocessError):pass
+                elif shortcut and str(shortcut) in previous.get('files',[]):shortcut.unlink(missing_ok=True)
                 manifest.write_text(json.dumps({'app':APP,'version':version,'systemd':use_systemd,'python':selected,
-                    'autostart':bool(want_autostart),'launcher':str(launcher),'files':managed},indent=2)+'\n')
+                    'autostart':bool(want_autostart),'launcher':str(launcher),
+                    'desktop_shortcut':str(shortcut) if want_shortcut else None,'files':managed},indent=2)+'\n')
                 # XDG autostart supplies the current display before starting the service.
                 ui.item(ui.text('Application menu entry','Пункт меню приложений'))
                 ui.item(ui.text('Start at login enabled','Запуск при входе включён') if want_autostart else ui.text('Launch whenever you want','Запуск по желанию'))

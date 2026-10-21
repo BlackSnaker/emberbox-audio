@@ -36,6 +36,12 @@ def session_file(environ=None):
 
 
 def main():
+    sys.path.insert(0,str(ROOT/'src'))
+    try:from widget_control import send
+    except ImportError:send=lambda _action:False
+    action='Hide' if '--hide' in sys.argv[1:] else 'Quit' if '--quit' in sys.argv[1:] else 'Show'
+    if send(action):return 0
+    if action!='Show':return 0
     try:config=json.loads((ROOT/'.emberbox-install.json').read_text())
     except (OSError,ValueError):config={}
     python=Path(config.get('python',sys.executable))

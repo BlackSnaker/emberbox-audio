@@ -62,7 +62,9 @@ jobs:
       - name: Regression checks
         run: /usr/bin/python3 -m unittest discover -s tests -p 'test_*.py' -v
       - name: MPRIS source routing
-        run: dbus-run-session -- /usr/bin/python3 tests/mpris_smoke.py
+        run: |
+          dbus-run-session -- /usr/bin/python3 tests/mpris_smoke.py
+          dbus-run-session -- /usr/bin/python3 tests/widget_control_smoke.py
       - name: Apple and Yandex Music adapters
         run: |
           node tests/apple_web_test.js

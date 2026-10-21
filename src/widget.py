@@ -43,7 +43,8 @@ from fullscreen import FullscreenPlayer
 from desktop_launch import launch as launch_desktop
 import desktop_window
 from kwin_desktop import KWinDesktop
-from widget_settings import SettingsMenu, settings_button
+from widget_settings import SettingsMenu, settings_button, window_button
+from widget_control import WidgetControl
 import widget_restart
 from youtube_audio import YouTubeAudio
 from youtube_panel import YouTubePanel
@@ -233,7 +234,7 @@ class Widget:
         self.source_picker = SourcePicker(self.select_source, self.launch_apple,self.show_accounts)
         self.fullscreen = None
         self.kwin_desktop = None
-        self.settings = SettingsMenu(lambda: self.toggle_compact(None), self.reconnect_player, self.restart_widget,self.show_accounts,self.show_fullscreen)
+        self.settings = SettingsMenu(lambda: self.toggle_compact(None), self.reconnect_player, self.restart_widget,self.show_accounts,self.show_fullscreen,self.hide_widget,self.quit)
         self.restarting = False
         self.resources_closed = False
         self.expanded = bool(saved.get('expanded', False))
@@ -294,6 +295,10 @@ class Widget:
         card.pack_start(header, False, False, 0)
         header_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         header.add(header_row)
+        self.close_button=window_button('window-close-symbolic',text('Close player','Закрыть плеер'),self.quit)
+        self.hide_button=window_button('window-minimize-symbolic',text('Hide player','Скрыть плеер'),self.hide_widget)
+        header_row.pack_end(self.close_button,False,False,0)
+        header_row.pack_end(self.hide_button,False,False,0)
         self.source_button = Gtk.Button(label='●  SPOTIFY  ⌄')
         self.source_button.get_style_context().add_class('filter-chip')
         self.source_button.get_style_context().add_class('source-button')
@@ -301,9 +306,9 @@ class Widget:
         self.source_button.get_accessible().set_name(text('Switch music source', 'Выбрать источник музыки'))
         self.source_button.connect('clicked', self.show_sources)
         header_row.pack_start(self.source_button, True, True, 0)
-        neon_caption = Gtk.Label(label='●  LIVE AUDIO')
+        neon_caption = Gtk.Label(label=text('●  LIVE AUDIO','●  ЖИВОЙ ЗВУК'))
         neon_caption.get_style_context().add_class('neon-caption')
-        self.mini_button = Gtk.Button(label='Mini')
+        self.mini_button = Gtk.Button(label=text('Mini','Мини'))
         self.mini_button.get_style_context().add_class('mini-button')
         self.mini_button.get_style_context().add_class('mode-button')
         self.mini_button.get_accessible().set_description('Компактный режим: обложка, кнопки и лампы')
@@ -319,7 +324,6 @@ class Widget:
         self.fullscreen_button.get_accessible().set_name(text('Listening room · Fullscreen','Комната прослушивания · На весь экран'))
         self.fullscreen_button.connect('clicked',lambda _b:self.show_fullscreen())
         header_row.pack_end(self.fullscreen_button,False,False,0)
-        header_row.pack_end(neon_caption, False, False, 0)
 
         body = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=13)
         self.body = body
@@ -397,7 +401,11 @@ class Widget:
         self.time = Gtk.Label(label='0:00  /  0:00')
         self.time.set_xalign(0)
         self.time.get_style_context().add_class('time')
-        details.pack_start(self.time, False, False, 0)
+        time_row=Gtk.Box(spacing=8)
+        time_row.pack_start(self.time,True,True,0)
+        time_row.pack_end(neon_caption,False,False,0)
+        self.time_row=time_row
+        details.pack_start(time_row, False, False, 0)
 
         controls = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=7)
         self.controls = controls
@@ -490,6 +498,7 @@ class Widget:
         self.frame_health = FrameHealth(self.window,self.animate)
         if self.desktop_mode == 'normal':
             self.kwin_desktop = KWinDesktop()
+        self.widget_control=WidgetControl(self.show_widget,self.hide_widget,self.quit)
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, self.quit)
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, self.quit)
 
@@ -507,6 +516,22 @@ class Widget:
         self.window.destroy()
         return False
 
+    def hide_widget(self):
+        self.save_position()
+        self.drag_offset=None
+        if self.settings.popover:self.settings.popover.popdown()
+        if self.source_picker.popover:self.source_picker.popover.popdown()
+        if self.fullscreen:self.fullscreen.hide()
+        self.window.hide()
+        return False
+
+    def show_widget(self):
+        if self.resources_closed:return False
+        self.window.show()
+        self.fit_window()
+        self.frame_health.request_frame()
+        return False
+
     def on_destroy(self, _window):
         self.close_resources()
         Gtk.main_quit()
@@ -515,6 +540,7 @@ class Widget:
         if self.resources_closed:
             return
         self.resources_closed = True
+        if hasattr(self,'widget_control'):self.widget_control.close()
         if self.kwin_desktop:self.kwin_desktop.close()
         self.frame_health.close()
         if self.fullscreen:self.fullscreen.close()
@@ -624,7 +650,7 @@ class Widget:
         self.mute_toggle.set_compact(self.compact)
         self.volume_knob.set_compact(self.compact)
         for child in (self.header, self.title, self.artist, self.album,
-                      self.progress_event, self.time, self.open, self.discovery_button):
+                      self.progress_event, self.time_row, self.open, self.discovery_button):
             child.set_visible(not self.compact)
         self.compact_source.set_visible(self.compact)
         self.compact_settings.set_visible(self.compact)
@@ -1331,6 +1357,10 @@ class Widget:
 
 if __name__ == '__main__':
     from paths import instance_lock
-    _instance = instance_lock()
+    try:_instance = instance_lock()
+    except SystemExit:
+        from widget_control import send
+        if send('Show'):raise SystemExit(0)
+        raise
     Widget()
     Gtk.main()

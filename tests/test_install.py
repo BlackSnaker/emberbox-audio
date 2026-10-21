@@ -20,6 +20,22 @@ from installer_ui import Terminal
 
 
 class InstallerTests(unittest.TestCase):
+    def test_desktop_shortcut_actions_survive_update_and_are_removed_on_uninstall(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base=Path(folder)
+            options=['--skip-check','--no-systemd','--bin-dir',str(base/'bin')]
+            with patch.dict(os.environ,{'XDG_DATA_HOME':str(base/'data'),'XDG_CONFIG_HOME':str(base/'config')}),\
+                 patch.object(installer,'desktop_directory',return_value=base/'Desktop with spaces'),\
+                 redirect_stdout(io.StringIO()):
+                self.assertEqual(installer.main(['install',*options,'--desktop-shortcut']),0)
+                shortcut=base/'Desktop with spaces'/f'{APP}.desktop'
+                self.assertTrue(shortcut.stat().st_mode&0o111)
+                for action in ('Show','Hide','Quit'):self.assertIn('[Desktop Action '+action+']',shortcut.read_text())
+                self.assertEqual(installer.main(['install',*options]),0)
+                self.assertTrue(shortcut.exists())
+                self.assertEqual(installer.main(['uninstall',*options]),0)
+                self.assertFalse(shortcut.exists())
+
     def test_isolated_install_and_uninstall_keep_preferences(self):
         with tempfile.TemporaryDirectory(prefix='emberbox-install-') as folder:
             folder = Path(folder)

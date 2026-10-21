@@ -66,6 +66,8 @@ On unknown or immutable systems, Emberbox does not bypass the distribution's sof
 | `./install.sh --yes` | Explicitly accept package-manager confirmations; `sudo` may still ask for your password. |
 | `./install.sh --autostart` | Enable launch at desktop login. |
 | `./install.sh --no-autostart` | Disable launch at login. An update without either option keeps the previous setting. |
+| `./install.sh --desktop-shortcut` | Add an executable launcher to the configured desktop folder. GNOME needs a desktop-icons extension to display it. |
+| `./install.sh --no-desktop-shortcut` | Remove the managed desktop shortcut. Updates otherwise preserve it. |
 | `./install.sh --no-systemd` | Use the direct launcher instead of a user service. This fallback is also automatic when a user service manager is unavailable. |
 | `./install.sh --lang ru` / `--lang en` | Choose the installer's language; normally selected from the locale. |
 | `./install.sh --plain` | Plain, colour-free terminal output; `NO_COLOR=1` also disables colours. |
@@ -108,6 +110,8 @@ YouTube playback normally needs no account; availability restrictions and websit
 [Connect accounts](ACCOUNTS.md) · [Apple Music](APPLE_MUSIC.md) · [Yandex Music](YANDEX_MUSIC.md) · [YouTube](YOUTUBE.md)
 
 ## Files, updates and removal
+
+Use the header’s **−** to hide the widget while music continues, and **×** to close it. Mini mode has the same actions in Settings. Click the application icon or desktop shortcut to restore a hidden player; a second copy is not started. The icon’s context menu also offers Show, Hide and Close. Closing exits cleanly, so the user service does not restart it; a later launch opens it again.
 
 Application files use `$XDG_DATA_HOME/emberbox-audio` (default `~/.local/share/emberbox-audio`). Preferences and cache use `$XDG_CONFIG_HOME/emberbox-audio` and `$XDG_CACHE_HOME/emberbox-audio`. The installer refuses to overwrite an unmanaged installation directory. The command launcher is `~/.local/bin/emberbox-audio` by default.
 

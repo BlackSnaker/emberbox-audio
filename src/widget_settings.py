@@ -15,10 +15,22 @@ def settings_button(callback):
     return button
 
 
+def window_button(icon_name, label, callback):
+    button=Gtk.Button()
+    icon=Gtk.Image.new_from_icon_name(icon_name,Gtk.IconSize.MENU)
+    icon.set_pixel_size(14);button.add(icon)
+    button.get_style_context().add_class('mini-button')
+    button.get_style_context().add_class('settings-button')
+    button.get_accessible().set_name(label)
+    button.connect('clicked',lambda _button:callback())
+    return button
+
+
 class SettingsMenu:
-    def __init__(self, compact, refresh, restart, accounts=None, fullscreen=None):
+    def __init__(self, compact, refresh, restart, accounts=None, fullscreen=None, hide=None, quit=None):
         self.compact, self.refresh, self.restart = compact, refresh, restart
         self.accounts,self.fullscreen = accounts,fullscreen
+        self.hide,self.quit = hide,quit
         self.popover = None
 
     def show(self, anchor, compact, source):
@@ -57,5 +69,7 @@ class SettingsMenu:
             self.compact)
         self.refresh_button = action(text('Refresh connections', 'Обновить подключения'), self.refresh)
         self.restart_button = action(text('Restart widget', 'Перезапустить виджет'), self.restart, 'warm-button')
+        if self.hide:self.hide_button=action(text('Hide player','Скрыть плеер'),self.hide)
+        if self.quit:self.quit_button=action(text('Close player','Закрыть плеер'),self.quit)
         popup.show_all()
         popup.popup()

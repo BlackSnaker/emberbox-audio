@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.7.1 — 2026-10-21
+
+- Hide and close controls, with the same actions in compact settings and launcher context menus.
+- Clicking the launcher restores an existing hidden widget instead of starting a duplicate.
+- Optional desktop shortcut installation, preserved across updates and removed on uninstall.
+
 ## 0.7.0 — 2026-10-20
 
 - Dependency-aware installer for Arch, Debian/Ubuntu, Fedora and openSUSE, with a warm terminal interface, read-only checks, and missing-package installation.
