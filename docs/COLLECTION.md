@@ -24,6 +24,8 @@ These pages reuse the existing connections in **Accounts**. They do not create a
 
 ## Build an evening
 
+The queue heading follows the computer's local time: morning from 05:00, daytime from 12:00, evening from 18:00, and night from 23:00. It updates automatically while the page is open and when you return to it.
+
 ![Editable listening queue](../assets/listening-queue.png)
 
 **Queue** shows the current song and the upcoming tracks. Use **↑ / ↓** to change their order, **×** to remove a pending track, or **Clear upcoming** to empty the tail. Clicking a queued row starts there. **Play queue** starts the pending list; the player advances through it while Emberbox is running. The footer and media-key Next/Previous use the managed queue during that session.

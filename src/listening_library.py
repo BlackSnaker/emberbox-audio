@@ -1,4 +1,5 @@
 """Fullscreen collection and queue pages, rendered from typed music metadata."""
+from datetime import datetime
 from gi.repository import Gtk,Pango
 from source_picker import text
 from discovery_panel import clear
@@ -73,6 +74,14 @@ def collection(item):
 def duration(item):
     seconds=int(item.get('duration_ms') or 0)//1000
     return f'{seconds//60}:{seconds%60:02d}' if seconds else ''
+
+
+def queue_greeting():
+    hour=datetime.now().hour
+    if 5<=hour<12:return text('Let the morning play.','Пусть утро звучит.')
+    if 12<=hour<18:return text('A soundtrack for your day.','Музыка для твоего дня.')
+    if 18<=hour<23:return text('Let the evening continue.','Пусть вечер продолжается.')
+    return text('Late hours, favourite songs.','Ночь — время любимых треков.')
 
 
 class LibraryView(Gtk.Box):
@@ -267,7 +276,8 @@ class QueueView(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL,spacing=14)
         self.service,self.artwork=service,artwork;self.active=False;self.rows=[];self.key=None
         hero=Gtk.Box(spacing=15);names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5)
-        names.pack_start(label(text('Let the evening continue.','Пусть вечер продолжается.'),'stage-library-title',40),False,False,0)
+        self.title=label(queue_greeting(),'stage-library-title',40)
+        names.pack_start(self.title,False,False,0)
         self.subtitle=label('','stage-library-note',80);names.pack_start(self.subtitle,False,False,0)
         hero.pack_start(names,True,True,0)
         self.clear_button=button(text('Clear upcoming','Очистить далее'),self.clear)
@@ -299,6 +309,8 @@ class QueueView(Gtk.Box):
         self.service.changed()
 
     def render(self,force=False):
+        greeting=queue_greeting()
+        if self.title.get_text()!=greeting:self.title.set_text(greeting)
         h=self.service.host;book=self.service.book;source=h.source
         title,artist=h.title.get_text(),h.artist.get_text()
         key=book.revision,source,title,artist,h.art_url,h.playing,self.service.loading,self.service.error,book.active

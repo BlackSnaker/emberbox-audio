@@ -1,10 +1,13 @@
 """Actual fullscreen collection/search/queue widgets with original offline media."""
 import os
+from datetime import datetime
 from pathlib import Path
 import threading
 from unittest.mock import patch
 import fullscreen_smoke as f
 import fullscreen
+import listening_library
+from source_picker import text
 from gi.repository import Gdk,Gtk
 
 tracks=[{'uri':'spotify:track:'+name,'id':name,'title':title,'artist':'Emberbox Sessions',
@@ -74,6 +77,24 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         shot(stage,'album-1920')
         stage.page_tabs['queue'].clicked();f.settle(.25);queue=stage.queue_view
         assert len(queue.rows)==3
+        # Local time changes the heading without rebuilding the queue or touching playback.
+        original_rows=list(queue.rows);original_plays=list(plays)
+        periods=((0,'Late hours, favourite songs.','Ночь — время любимых треков.'),
+                 (4,'Late hours, favourite songs.','Ночь — время любимых треков.'),
+                 (5,'Let the morning play.','Пусть утро звучит.'),
+                 (11,'Let the morning play.','Пусть утро звучит.'),
+                 (12,'A soundtrack for your day.','Музыка для твоего дня.'),
+                 (17,'A soundtrack for your day.','Музыка для твоего дня.'),
+                 (18,'Let the evening continue.','Пусть вечер продолжается.'),
+                 (22,'Let the evening continue.','Пусть вечер продолжается.'),
+                 (23,'Late hours, favourite songs.','Ночь — время любимых треков.'))
+        with patch.object(listening_library,'datetime') as clock:
+            for hour,en,ru in periods:
+                clock.now.return_value=datetime(2026,10,21,hour)
+                queue.render()
+                assert queue.title.get_text()==text(en,ru),(hour,queue.title.get_text())
+            assert queue.rows==original_rows and plays==original_plays
+        queue.render()
         queue.rows[2][1].clicked()
         assert [i['id'] for _,i in service.book.upcoming('spotify')]==['A','C','B']
         queue.rows[2][3].clicked()
