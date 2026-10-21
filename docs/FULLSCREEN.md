@@ -50,6 +50,10 @@ Fullscreen requests a separate large source: Apple Music at 1200×1200, Spotify'
 
 When the current catalog song has a public animated album cover, fullscreen automatically loops it silently. This is the album's original animation, not a motion effect applied to a still image. Pausing music freezes the cover; leaving fullscreen stops its decoder. Loading errors, missing video art, or unsupported catalog IDs retain the static cover.
 
+The clip is prepared locally before its first animated frame. A short, memory-bounded queue feeds display-clock presentation at 60 fps, with gentle frame blending for lower-rate video and scene-cut detection. Hardware GL updates a fixed-size texture; the image fallback uses the same clock. Changing the cover size keeps the same running loop. Pausing or temporarily obscuring the window resumes at its position, without fast-forwarding to wall time. Source quality and display/GPU performance still limit the result.
+
+Completed silent clips are cached for up to seven days, with a 48 MiB per-clip limit and a 160 MiB limit for completed cache entries. A failed or oversized download keeps the still cover. No account credentials or audio are stored in this cache.
+
 Animation needs optional **FFmpeg**: `sudo pacman -S ffmpeg` on Arch or `sudo apt install ffmpeg` on Ubuntu/Debian. Static covers and the player work without it. Support currently covers public Apple Music motion artwork, not Spotify Canvas or every service's animations.
 
 **Network requests:** only while fullscreen is open, the player fetches the public page of the exact Apple Music song and its linked album, then streams cover video from Apple's CDN. It does not search for similarly named releases. No account passwords, cookies, or tokens are sent. Known cover CDNs receive a request for the larger image size.

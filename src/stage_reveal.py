@@ -17,10 +17,11 @@ def interpolate(start,end,amount):
 class StageReveal(Gtk.GLArea):
     DURATION=.9
 
-    def __init__(self,window,background,layout,cover,art_shell):
+    def __init__(self,window,background,layout,cover,art_shell,current_art=None):
         super().__init__()
         self.window,self.background,self.layout=window,background,layout
         self.cover,self.art_shell=cover,art_shell
+        self.current_art=current_art or cover.get_pixbuf
         self.active=False;self.started=None;self.progress=1.;self.handed_off=False
         self.origin=(0,0,1,1);self.cover_origin=None;self.cover_pixels=None
         self.driver=None;self.error='';self.fallback=False
@@ -182,7 +183,7 @@ class StageReveal(Gtk.GLArea):
         try:self.previous=self.scene(allocation,without_art=True)
         except (OSError,AttributeError,RuntimeError):
             self.finish();change();completed();return
-        self.cover_pixels=self.cover.get_pixbuf()
+        self.cover_pixels=self.current_art()
         self.cover_origin=self.cover_rect()
         for widget in (self.background,self.layout):widget.set_no_show_all(True);widget.hide()
         change();self.capture(allocation,without_art=True)

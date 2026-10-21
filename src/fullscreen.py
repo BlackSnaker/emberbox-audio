@@ -14,6 +14,7 @@ from source_picker import SourcePicker, text
 from lyrics import LyricsClient, active_line
 from cover_sources import AppleMotion, apple_page
 from motion_artwork import MotionCover
+from motion_surface import MotionSurface
 
 
 CSS = b'''
@@ -186,7 +187,7 @@ class FullscreenPlayer:
         art_shell.set_halign(Gtk.Align.START)
         art_layers=Gtk.Overlay();art_shell.pack_start(art_layers,False,False,0)
         self.cover=Gtk.Image();art_layers.add(self.cover)
-        self.motion_image=Gtk.Image();self.motion_image.set_no_show_all(True)
+        self.motion_image=MotionSurface();self.motion_image.set_no_show_all(True)
         art_layers.add_overlay(self.motion_image);art_layers.set_overlay_pass_through(self.motion_image,True)
         self.motion=MotionCover(self.motion_image)
         self.motion_url=''
@@ -266,7 +267,8 @@ class FullscreenPlayer:
         console.pack_end(volume_box,True,True,0)
         footer.pack_start(console,False,False,0)
         self.layout.pack_end(footer,False,False,0)
-        self.reveal=StageReveal(self.window,self.background,self.layout,self.cover,art_shell)
+        self.reveal=StageReveal(self.window,self.background,self.layout,self.cover,art_shell,
+                               lambda:self.motion_image.get_pixbuf() or self.cover.get_pixbuf())
         overlay.add_overlay(self.reveal);overlay.set_overlay_pass_through(self.reveal,True)
         self.source_picker=SourcePicker(lambda source,session=None:host.select_source(source,session),lambda:None,self.open_accounts)
         self.layout.show_all()
@@ -340,7 +342,8 @@ class FullscreenPlayer:
         self.reveal.prepare(self.host,monitor,self.palette,reverse=True)
         allocation=self.window.get_allocation();allocation.x=allocation.y=0
         self.reveal.capture(allocation)
-        if self.cover.get_pixbuf():self.reveal.cover_pixels=self.cover.get_pixbuf()
+        pixels=self.motion_image.get_pixbuf() or self.cover.get_pixbuf()
+        if pixels:self.reveal.cover_pixels=pixels
         self.reveal.completed=self.hide
 
     def prewarm(self):
@@ -361,6 +364,7 @@ class FullscreenPlayer:
                 from room_snapshot import snapshot
                 try:room=snapshot(self.layout,allocation)
                 except (OSError,AttributeError,RuntimeError):pass
+            self.motion_image.warmup()
             self.reveal.warmup(pixels,room=room,monitor=monitor)
         return False
 
@@ -423,6 +427,7 @@ class FullscreenPlayer:
               max(160,min(720,width-2*margin-40,height-(420 if small else 460))))
         if size!=self.art_size:
             self.art_size=size
+            self.motion_image.resize(size)
             self.left.set_size_request(size+18,-1)
             self.title.set_max_width_chars(max(10,int(size/17)))
             self.load_art()
@@ -461,8 +466,9 @@ class FullscreenPlayer:
         url=self.host.art_url or ''
         key=(url,self.art_size)
         if key==self.art_key:return
+        if self.art_key and self.art_key[0]!=url:
+            self.motion.stop();self.motion_url=''
         self.art_key=key
-        self.motion.stop()
         self.artwork.load(self.cover,url,self.art_size,22,preserve=True,on_loaded=self.on_art,high_quality=True)
         if self.motion_url:self.motion.set_source(self.motion_url,self.art_size,playing=self.host.playing)
 
@@ -652,7 +658,7 @@ class FullscreenPlayer:
         self.reveal.advance(now)
         if not self.visible:return False
         if self.reveal.active:return True
-        self.motion.tick()
+        self.motion.tick(now/1e6)
         dt=min(.05,(now-self.frame_time)/1e6) if self.frame_time else 1/60
         self.frame_time=now
         if self.lyrics_visible and self.pending_center:self.center_line()

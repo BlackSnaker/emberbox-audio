@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.8.1 — 2026-10-21
+
+- Prepare and cache silent artwork clips before animation, so network requests are outside the playback loop.
+- Present a bounded queue on the display clock at 60 fps, with short preroll and gentle interpolation for lower-rate source video. Tolerate small vsync timing jitter and resume after pauses without racing through old frames.
+- Update an existing GPU texture without per-frame GTK layout or texture reallocation. Preserve the decoder and its position when artwork changes size; transitions use the current video frame.
+- Check cadence, backpressure, cache reuse/cancellation, actual FFmpeg decoding, GPU layout, resize, pause and cleanup.
+
 ## 0.8.0 — 2026-10-21
 
 - Open fullscreen with a centred large cover. Lyrics load and render only after pressing **Lyrics**; **Artwork** returns to the cover.

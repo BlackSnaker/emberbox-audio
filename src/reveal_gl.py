@@ -28,6 +28,8 @@ uniform sampler2D room;
 uniform int hasRoom;
 uniform sampler2D previous;
 uniform int hasPrevious;
+uniform int coverOnly;
+uniform float cornerRadius;
 float ease(float t){t=clamp(t,0.0,1.0);return t*t*(3.0-2.0*t);}
 vec4 over(vec4 a,vec4 b){return a+b*(1.0-a.a);}
 float rounded(vec2 p,vec4 box,float radius){
@@ -37,6 +39,11 @@ float rounded(vec2 p,vec4 box,float radius){
 }
 void main(){
   vec2 p=uv*viewport;
+  if(coverOnly==1){
+    vec4 tex=texture(cover,uv);
+    tex.a*=rounded(p,vec4(0,0,viewport),cornerRadius);
+    color=vec4(tex.rgb*tex.a,tex.a);return;
+  }
   float atmosphere=ease((progress-.04)/.56);
   vec2 a=(uv-vec2(.21,.35))/vec2(.59,.78);
   vec2 b=(uv-vec2(.92,.09))/vec2(.43,.72);
@@ -88,6 +95,7 @@ class RevealGL:
             raise RuntimeError('Software OpenGL: use compositor fade')
         self.program=self.vao=self.texture=self.room_texture=self.previous_texture=0
         self.uploaded=self.room_uploaded=self.previous_uploaded=None
+        self.texture_size=None
         u,i,f,p=C.c_uint,C.c_int,C.c_float,C.c_void_p
         self.functions={}
         signatures={
@@ -102,6 +110,7 @@ class RevealGL:
             'DeleteTextures':(None,i,C.POINTER(u)),'ActiveTexture':(None,u),
             'TexParameteri':(None,u,u,i),'PixelStorei':(None,u,i),
             'TexImage2D':(None,u,i,i,i,i,i,u,u,p),
+            'TexSubImage2D':(None,u,i,i,i,i,i,u,u,p),
             'GetUniformLocation':(i,u,C.c_char_p),'Uniform1f':(None,i,f),
             'Uniform1i':(None,i,i),'Uniform2f':(None,i,f,f),
             'Uniform3f':(None,i,f,f,f),'Uniform4f':(None,i,f,f,f,f),
@@ -130,7 +139,7 @@ class RevealGL:
             self.call('GenTextures',1,C.byref(value));self.room_texture=value.value
             self.call('GenTextures',1,C.byref(value));self.previous_texture=value.value
             self.uniforms={name:self.call('GetUniformLocation',self.program,name.encode()) for name in
-                           ('viewport','shell','artwork','pigment','progress','hasCover','cover','room','hasRoom','previous','hasPrevious')}
+                           ('viewport','shell','artwork','pigment','progress','hasCover','cover','room','hasRoom','previous','hasPrevious','coverOnly','cornerRadius')}
         except Exception:
             self.close();raise
         finally:
@@ -145,14 +154,19 @@ class RevealGL:
         if pixels is None:return
         w,h,channels=pixels.get_width(),pixels.get_height(),pixels.get_n_channels()
         stride=pixels.get_rowstride();raw=pixels.get_pixels()
-        data=b''.join(raw[y*stride:y*stride+w*channels] for y in range(h))
-        buffer=C.create_string_buffer(data)
+        data=raw if stride==w*channels else b''.join(raw[y*stride:y*stride+w*channels] for y in range(h))
+        buffer=C.c_char_p(data)
         self.call('BindTexture',0x0DE1,self.texture)
         self.call('PixelStorei',0x0CF5,1)
         self.call('PixelStorei',0x0CF2,0)
         for name,value in ((0x2801,0x2601),(0x2800,0x2601),(0x2802,0x812F),(0x2803,0x812F)):
             self.call('TexParameteri',0x0DE1,name,value)
-        self.call('TexImage2D',0x0DE1,0,0x8058,w,h,0,0x1908 if channels==4 else 0x1907,0x1401,buffer)
+        kind=0x1908 if channels==4 else 0x1907
+        if self.texture_size==(w,h,channels):
+            self.call('TexSubImage2D',0x0DE1,0,0,0,w,h,kind,0x1401,buffer)
+        else:
+            self.call('TexImage2D',0x0DE1,0,0x8058,w,h,0,kind,0x1401,buffer)
+            self.texture_size=(w,h,channels)
 
     def raw_texture(self,texture,frame):
         w,h,data=frame
@@ -176,6 +190,7 @@ class RevealGL:
         if previous is not None and previous is not self.previous_uploaded:
             self.previous_uploaded=previous;self.raw_texture(self.previous_texture,previous)
         for name,kind,values in (
+                ('coverOnly','1i',(0,)),
                 ('viewport','2f',(width,height)),('shell','4f',shell),('artwork','4f',artwork),
                 ('pigment','3f',pigment),('progress','1f',(progress,)),
                 ('hasCover','1i',(int(pixels is not None),)),('cover','1i',(0,)),
@@ -188,6 +203,19 @@ class RevealGL:
         self.call('BindVertexArray',0);self.call('UseProgram',0)
         self.call('BindTexture',0x0DE1,0)
         self.call('ActiveTexture',0x84C0);self.call('BindTexture',0x0DE1,0)
+
+    def draw_cover(self,width,height,pixels,radius):
+        self.call('Disable',0x0BE2)
+        self.call('UseProgram',self.program);self.call('BindVertexArray',self.vao)
+        self.call('ActiveTexture',0x84C0);self.upload(pixels)
+        self.call('BindTexture',0x0DE1,self.texture)
+        self.call('Uniform1i',self.uniforms['coverOnly'],1)
+        self.call('Uniform1i',self.uniforms['cover'],0)
+        self.call('Uniform2f',self.uniforms['viewport'],width,height)
+        self.call('Uniform1f',self.uniforms['cornerRadius'],radius)
+        self.call('DrawArrays',0x0004,0,3)
+        self.call('BindVertexArray',0);self.call('UseProgram',0)
+        self.call('BindTexture',0x0DE1,0)
 
     def close(self):
         if self.texture:self.call('DeleteTextures',1,C.byref(C.c_uint(self.texture)))
