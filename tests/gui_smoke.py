@@ -20,8 +20,8 @@ from gi.repository import Gtk,GLib
 import widget
 
 
-def settle():
-    deadline=time.monotonic()+.3
+def settle(seconds=.3):
+    deadline=time.monotonic()+seconds
     while time.monotonic()<deadline:
         while GLib.MainContext.default().pending():
             GLib.MainContext.default().iteration(False)
@@ -74,22 +74,32 @@ try:
     assert app.settings.popover.get_visible()
     assert app.settings.hide_button.get_visible() and app.settings.quit_button.get_visible()
     app.settings.mode_button.clicked()
-    settle()
+    settle(.6)
     assert app.compact and app.compact_settings.get_visible()
     assert app.window.get_size().width==320
     app.compact_settings.clicked()
     settle()
     assert app.settings.popover.get_visible()
     app.settings.mode_button.clicked()
-    settle()
+    settle(.6)
     assert not app.compact
     app.toggle_compact(None)
-    settle()
+    settle(.6)
     assert app.window.get_size().width==320
     assert not app.title.get_visible()
     app.toggle_compact(None)
-    settle()
+    settle(.6)
     assert app.window.get_size().width==460
+    app.toggle_compact(None);settle(.08)
+    assert app.layout_transition.active and not app.layout_transition.root.get_mapped()
+    app.toggle_compact(None);settle(.6)
+    assert not app.compact and not app.layout_transition.active
+    assert app.layout_transition.root.get_mapped() and not app.layout_transition.frames
+    app.toggle_compact(None);settle(.08)
+    app.hide_widget()
+    assert not app.layout_transition.active and not app.layout_transition.frames
+    app.show_widget();app.toggle_compact(None);settle(.6)
+    assert not app.compact and app.window.get_size().width==460
     app.show_accounts()
     assert app.library_stack.get_visible_child() is app.account_panel
     app.accounts.spotify=['fixture-spotify'];app.accounts.spotify_checked=True
@@ -133,7 +143,7 @@ try:
     app.on_action(None,'next')
     assert app.monitor.calls[-1]==(browser.name,'Next')
     app.toggle_compact(None)
-    settle()
+    settle(.6)
     assert app.window.get_size().width==320
     assert app.compact_source.get_visible()
     app.show_sources(app.compact_source)
@@ -141,7 +151,7 @@ try:
     assert app.source_picker.popover.get_visible()
     app.source_picker.popover.popdown()
     app.toggle_compact(None)
-    settle()
+    settle(.6)
     app.select_source('spotify')
     assert app.title.get_text()=='Spotify track'
     assert not app.source_picker.popover.get_visible()
@@ -179,7 +189,7 @@ try:
         assert app.youtube.position==4
         launch.assert_not_called()
     app.toggle_compact(None)
-    settle()
+    settle(.6)
     assert app.window.get_size().width==320 and app.compact_source.get_label()=='Y⌄'
     app.select_source('spotify')
     assert not app.youtube.enabled and app.youtube.paused
@@ -238,7 +248,7 @@ try:
         settle()
         assert ('play',{'kind':'library-songs','id':'i.fixture'}) in app.apple_web.calls
         launch.assert_not_called()
-    app.toggle_compact(None);settle()
+    app.toggle_compact(None);settle(.6)
     assert app.window.get_size().width==320 and app.compact_source.get_label()=='A⌄'
     app.select_source('spotify')
     assert not app.apple_web.enabled
@@ -271,12 +281,19 @@ try:
     assert app.yandex_panel.back.get_visible()
     app.yandex_panel.back.clicked();settle()
     assert app.yandex_panel.category=='collection' and not app.yandex_panel.back.get_visible()
-    app.toggle_compact(None);settle()
+    app.toggle_compact(None);settle(.6)
     assert app.window.get_size().width==320 and app.compact_source.get_label()=='Я⌄'
-    app.toggle_compact(None);settle()
+    app.toggle_compact(None);settle(.6)
     app.select_source('apple-music')
     assert not app.yandex_web.enabled and app.apple_web.enabled
     app.source='apple-music';app.browser_binding='firefox';app.compact=True
+    prepared=app.fullscreen
+    assert prepared is not None,'Prepare the fullscreen scene before the first click'
+    with patch.object(prepared,'open') as opening:
+        app.fullscreen_button.clicked();app.show_settings(app.settings_button)
+        app.settings.fullscreen_button.clicked()
+        assert opening.call_count==2,'Both entry points reuse the prepared scene'
+    prepared.close();app.fullscreen=None
     with patch('widget.FullscreenPlayer') as stage:
         app.fullscreen_button.clicked();app.show_settings(app.settings_button)
         app.settings.fullscreen_button.clicked()

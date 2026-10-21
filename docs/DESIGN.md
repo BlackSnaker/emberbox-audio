@@ -38,7 +38,11 @@ The result is **physically inspired**, rather than an exact simulation of gas-di
 
 ## Interaction stays quiet
 
-The fullscreen entrance takes 720 ms. A rounded shell expands from the desktop widget while the cover travels to its listening-room position; the background, words and controls fade in with smooth acceleration and deceleration. GTK's frame clock drives the entrance without repeated window-manager resizing. Esc cancels it immediately, and disabling system animations skips it. Desktops without compositing keep an opaque background.
+Fullscreen opens with a centred cover; **Lyrics** explicitly enables text lookup and the split layout. Until then, no lyric lookup, line layout or scrolling runs.
+
+The 900 ms entrance uses a prewarmed hardware GL renderer: a rounded shell and cover move over a gradient, then a single cached image of the room reveals its controls. The GTK scene stays unmapped throughout the movement, avoiding costly opacity-zero Cairo groups and per-frame resizing. Only our own widgets are captured, in memory. The background is cached and prepared off the UI thread. Systems without accelerated GL use a short compositor fade; disabling system animations skips the entrance. Esc cancels immediately.
+
+Lyrics and artwork exchange places over 660 ms: one cover travels between the two layouts while the panel appears with a gentle vertical delay. A ready lyric result is included in the cached destination; later results fade in after the movement. Exiting fullscreen reverses the entrance toward the current desktop widget, including Mini. The normal/Mini switch takes 380 ms and blends two cached card images while resizing, without rebuilding live controls on every frame. Hiding or closing clears transition layers.
 
 No dotted focus rectangles or hover captions. Accessible names remain available for assistive technology. Main actions stay visible; miniature controls remain separated. Compact mode preserves the character of the instrument rather than reducing it to a generic transport bar.
 

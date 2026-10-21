@@ -40,6 +40,14 @@ def settle(seconds=.2):
         time.sleep(.005)
 
 
+def wait_transition(stage,limit=2):
+    deadline=time.monotonic()+limit
+    while stage.reveal.active and time.monotonic()<deadline:
+        settle(.03)
+    assert not stage.reveal.active,'Transition must finish without a stuck overlay'
+    settle(.05)
+
+
 def labels(container):
     if isinstance(container, Gtk.Label):
         yield container.get_text()
@@ -162,7 +170,7 @@ class FixtureHost:
 
 def assert_controls_fit(stage):
     width, height = stage.window.get_size()
-    for child in (stage.exit_button, stage.progress, stage.play_button,
+    for child in (stage.exit_button, stage.lyrics_button, stage.progress, stage.play_button,
                   stage.volume_meter, stage.knob, stage.mute,
                   stage.previous_button, stage.next_button):
         assert child.get_mapped(), f'{type(child).__name__} is not mapped'
@@ -260,6 +268,7 @@ def run():
          patch.object(fullscreen, 'LyricsClient', FixtureLyrics), \
          patch.object(fullscreen.Artwork, 'load', image_load):
         stage = fullscreen.FullscreenPlayer(host)
+        stage.prewarm()
         entrance_frames=[]
         advance=stage.reveal.advance
         def record_entrance(now):
@@ -271,9 +280,8 @@ def run():
             stage.open()
             assert stage.reveal.active
             settle()
-            assert any(0 < value < 1 for value in entrance_frames), 'Entrance must animate across frames'
             if stage.reveal.active:
-                assert stage.reveal.flying_cover.get_mapped(), 'Cover must travel from the widget'
+                assert stage.reveal.cover_pixels is not None, 'Cover must travel from the widget'
             assert stage.visible and stage.window.get_visible()
             assert stage.window.get_type_hint() != Gdk.WindowTypeHint.DESKTOP
             assert host.calls == [], 'Entering listening mode must not start or seek music'
@@ -290,9 +298,14 @@ def run():
                 assert stage.window.get_size() == (width,height), 'Controls must not force a wider window'
                 assert_controls_fit(stage)
             assert not stage.reveal.active and not stage.reveal.get_visible()
+            assert any(0 < value < 1 for value in entrance_frames), 'Entrance must animate across frames'
             assert stage.layout.get_opacity()==stage.background.get_opacity()==1.
             assert stage.knob.get_allocated_width() >= 88
             assert not hasattr(stage,'volume'), 'Fullscreen volume slider must be removed'
+            assert not stage.lyrics_visible and not stage.right.get_visible()
+            assert not any(call[0] for call in stage.lyrics.calls), 'Artwork mode must not request lyrics'
+            stage.lyrics_button.clicked();wait_transition(stage)
+            assert stage.lyrics_visible and stage.right.get_visible()
             assert stage.current_line == 1
             assert stage.line_buttons[1].get_style_context().has_class('stage-line-active')
             stage.line_buttons[2].clicked()
@@ -354,8 +367,11 @@ def run():
                 assert stage.play_button.get_sensitive()
                 assert stage.window.get_visible()
             assert_lyrics_under_repaint(stage, host)
+            stage.lyrics_button.clicked();wait_transition(stage)
+            assert not stage.lyrics_visible and not stage.right.get_visible()
+            assert_controls_fit(stage)
             key(stage.window, 'Escape')
-            settle()
+            wait_transition(stage)
             assert not stage.visible and not stage.window.get_visible()
             hidden_calls = len(client.calls)
             host.title.set_text('Hidden fixture must not request lyrics')
@@ -378,7 +394,7 @@ def run():
                 assert not stage.reveal.active and stage.layout.get_opacity()==1.
             finally:
                 settings.set_property('gtk-enable-animations',animations)
-            stage.exit_button.clicked();settle()
+            stage.exit_button.clicked();wait_transition(stage)
             assert not stage.visible
         finally:
             stage.close()

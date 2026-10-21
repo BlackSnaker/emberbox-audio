@@ -1,6 +1,8 @@
 """An immersive Grunesphism listening room, separate from the desktop widget."""
 import math
 import time
+from functools import lru_cache
+import numpy as np
 from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
 from artwork import Artwork
 from cover_tint import cover_color, BASE_COLOR
@@ -15,11 +17,13 @@ from motion_artwork import MotionCover
 
 
 CSS = b'''
-window.ember-stage { background-color: #171b18; color: #ebdbb2; }
+window.ember-stage { background-color: #171b18; color: #ebdbb2;
+  border: none; border-radius: 0; box-shadow: none; padding: 0; margin: 0; background-image: none; }
+window.ember-stage overlay, .stage-gl { border: none; border-radius: 0; box-shadow: none; padding: 0; }
 window.ember-stage.stage-opening { background-color: transparent; }
 .stage-opening-card { background-color: #2c2c29; border-radius: 26px; }
 .ember-stage { font-family: 'Noto Sans'; }
-.ember-stage button, .ember-stage button:focus { outline-style: none; outline-width: 0; }
+.ember-stage button, .ember-stage button:focus { outline-style: none; outline-width: 0; transition-duration: 0ms; transition-delay: 0ms; }
 .stage-brand { color: #fbf1c7; font-size: 17px; font-weight: bold; letter-spacing: 4px; }
 .stage-overline { color: #a89984; font-size: 9px; letter-spacing: 2px; }
 .stage-dot { color: #d79921; font-size: 10px; }
@@ -106,27 +110,32 @@ def label(value, style, wrap=False):
     return item
 
 
+@lru_cache(maxsize=4)
 def background(width,height,color):
-    # Simple vector gradients stay cheap and crisp; no per-frame image blur.
-    accent=tuple(max(26,min(140,67+(value-base)*8)) for value,base in zip(color,BASE_COLOR))
-    hue=f'rgb{accent}'
-    svg=f'''<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 1600 1000" preserveAspectRatio="none">
-    <defs><radialGradient id="a"><stop stop-color="{hue}" stop-opacity=".58"/><stop offset="1" stop-color="{hue}" stop-opacity="0"/></radialGradient>
-    <radialGradient id="b"><stop stop-color="#9e7238" stop-opacity=".16"/><stop offset="1" stop-color="#9e7238" stop-opacity="0"/></radialGradient>
-    <linearGradient id="v" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#0d1511" stop-opacity="0"/><stop offset="1" stop-color="#0c120e" stop-opacity=".65"/></linearGradient>
-    <pattern id="p" width="6" height="6" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".45" fill="#f5eacb" opacity=".025"/></pattern></defs>
-    <rect width="1600" height="1000" fill="#1b211b"/><ellipse cx="340" cy="350" rx="940" ry="780" fill="url(#a)"/>
-    <ellipse cx="1480" cy="90" rx="680" ry="720" fill="url(#b)"/><rect width="1600" height="1000" fill="url(#v)"/>
-    <rect width="1600" height="1000" fill="url(#p)"/></svg>'''
-    loader=GdkPixbuf.PixbufLoader.new_with_type('svg')
-    loader.write(svg.encode());loader.close()
-    return loader.get_pixbuf()
+    # A small cached gradient avoids rasterising tens of thousands of SVG
+    # pattern elements. NumPy does the work outside GTK; upscale only once.
+    ratio=min(1.,640/max(width,height))
+    w,h=max(1,round(width*ratio)),max(1,round(height*ratio))
+    x=np.linspace(0,1600,w,dtype=np.float32)[None,:]
+    y=np.linspace(0,1000,h,dtype=np.float32)[:,None]
+    accent=np.array([max(26,min(140,67+(value-base)*8)) for value,base in zip(color,BASE_COLOR)],dtype=np.float32)
+    first=np.maximum(0.,1.-np.sqrt(((x-340)/940)**2+((y-350)/780)**2))[...,None]*.58
+    second=np.maximum(0.,1.-np.sqrt(((x-1480)/680)**2+((y-90)/720)**2))[...,None]*.16
+    pixels=np.array((27,33,27),dtype=np.float32)*(1-first)+accent*first
+    pixels=pixels*(1-second)+np.array((158,114,56),dtype=np.float32)*second
+    vignette=(y/1000*.65)[...,None]
+    pixels=pixels*(1-vignette)+np.array((12,18,14),dtype=np.float32)*vignette
+    raw=np.clip(pixels,0,255).astype(np.uint8).tobytes()
+    image=GdkPixbuf.Pixbuf.new_from_bytes(GLib.Bytes.new(raw),GdkPixbuf.Colorspace.RGB,False,8,w,h,w*3)
+    return image.scale_simple(width,height,GdkPixbuf.InterpType.BILINEAR)
 
 
 class FullscreenPlayer:
     def __init__(self,host):
         self.host=host
         self.visible=False;self.closed=False;self.timer=0;self.tick=0
+        self.lyrics_visible=False
+        self.dismiss_pending=False
         self.track=None;self.art_key=None;self.art_size=380;self.palette=BASE_COLOR;self.bg_key=None;self.layout_size=None
         self.last_position=None;self.anchor=time.monotonic();self.position=0.
         self.levels=[0.]*9;self.velocities=[0.]*9;self.frame_time=None
@@ -142,7 +151,7 @@ class FullscreenPlayer:
         if visual:self.window.set_visual(visual)
         self.window.set_default_size(1280,800)
         self.window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
-        self.window.connect('delete-event',lambda *_args:(self.hide(),True)[1])
+        self.window.connect('delete-event',lambda *_args:(self.dismiss(),True)[1])
         self.window.connect('key-press-event',self.on_key)
         provider=Gtk.CssProvider();provider.load_from_data(CSS)
         Gtk.StyleContext.add_provider_for_screen(self.window.get_screen(),provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+5)
@@ -158,9 +167,12 @@ class FullscreenPlayer:
         wordmark.pack_start(label('EMBER','stage-brand'),False,False,0)
         wordmark.pack_start(label(text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'),'stage-overline'),False,False,0)
         header.pack_start(wordmark,True,True,0)
+        self.lyrics_button=self.button(text('Lyrics','Текст песни'),self.toggle_lyrics,'stage-quiet')
+        self.lyrics_button.set_valign(Gtk.Align.CENTER)
+        header.pack_start(self.lyrics_button,False,False,0)
         self.source_button=self.button('',self.show_sources,'stage-quiet')
         header.pack_start(self.source_button,False,False,0)
-        self.exit_button=self.button('↙',self.hide,'stage-quiet','stage-exit')
+        self.exit_button=self.button('↙',self.dismiss,'stage-quiet','stage-exit')
         self.source_button.set_valign(Gtk.Align.CENTER)
         self.exit_button.set_valign(Gtk.Align.CENTER)
         self.exit_button.get_accessible().set_name(text('Return to desktop · Esc','Вернуться на рабочий стол · Esc'))
@@ -188,6 +200,7 @@ class FullscreenPlayer:
         self.left.pack_start(self.album,False,False,0)
         self.body.pack_start(self.left,False,False,0)
         right=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=14)
+        self.right=right
         heading=Gtk.Box(spacing=10)
         self.lyric_heading=label(text('WORDS, IN YOUR RHYTHM','СТРОКИ В ТВОЁМ РИТМЕ'),'stage-lyrics-heading')
         heading.pack_start(self.lyric_heading,True,True,0)
@@ -257,6 +270,7 @@ class FullscreenPlayer:
         overlay.add_overlay(self.reveal);overlay.set_overlay_pass_through(self.reveal,True)
         self.source_picker=SourcePicker(lambda source,session=None:host.select_source(source,session),lambda:None,self.open_accounts)
         self.layout.show_all()
+        self.set_lyrics_visible(False)
         self.follow.hide();self.retry_button.hide()
 
     def button(self,value,callback,*styles):
@@ -269,8 +283,11 @@ class FullscreenPlayer:
     def open(self):
         if self.closed:return
         if self.visible:
+            if self.dismiss_pending:
+                self.reveal.finish();self.dismiss_pending=False;self.update()
             self.window.present()
             return
+        self.set_lyrics_visible(False)
         self.visible=True
         self.current_line=-2;self.last_position=None;self.frame_time=None;self.manual_until=0.
         display=self.host.window.get_display()
@@ -279,7 +296,16 @@ class FullscreenPlayer:
         if monitor:
             geometry=monitor.get_geometry()
             self.window.resize(geometry.width,geometry.height)
-        self.reveal.prepare(self.host,monitor)
+        self.reveal.prepare(self.host,monitor,self.palette)
+        self.knob.shown=self.host.sound.volume;self.knob._render()
+        # Measure the room once before mapping it. Its GTK trees remain hidden
+        # during the flight, so only the GL layer paints the first frames.
+        self.update()
+        if monitor:
+            self.on_size(self.window,geometry)
+            allocation=geometry.copy();allocation.x=allocation.y=0
+            self.layout.show();self.layout.size_allocate(allocation)
+            if self.reveal.active and not self.reveal.fallback:self.reveal.capture(allocation)
         if monitor:
             index=next((i for i in range(display.get_n_monitors()) if display.get_monitor(i)==monitor),0)
             self.window.fullscreen_on_monitor(self.window.get_screen(),index)
@@ -287,12 +313,12 @@ class FullscreenPlayer:
         self.window.show_all()
         self.retry_button.hide();self.follow.hide()
         self.window.present()
-        self.update()
         if not self.timer:self.timer=GLib.timeout_add(100,self.update)
         if not self.tick:self.tick=self.window.add_tick_callback(self.animate)
 
     def hide(self):
         self.reveal.finish()
+        self.dismiss_pending=False
         self.visible=False
         self.track=None
         self.lyrics.set_track('','')
@@ -303,6 +329,74 @@ class FullscreenPlayer:
         if self.tick:self.window.remove_tick_callback(self.tick);self.tick=0
         self.frame_time=None
         if self.source_picker.popover:self.source_picker.popover.popdown()
+
+    def dismiss(self):
+        if not self.visible:return
+        if self.reveal.active:self.hide();return
+        if not self.window.get_settings().get_property('gtk-enable-animations'):
+            self.hide();return
+        self.dismiss_pending=True
+        monitor=self.host.window.get_display().get_monitor_at_window(self.host.window.get_window())
+        self.reveal.prepare(self.host,monitor,self.palette,reverse=True)
+        allocation=self.window.get_allocation();allocation.x=allocation.y=0
+        self.reveal.capture(allocation)
+        if self.cover.get_pixbuf():self.reveal.cover_pixels=self.cover.get_pixbuf()
+        self.reveal.completed=self.hide
+
+    def prewarm(self):
+        if not self.visible and not self.closed:
+            image=getattr(self.host,'cover',None)
+            pixels=image.get_pixbuf() if image else None
+            if pixels:self.palette=cover_color(pixels)
+            display=self.host.window.get_display()
+            native=self.host.window.get_window()
+            monitor=display.get_monitor_at_window(native) if native else display.get_primary_monitor()
+            room=None
+            if monitor:
+                allocation=monitor.get_geometry().copy();allocation.x=allocation.y=0
+                for target,source in ((self.title,self.host.title),(self.artist,self.host.artist),(self.album,self.host.album)):
+                    target.set_text(source.get_text())
+                self.window.realize();self.window.resize(allocation.width,allocation.height)
+                self.on_size(self.window,allocation)
+                from room_snapshot import snapshot
+                try:room=snapshot(self.layout,allocation)
+                except (OSError,AttributeError,RuntimeError):pass
+            self.reveal.warmup(pixels,room=room,monitor=monitor)
+        return False
+
+    def set_lyrics_visible(self,visible):
+        self.lyrics_visible=visible
+        self.right.set_no_show_all(not visible)
+        self.right.show() if visible else self.right.hide()
+        self.body.set_halign(Gtk.Align.FILL if visible else Gtk.Align.CENTER)
+        self.left.set_halign(Gtk.Align.START if visible else Gtk.Align.CENTER)
+        for item in (self.title,self.artist,self.album):item.set_xalign(0. if visible else .5)
+        self.lyrics_button.set_label(text('Artwork','Обложка') if visible else text('Lyrics','Текст песни'))
+        self.lyrics_button.get_accessible().set_name(text('Show artwork','Показать обложку') if visible else text('Show lyrics','Показать текст песни'))
+        self.layout_size=None;self.track=None
+        if not visible:self.lyrics.set_track('','')
+        else:
+            self.lyric_stack.set_visible_child_name('empty')
+            self.empty_title.set_text(text('A moment\nfor the words.','Сейчас найдём\nнужные слова.'))
+            self.empty_note.set_text(text('Your music keeps playing.','Музыка продолжает звучать.'))
+            self.credit.hide();self.follow.hide();self.retry_button.hide()
+
+    def toggle_lyrics(self):
+        if self.reveal.active:return
+        target=not self.lyrics_visible
+        if target:
+            h=self.host
+            self.lyrics.set_track(h.title.get_text(),h.artist.get_text(),h.album.get_text(),h.length/1e6)
+        def change():
+            self.set_lyrics_visible(target);self.update()
+            if target:self.on_lyrics(force=True)
+        self.reveal.morph(change,self.finish_scene_transition)
+
+    def finish_scene_transition(self):
+        self.update()
+        # A cached result can arrive before the new panel becomes visible.
+        # Read its current state once after the transition in either case.
+        if self.lyrics_visible:self.on_lyrics()
 
     def close(self):
         if self.closed:return
@@ -324,8 +418,9 @@ class FullscreenPlayer:
         margin=max(24,min(88,int(width*.047)))
         self.layout.set_margin_start(margin);self.layout.set_margin_end(margin)
         self.layout.set_margin_top(24 if small else 36);self.layout.set_margin_bottom(22 if small else 32)
-        self.body.set_spacing(max(32,min(100,int(width*.052))))
-        size=max(180,min(560,int(width*.34),height-(410 if small else 460)))
+        self.body.set_spacing(max(32,min(100,int(width*.052))) if self.lyrics_visible else 0)
+        size=(max(180,min(560,int(width*.34),height-(410 if small else 460))) if self.lyrics_visible else
+              max(160,min(720,width-2*margin-40,height-(420 if small else 460))))
         if size!=self.art_size:
             self.art_size=size
             self.left.set_size_request(size+18,-1)
@@ -341,9 +436,28 @@ class FullscreenPlayer:
         key=(width,height,self.palette)
         if key==self.bg_key:return
         self.bg_key=key
-        self.background.set_from_pixbuf(background(max(1,width),max(1,height),self.palette))
+        # SVG parsing/rasterisation must not block the first animation frames.
+        future=self.artwork.pool.submit(background,max(1,width),max(1,height),self.palette)
+        def completed(result):
+            try:pixels=result.result()
+            except Exception:return
+            def apply():
+                if not self.closed and self.bg_key==key:self.background.set_from_pixbuf(pixels)
+                return False
+            GLib.idle_add(apply,priority=GLib.PRIORITY_DEFAULT)
+        future.add_done_callback(completed)
 
     def load_art(self):
+        if self.reveal.active or not self.visible:
+            existing=self.cover.get_pixbuf()
+            if existing and existing.get_width()!=self.art_size:
+                self.cover.set_from_pixbuf(existing.scale_simple(self.art_size,self.art_size,GdkPixbuf.InterpType.BILINEAR))
+            elif existing is None:
+                image=getattr(self.host,'cover',None)
+                pixels=image.get_pixbuf() if image else None
+                if pixels:self.cover.set_from_pixbuf(pixels.scale_simple(self.art_size,self.art_size,GdkPixbuf.InterpType.BILINEAR))
+            self.cover.set_size_request(self.art_size,self.art_size)
+            return
         url=self.host.art_url or ''
         key=(url,self.art_size)
         if key==self.art_key:return
@@ -393,7 +507,7 @@ class FullscreenPlayer:
 
     def on_key(self,_window,event):
         key=Gdk.keyval_name(event.keyval)
-        if key in ('Escape','F11'):self.hide();return True
+        if key in ('Escape','F11'):self.dismiss();return True
         if key in ('space','XF86AudioPlay'):self.action('toggle');return True
         if key in ('Left','Right'):
             if self.host.progress_event.get_sensitive() and self.host.length>0:
@@ -431,19 +545,21 @@ class FullscreenPlayer:
         self.mute.set_state(h.sound.volume,h.sound.muted,h.sound.available)
         self.knob.set_state(h.sound.volume,h.sound.muted,h.sound.available)
         self.load_art()
-        self.motion_lookup.set_track(self.motion_page() if self.motion.executable else '',h.art_url or '')
-        self.motion.set_playing(h.playing)
+        if not self.reveal.active:
+            self.motion_lookup.set_track(self.motion_page() if self.motion.executable else '',h.art_url or '')
+            self.motion.set_playing(h.playing)
         identity=(h.source,title,artist,album,round(h.length/1e6))
-        if identity!=self.track:
+        if identity!=self.track and self.lyrics_visible and not self.reveal.active:
             self.track=identity;self.current_line=-2;self.manual_until=0.;self.last_position=None
             # No network activity for the desktop widget or empty player states.
             valid=bool(h.length>0 and title and artist)
             self.lyrics.set_track(title if valid else '',artist if valid else '',album if valid else '',h.length/1e6)
-        self.update_line()
+        if self.lyrics_visible:self.update_line()
         return True
 
-    def on_lyrics(self):
-        if self.closed or not self.visible:return
+    def on_lyrics(self,force=False):
+        if self.closed or not self.visible or not self.lyrics_visible:return
+        if self.reveal.active and not force:return
         state=self.lyrics.state
         self.lyric_state=state;self.current_line=-2;self.scroll_target=None
         for child in self.lines_box.get_children():child.destroy()
@@ -532,13 +648,15 @@ class FullscreenPlayer:
             if abs(b.get_opacity()-opacity)>.015:b.set_opacity(opacity)
 
     def animate(self,_window,clock):
-        self.motion.tick()
         now=clock.get_frame_time()
         self.reveal.advance(now)
+        if not self.visible:return False
+        if self.reveal.active:return True
+        self.motion.tick()
         dt=min(.05,(now-self.frame_time)/1e6) if self.frame_time else 1/60
         self.frame_time=now
-        if self.pending_center:self.center_line()
-        if time.monotonic()-self.last_fade>.1:
+        if self.lyrics_visible and self.pending_center:self.center_line()
+        if self.lyrics_visible and time.monotonic()-self.last_fade>.1:
             self.last_fade=time.monotonic();self.fade_lines()
         meter=self.host.meter
         active=self.host.playing and not self.host.sound.muted and time.monotonic()-meter.last_sample<.35
@@ -550,7 +668,7 @@ class FullscreenPlayer:
             self.levels[i]=max(0,min(1,target+(offset+momentum*dt)*decay))
             self.velocities[i]=(self.velocities[i]-rate*momentum*dt)*decay
         self.equalizer.set_levels(self.levels)
-        if self.scroll_target is not None and time.monotonic()>=self.manual_until:
+        if self.lyrics_visible and self.scroll_target is not None and time.monotonic()>=self.manual_until:
             adjustment=self.lyrics_scroll.get_vadjustment();current=adjustment.get_value()
             difference=self.scroll_target-current
             adjustment.set_value(self.scroll_target if abs(difference)<.5 else current+difference*(1-math.exp(-dt*7)))

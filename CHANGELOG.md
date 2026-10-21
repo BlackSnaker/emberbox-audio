@@ -2,6 +2,14 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.8.0 — 2026-10-21
+
+- Open fullscreen with a centred large cover. Lyrics load and render only after pressing **Lyrics**; **Artwork** returns to the cover.
+- Replace per-frame GTK layout/opacity work with a prewarmed GPU entrance and one in-memory room texture. Defer lyrics, artwork decoding and motion lookup until the entrance ends.
+- Animate Lyrics/Artwork in both directions, with a moving cover and cascading reveal. Fullscreen returns to the desktop widget through a reverse transition; Mini also animates its size and contents.
+- Prepare the background off the UI thread using a cached gradient. Use a cheap compositor fade when hardware GL is unavailable, and honour disabled system animations.
+- Cover/lyrics layout checks, real shader/offscreen capture checks, cancellation and playback-preservation regressions.
+
 ## 0.7.5 — 2026-10-21
 
 - A 720 ms fullscreen entrance: expand the rounded player shell from the desktop widget, move the cover into place, and softly reveal the listening room.

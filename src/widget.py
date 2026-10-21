@@ -45,6 +45,7 @@ import desktop_window
 from kwin_desktop import KWinDesktop
 from widget_settings import SettingsMenu, settings_button, window_button
 from widget_control import WidgetControl
+from widget_morph import WidgetMorph
 import widget_restart
 from youtube_audio import YouTubeAudio
 from youtube_panel import YouTubePanel
@@ -270,7 +271,8 @@ class Widget:
         outside.set_margin_bottom(0)
         outside.set_margin_start(0)
         outside.set_margin_end(0)
-        self.window.add(outside)
+        self.layout_transition=WidgetMorph(self.window,outside,self.layout_transition_done)
+        self.window.add(self.layout_transition)
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.card = card
         card.get_style_context().add_class('card')
@@ -496,6 +498,7 @@ class Widget:
         self.refresh()
         GLib.timeout_add_seconds(1, self.refresh)
         self.frame_health = FrameHealth(self.window,self.animate)
+        self.fullscreen_prewarm=GLib.timeout_add(900,self.prepare_fullscreen)
         if self.desktop_mode == 'normal':
             self.kwin_desktop = KWinDesktop()
         self.widget_control=WidgetControl(self.show_widget,self.hide_widget,self.quit)
@@ -517,6 +520,7 @@ class Widget:
         return False
 
     def hide_widget(self):
+        self.layout_transition.finish(notify=False)
         self.save_position()
         self.drag_offset=None
         if self.settings.popover:self.settings.popover.popdown()
@@ -540,6 +544,8 @@ class Widget:
         if self.resources_closed:
             return
         self.resources_closed = True
+        self.layout_transition.finish(notify=False)
+        if getattr(self,'fullscreen_prewarm',0):GLib.source_remove(self.fullscreen_prewarm);self.fullscreen_prewarm=0
         if hasattr(self,'widget_control'):self.widget_control.close()
         if self.kwin_desktop:self.kwin_desktop.close()
         self.frame_health.close()
@@ -560,6 +566,12 @@ class Widget:
     def show_fullscreen(self):
         if self.fullscreen is None:self.fullscreen=FullscreenPlayer(self)
         self.fullscreen.open()
+
+    def prepare_fullscreen(self):
+        self.fullscreen_prewarm=0
+        if self.resources_closed:return False
+        if self.fullscreen is None:self.fullscreen=FullscreenPlayer(self)
+        return self.fullscreen.prewarm()
 
     def on_stage_key(self,_window,event):
         if Gdk.keyval_name(event.keyval)=='F11':self.show_fullscreen();return True
@@ -667,12 +679,23 @@ class Widget:
         self.reflow()
 
     def toggle_compact(self, _button):
+        self.layout_transition.play(self.change_compact)
+
+    def change_compact(self):
         self.compact = not self.compact
-        self.apply_layout()
+        duration=self.drawer.get_transition_duration()
+        self.drawer.set_transition_duration(0)
+        try:self.apply_layout()
+        finally:self.drawer.set_transition_duration(duration)
         if not self.compact and self.expanded:
             self.active_panel().open()
         if self.positioned:
             self.save_position()
+
+    def layout_transition_done(self):
+        if self.resources_closed:return
+        self.reflow()
+        if self.positioned:self.save_position()
 
     def toggle_discovery(self, _button):
         if self.compact:
@@ -685,11 +708,13 @@ class Widget:
         self.save_position()
 
     def reflow(self):
+        if self.layout_transition.active:return False
         self.window.resize(self.layout_width(), 1)
         GLib.timeout_add(100, self.fit_window)
         return False
 
     def fit_window(self):
+        if self.layout_transition.active:return False
         if not self.positioned:
             return False
         width, height = self.window.get_size()

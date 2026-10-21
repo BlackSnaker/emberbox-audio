@@ -12,6 +12,8 @@ Give the music a little more room. Fullscreen listening brings a large cover, a 
 
 Fullscreen opens on the widget's monitor as a separate, focusable window. It does not turn the desktop widget itself into a fullscreen desktop surface.
 
+Returning animates the cover back toward the desktop widget. Both normal/Mini transitions are animated too; the saved mode and position stay intact.
+
 ## Controls
 
 | Action | Control |
@@ -21,17 +23,20 @@ Fullscreen opens on the widget's monitor as a separate, focusable window. It doe
 | Seek | Progress bar; **Left / Right** move 10 seconds |
 | Volume | Dial; **Up / Down** |
 | Mute | Metal toggle |
+| Lyrics / artwork | Header button |
 | Leave fullscreen | **Esc**, **F11**, or upper-right exit button |
 
 The selected source still controls which playback and seek actions are available. Spotify, Apple Music, YouTube and Yandex Music use their existing Emberbox connection; fullscreen does not create a second player. The tubes follow the same measured application audio as the desktop widget.
 
 ## Lyrics
 
-While fullscreen is open, Emberbox looks for lyrics matching the current song on [LRCLIB](https://lrclib.net/). Synchronized lyrics highlight the current line and scroll with playback; clicking a timed line seeks to it when the source supports seeking. Plain lyrics remain readable when timestamps are unavailable.
+Fullscreen opens with a large centred cover. Press **Lyrics** in the header to show the text panel; **Artwork** returns to the cover. No lyric lookup, line rendering or scrolling runs before you ask for text.
+
+While the text panel is open, Emberbox looks for lyrics matching the current song on [LRCLIB](https://lrclib.net/). Synchronized lyrics highlight the current line and scroll with playback; clicking a timed line seeks to it when the source supports seeking. Plain lyrics remain readable when timestamps are unavailable.
 
 Some songs have no matching text, are instrumental, or only have plain lyrics. A failed lookup leaves the cover and playback controls usable. Lyrics availability depends on the song and the lyrics database; a music-service subscription does not guarantee lyrics.
 
-**Network disclosure:** a lookup sends the song's title, artist, album and duration to LRCLIB. This happens only while fullscreen is shown. Signing in to a music service remains part of that service's existing account connection.
+**Network disclosure:** a lookup sends the song's title, artist, album and duration to LRCLIB. This happens only while fullscreen and its text panel are shown. Signing in to a music service remains part of that service's existing account connection.
 
 ## Visual character
 

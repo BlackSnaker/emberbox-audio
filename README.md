@@ -28,7 +28,7 @@ A warm desktop companion for **Spotify, Apple Music, YouTube and Yandex Music**,
 
 ![Fullscreen listening room with original demonstration artwork and verse](assets/fullscreen.png)
 
-Open **Listening room · Fullscreen** from settings, press the **⛶** header button or **F11**. Big artwork, a cover-tinted atmosphere, live tubes and line-synchronized lyrics from LRCLIB bring the same Grunesphism materials to a whole screen. Click a timed line to seek; **Esc** brings back your desktop widget exactly where you left it. Plain lyrics and instrumental/missing-text views keep the scene useful when timecodes are unavailable.
+Open **Listening room · Fullscreen** from settings, press the **⛶** header button or **F11**. A centred large cover, a cover-tinted atmosphere and live tubes bring the same Grunesphism materials to a whole screen. Press **Lyrics** to load line-synchronized text from LRCLIB; **Artwork** returns to the cover. No lyric lookup or line layout runs before that button. Click a timed line to seek; **Esc** brings back your desktop widget exactly where you left it. Plain lyrics and instrumental/missing-text views keep the scene useful when timecodes are unavailable.
 
 Large original covers replace enlarged thumbnails. Supported Apple Music catalog songs can display their authentic animated album cover, looping silently and pausing with the track. Optional FFmpeg enables motion covers; unavailable animations retain static artwork.
 
@@ -94,7 +94,7 @@ Dark olive-charcoal surfaces, warm cream type, amber light behind glass, a smoot
 | Seek | Click the progress bar |
 | Browse collections | **For you** for Spotify; **Your library** for Apple Music |
 
-## What to expect in v0.7
+## What to expect in v0.8
 
 This is an early source release, built from the working desktop widgets. Apple Music's in-widget integration is experimental and uses Apple's website in a separately configured local engine; compatible runtime binaries are not distributed. Browser MPRIS remains an optional fallback. Spotify personal recommendations use an optional, version-sensitive local desktop-client integration. Website and client updates may require integration fixes; see the setup notes.
 
