@@ -26,6 +26,7 @@ Artwork may shift the shell by at most nine RGB levels per channel. A 1.4-second
 
 - The mute switch has a smooth metal collar and a rounded lever, with a 250 ms smootherstep movement.
 - The volume dial has a ridged edge, warm scale ticks and an indicator that follows its target smoothly.
+- Fullscreen uses a larger volume dial and a passive horizontal glass VU instead of a second volume slider. Its amber discharge follows stereo PCM energy on a −60 to 0 dBFS scale, with a quick rise and a soft decay; pause, mute and stale audio return it to rest.
 - Transport buttons have visible breathing room, including in mini mode.
 - Glass tubes have no feet or simulated sockets. Small highlights describe the glass; the orange glow softly reaches the edge.
 

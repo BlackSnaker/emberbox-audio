@@ -6,6 +6,7 @@ from artwork import Artwork
 from cover_tint import cover_color, BASE_COLOR
 from hardware_controls import MuteToggle, VolumeKnob
 from nixie_spectrum import NixieSpectrum
+from tube_meter import TubeMeter
 from source_picker import SourcePicker, text
 from lyrics import LyricsClient, active_line
 from cover_sources import AppleMotion, apple_page
@@ -240,10 +241,9 @@ class FullscreenPlayer:
         volume_box.set_valign(Gtk.Align.CENTER)
         self.mute=MuteToggle(host.sound.toggle_mute);self.mute.set_compact(True)
         volume_box.pack_start(self.mute,False,False,0)
-        self.volume=Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL,0,1,.01)
-        self.volume.set_draw_value(False);self.volume.set_size_request(85,-1)
-        self.volume.connect('change-value',self.on_volume);volume_box.pack_start(self.volume,False,False,0)
-        self.knob=VolumeKnob(host.sound.set_volume)
+        self.volume_meter=TubeMeter()
+        volume_box.pack_start(self.volume_meter,False,False,0)
+        self.knob=VolumeKnob(host.sound.set_volume,large=True)
         volume_box.pack_start(self.knob,False,False,0)
         console.pack_end(volume_box,True,True,0)
         footer.pack_start(console,False,False,0)
@@ -379,10 +379,6 @@ class FullscreenPlayer:
         if self.host.progress_event.get_sensitive():self.host.seek_to(value)
         return True
 
-    def on_volume(self,_scale,_scroll,value):
-        if self.host.sound.available:self.host.sound.set_volume(value)
-        return True
-
     def on_key(self,_window,event):
         key=Gdk.keyval_name(event.keyval)
         if key in ('Escape','F11'):self.hide();return True
@@ -420,7 +416,6 @@ class FullscreenPlayer:
         self.progress.set_range(0,max(1,h.length/1e6));self.progress.set_value(self.position)
         self.progress.set_sensitive(h.progress_event.get_sensitive() and h.length>0)
         self.elapsed.set_text(clock_text(self.position));self.total.set_text(clock_text(h.length/1e6))
-        self.volume.set_value(0 if h.sound.muted else h.sound.volume);self.volume.set_sensitive(h.sound.available)
         self.mute.set_state(h.sound.volume,h.sound.muted,h.sound.available)
         self.knob.set_state(h.sound.volume,h.sound.muted,h.sound.available)
         self.load_art()
@@ -533,7 +528,9 @@ class FullscreenPlayer:
         if time.monotonic()-self.last_fade>.1:
             self.last_fade=time.monotonic();self.fade_lines()
         meter=self.host.meter
-        targets=meter.levels if self.host.playing and time.monotonic()-meter.last_sample<.35 else (0.,)*9
+        active=self.host.playing and not self.host.sound.muted and time.monotonic()-meter.last_sample<.35
+        targets=meter.levels if active else (0.,)*9
+        self.volume_meter.advance(getattr(meter,'rms_level',0.) if active else 0.,dt)
         for i,(old,target) in enumerate(zip(self.levels,targets)):
             rate=24. if target>old else 11.
             offset=old-target;momentum=self.velocities[i]+rate*offset;decay=math.exp(-rate*dt)

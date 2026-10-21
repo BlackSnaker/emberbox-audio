@@ -18,7 +18,7 @@ def pixbuf(svg, width, height):
 
 
 @lru_cache(maxsize=512)
-def knob_frame(index, compact):
+def knob_frame(index, compact, large=False):
     value = index / 200
     angle = math.radians(135 + 270 * value)
     ticks = []
@@ -55,7 +55,8 @@ def knob_frame(index, compact):
         stroke="#f5bd51" stroke-width="1.8" stroke-linecap="round"/>
       <text x="32" y="64" text-anchor="middle" font-family="monospace" font-size="10" fill="#bdae93">{round(value*100)}%</text>
     </svg>'''
-    return pixbuf(svg, 38 if compact else 48, 42 if compact else 52)
+    return pixbuf(svg, 88 if large else 38 if compact else 48,
+                  94 if large else 42 if compact else 52)
 
 
 @lru_cache(maxsize=256)
@@ -94,7 +95,7 @@ def switch_frame(index, compact):
 
 
 class VolumeKnob(Gtk.EventBox):
-    def __init__(self, changed):
+    def __init__(self, changed, *, large=False):
         super().__init__()
         self.changed = changed
         self.set_visible_window(False)
@@ -104,6 +105,7 @@ class VolumeKnob(Gtk.EventBox):
         self.set_valign(Gtk.Align.CENTER)
         self.value = self.shown = 1.0
         self.muted = self.compact = False
+        self.large = large
         self.drag = None
         self.tick = 0
         self.last_frame = None
@@ -117,7 +119,7 @@ class VolumeKnob(Gtk.EventBox):
         self.connect('scroll-event', self._scroll)
         self.connect('key-press-event', self._key)
         self.get_accessible().set_role(Atk.Role.DIAL)
-        self.get_accessible().set_name('Громкость Spotify')
+        self.get_accessible().set_name('Громкость')
         self._render()
 
     def set_compact(self, compact):
@@ -137,7 +139,7 @@ class VolumeKnob(Gtk.EventBox):
 
     def _render(self):
         index = round(max(0,min(1,self.shown))*200)
-        key = (index,self.compact)
+        key = (index,self.compact,self.large)
         if key != self.frame:
             self.image.set_from_pixbuf(knob_frame(*key));self.frame = key
 

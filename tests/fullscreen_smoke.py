@@ -161,6 +161,7 @@ class FixtureHost:
 def assert_controls_fit(stage):
     width, height = stage.window.get_size()
     for child in (stage.exit_button, stage.progress, stage.play_button,
+                  stage.volume_meter, stage.knob, stage.mute,
                   stage.previous_button, stage.next_button):
         assert child.get_mapped(), f'{type(child).__name__} is not mapped'
         point = child.translate_coordinates(stage.window, 0, 0)
@@ -222,9 +223,26 @@ def assert_lyrics_under_repaint(stage, host):
         assert client.state.status == 'ready', 'Lyric completion starved behind repaint work'
         assert len(stage.line_buttons) == 2, 'Completed lyrics were not rendered under load'
         assert stage.line_labels[0].get_text() == state.lines[0].text
+        GLib.source_remove(busy);busy=0
+        assert stage.volume_meter.level > .3, 'VU must react to measured PCM'
+        sound_calls=list(host.sound.calls)
+        measured=stage.volume_meter.level
+        host.sound.volume=.05
+        stage.update();settle(.1)
+        assert stage.volume_meter.level > measured*.8, 'VU must not display the knob position'
+        assert host.sound.calls == sound_calls, 'Passive VU must not change volume'
+        host.sound.muted=True
+        settle(.85)
+        assert stage.volume_meter.level < .01, 'Muted sound must fade to rest'
+        host.sound.muted=False
+        settle(.3)
+        assert stage.volume_meter.level > .3
+        GLib.source_remove(measure_timer);measure_timer=0
+        settle(1.2)
+        assert stage.volume_meter.level < .01, 'A stalled audio stream must fade to rest'
     finally:
-        GLib.source_remove(busy)
-        GLib.source_remove(measure_timer)
+        if busy:GLib.source_remove(busy)
+        if measure_timer:GLib.source_remove(measure_timer)
         client.close()
         stage.lyrics, host.meter = old_lyrics, old_meter
         stage.on_lyrics()
@@ -257,7 +275,10 @@ def run():
                 stage.window.unfullscreen()
                 stage.window.resize(width, height)
                 settle()
+                assert stage.window.get_size() == (width,height), 'Controls must not force a wider window'
                 assert_controls_fit(stage)
+            assert stage.knob.get_allocated_width() >= 88
+            assert not hasattr(stage,'volume'), 'Fullscreen volume slider must be removed'
             assert stage.current_line == 1
             assert stage.line_buttons[1].get_style_context().has_class('stage-line-active')
             stage.line_buttons[2].clicked()

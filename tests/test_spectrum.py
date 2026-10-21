@@ -23,6 +23,7 @@ class SpectrumTests(unittest.TestCase):
         meter=audio_meter.SpotifyAudioMeter()
         meter.process=SlowRecorder()
         meter.levels=(1.,)*9
+        meter.rms_level=1.
         start=time.monotonic()
         try:
             meter.stop()
@@ -30,6 +31,7 @@ class SpectrumTests(unittest.TestCase):
             self.assertTrue(entered.wait(.5))
             self.assertIsNone(meter.process)
             self.assertEqual(meter.levels,(0.,)*9)
+            self.assertEqual(meter.rms_level,0.)
             self.assertFalse(finished.is_set())
         finally:
             release.set()
@@ -58,3 +60,15 @@ class SpectrumTests(unittest.TestCase):
         self.assertEqual(int(np.argmax(meter.levels)),3)
         self.assertGreater(meter.levels[3],.3)
         self.assertGreater(meter.last_sample,0)
+
+    def test_vu_follows_stereo_energy_even_with_opposite_phase(self):
+        meter=audio_meter.SpotifyAudioMeter()
+        wave=np.sin(2*np.pi*440*np.arange(audio_meter.FRAMES)/audio_meter.RATE)
+        values=[]
+        for amplitude in (0.,.01,.1,.5):
+            stereo=np.column_stack((wave*amplitude,-wave*amplitude)).astype('<f4')
+            meter._measure(stereo.tobytes())
+            values.append(meter.rms_level)
+        self.assertEqual(values[0],0.)
+        self.assertTrue(all(a<b for a,b in zip(values,values[1:])),values)
+        self.assertGreater(values[-1],.8)

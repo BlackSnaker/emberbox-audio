@@ -33,6 +33,7 @@ class SpotifyAudioMeter:
         self.process = None
         self.thread = None
         self.levels = (0.0,) * 9
+        self.rms_level = 0.0
         self.last_sample = 0.0
         self.generation = 0
 
@@ -59,6 +60,7 @@ class SpotifyAudioMeter:
         process = self.process
         self.process = None
         self.levels = (0.0,) * 9
+        self.rms_level = 0.0
         self.last_sample = 0.0
         if process:
             # A track transition may replace the output stream. Reaping the
@@ -138,6 +140,10 @@ class SpotifyAudioMeter:
 
     def _measure(self, raw):
         samples = np.frombuffer(raw, dtype='<f4').reshape(FRAMES, CHANNELS)
+        # Measure stereo energy before summing channels: opposite-phase audio
+        # is audible too. The VU scale covers -60 to 0 dBFS.
+        rms = math.sqrt(float(np.mean(samples ** 2)))
+        self.rms_level = max(0.0, min(1.0, (20 * math.log10(max(1e-8, rms)) + 60) / 60))
         mono = samples.mean(axis=1)
         spectrum = np.abs(np.fft.rfft(mono * WINDOW)) * (2 / WINDOW.sum())
         levels = []

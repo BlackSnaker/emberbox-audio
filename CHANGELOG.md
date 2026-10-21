@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.7.4 — 2026-10-21
+
+- A larger tactile volume dial in fullscreen; replace the duplicate volume slider with a passive amber glass VU.
+- Measure stereo PCM energy, with smooth attack/decay and a return to rest on pause, mute or stale audio. Preserve the seek timeline and desktop/mini controls.
+- Verify fullscreen controls down to 1024×600 and fix the fullscreen preview's artwork fixture.
+
 ## 0.7.3 — 2026-10-21
 
 - Refresh Yandex player contexts after sign-in and read context consumers outside the main content.
