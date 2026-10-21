@@ -20,6 +20,53 @@ from installer_ui import Terminal
 
 
 class InstallerTests(unittest.TestCase):
+    def test_kde_session_detection(self):
+        for session in ('KDE','KDE:PLASMA','plasma','plasmawayland','plasmax11','plasma-x11'):
+            self.assertTrue(installer.kde_session({'XDG_CURRENT_DESKTOP':session}),session)
+        for session in ('GNOME','ubuntu:GNOME','XFCE',''):
+            self.assertFalse(installer.kde_session({'XDG_CURRENT_DESKTOP':session}),session)
+
+    def test_localized_desktop_directory_without_xdg_command(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base=Path(folder)
+            desktop=base/'Рабочий стол'
+            (base/'user-dirs.dirs').write_text('XDG_DESKTOP_DIR="'+str(desktop)+'"\n')
+            with patch.dict(os.environ,{'XDG_CONFIG_HOME':str(base)}),\
+                 patch.object(installer.subprocess,'run',side_effect=FileNotFoundError('xdg-user-dir')):
+                self.assertEqual(installer.desktop_directory(),desktop)
+
+    def test_kde_creates_localized_desktop_shortcut_and_preserves_opt_out(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base=Path(folder)
+            options=['--skip-check','--no-systemd','--bin-dir',str(base/'bin')]
+            env={'XDG_DATA_HOME':str(base/'data'),'XDG_CONFIG_HOME':str(base/'config'),
+                 'XDG_CURRENT_DESKTOP':'KDE','DESKTOP_SESSION':'plasmawayland'}
+            with patch.dict(os.environ,env),\
+                 patch.object(installer,'desktop_directory',return_value=base/'Рабочий стол'),\
+                 redirect_stdout(io.StringIO()):
+                self.assertEqual(installer.main(['install',*options]),0)
+                shortcut=base/'Рабочий стол'/f'{APP}.desktop'
+                self.assertTrue(shortcut.exists())
+                self.assertIn('StartupWMClass=emberbox-audio',shortcut.read_text())
+                self.assertIn('--hide',shortcut.read_text());self.assertIn('--quit',shortcut.read_text())
+                self.assertEqual(installer.main(['install',*options,'--no-desktop-shortcut']),0)
+                self.assertFalse(shortcut.exists())
+                self.assertEqual(installer.main(['install',*options]),0)
+                self.assertFalse(shortcut.exists())
+                self.assertEqual(installer.main(['install',*options,'--desktop-shortcut']),0)
+                self.assertTrue(shortcut.exists())
+                self.assertEqual(installer.main(['uninstall',*options]),0)
+                self.assertFalse(shortcut.exists())
+
+    def test_kde_disabled_desktop_folder_keeps_menu_launcher(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base=Path(folder)
+            env={'XDG_DATA_HOME':str(base/'data'),'XDG_CONFIG_HOME':str(base/'config'),'XDG_CURRENT_DESKTOP':'KDE'}
+            with patch.dict(os.environ,env),patch.object(installer,'desktop_directory',side_effect=ValueError('disabled')),redirect_stdout(io.StringIO()):
+                code=installer.main(['install','--skip-check','--no-systemd','--bin-dir',str(base/'bin')])
+            self.assertEqual(code,0)
+            self.assertTrue((base/'data/applications'/f'{APP}.desktop').exists())
+
     def test_desktop_shortcut_actions_survive_update_and_are_removed_on_uninstall(self):
         with tempfile.TemporaryDirectory() as folder:
             base=Path(folder)

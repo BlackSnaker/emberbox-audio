@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import shutil
 import subprocess
@@ -52,10 +53,31 @@ def desktop_directory():
         result=subprocess.run(['xdg-user-dir','DESKTOP'],capture_output=True,text=True,timeout=3)
         directory=absolute(result.stdout.strip()) if result.returncode==0 and result.stdout.strip() else None
     except (OSError,ValueError,subprocess.SubprocessError):directory=None
+    if directory is None:
+        config=Path(os.environ.get('XDG_CONFIG_HOME',Path.home()/'.config'))/'user-dirs.dirs'
+        try:
+            for line in config.read_text().splitlines():
+                if not line.strip().startswith('XDG_DESKTOP_DIR='):continue
+                values=shlex.split(line.strip().split('=',1)[1],comments=True)
+                if len(values)!=1:continue
+                value=values[0]
+                for prefix in ('$HOME','${HOME}'):
+                    if value==prefix or value.startswith(prefix+'/'):
+                        value=str(Path.home())+value[len(prefix):];break
+                if Path(value).is_absolute():directory=absolute(value)
+                break
+        except (OSError,ValueError):pass
     # A desktop directory equal to HOME means desktop icons were disabled.
     if directory is None or directory==Path.home():
         raise ValueError('No desktop folder is configured. Configure XDG_DESKTOP_DIR before adding a shortcut.')
     return directory
+
+
+def kde_session(environ=None):
+    env=os.environ if environ is None else environ
+    names=re.split(r'[:;\s]+',' '.join(env.get(key,'') for key in (
+        'XDG_CURRENT_DESKTOP','XDG_SESSION_DESKTOP','DESKTOP_SESSION')).casefold())
+    return any(name in ('kde','plasma','plasmawayland','plasma-wayland','plasmax11','plasma-x11') for name in names)
 
 
 def remove(path):
@@ -130,7 +152,7 @@ def main(argv=None):
     startup.add_argument('--autostart',dest='autostart',action='store_true',default=None,help='Start at desktop login')
     startup.add_argument('--no-autostart',dest='autostart',action='store_false',help='Disable start at login')
     shortcut_options=parser.add_mutually_exclusive_group()
-    shortcut_options.add_argument('--desktop-shortcut',dest='desktop_shortcut',action='store_true',default=None,help='Add a launcher to the XDG desktop folder')
+    shortcut_options.add_argument('--desktop-shortcut',dest='desktop_shortcut',action='store_true',default=None,help='Add a launcher to the XDG desktop folder (default on KDE)')
     shortcut_options.add_argument('--no-desktop-shortcut',dest='desktop_shortcut',action='store_false',help='Remove the managed desktop shortcut')
     parser.add_argument('--bin-dir',type=Path,default=Path.home()/'.local/bin')
     parser.add_argument('--no-systemd',action='store_true',help='Use a direct desktop launcher')
@@ -168,11 +190,21 @@ def main(argv=None):
     old_shortcut=previous.get('desktop_shortcut')
     if old_shortcut and Path(old_shortcut).is_absolute() and Path(old_shortcut).name==APP+'.desktop':
         shortcut=absolute(old_shortcut)
-    want_shortcut=bool(shortcut) if args.desktop_shortcut is None else args.desktop_shortcut
+    shortcut_preference=previous.get('desktop_shortcut_enabled')
+    if args.desktop_shortcut is None:
+        want_shortcut=bool(shortcut_preference) if shortcut_preference is not None else bool(shortcut) or kde_session()
+    else:want_shortcut=args.desktop_shortcut
+    shortcut_warning=False
     if args.action=='install' and want_shortcut and shortcut is None:
         try:shortcut=desktop_directory()/(APP+'.desktop')
-        except ValueError as error:parser.error(str(error))
+        except ValueError as error:
+            if args.desktop_shortcut is True:parser.error(str(error))
+            # A disabled desktop folder must not prevent the menu installation.
+            want_shortcut=False;shortcut_warning=True
     ui.banner(version)
+    if shortcut_warning:
+        ui.warning('No desktop folder is configured; the application-menu launcher will still be installed.',
+                   'Папка рабочего стола не настроена; ярлык в меню приложений будет установлен.')
     if args.action=='uninstall':
         if not previous:
             ui.note('Emberbox is not installed here.','Emberbox здесь не установлен.');return 0
@@ -318,9 +350,11 @@ def main(argv=None):
                 elif shortcut and str(shortcut) in previous.get('files',[]):shortcut.unlink(missing_ok=True)
                 manifest.write_text(json.dumps({'app':APP,'version':version,'systemd':use_systemd,'python':selected,
                     'autostart':bool(want_autostart),'launcher':str(launcher),
-                    'desktop_shortcut':str(shortcut) if want_shortcut else None,'files':managed},indent=2)+'\n')
+                    'desktop_shortcut':str(shortcut) if want_shortcut else None,
+                    'desktop_shortcut_enabled':bool(want_shortcut),'files':managed},indent=2)+'\n')
                 # XDG autostart supplies the current display before starting the service.
                 ui.item(ui.text('Application menu entry','Пункт меню приложений'))
+                if want_shortcut:ui.item(ui.text('Desktop shortcut','Ярлык рабочего стола'))
                 ui.item(ui.text('Start at login enabled','Запуск при входе включён') if want_autostart else ui.text('Launch whenever you want','Запуск по желанию'))
                 if was_running and use_systemd:service('start',APP+'.service',check=True)
                 if old_link.is_symlink() and old_link.resolve()==unit.resolve():old_link.unlink()

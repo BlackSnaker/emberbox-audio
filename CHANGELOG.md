@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.7.2 — 2026-10-21
+
+- Automatic desktop shortcut on KDE Plasma, with localized XDG desktop folders and a remembered opt-out.
+- Application-menu access remains available when the desktop folder is disabled; GNOME desktop icons are not enabled automatically.
+- CI verifies the Plasma shortcut file, executable permissions and desktop-entry syntax.
+
 ## 0.7.1 — 2026-10-21
 
 - Hide and close controls, with the same actions in compact settings and launcher context menus.

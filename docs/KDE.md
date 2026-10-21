@@ -6,6 +6,8 @@ Emberbox keeps its [Grunesphism materials](DESIGN.md) on KDE: transparent rounde
 
 ## What has been verified
 
+The installer adds Emberbox to the application menu and creates a desktop shortcut automatically on Plasma. The shortcut uses your configured desktop folder and includes Show, Hide and Close actions. Disable it with `./install.sh --no-desktop-shortcut`; subsequent updates remember that preference. Panel pinning is available through Plasma’s application menu. See [installation options](INSTALL.md).
+
 The integration test ran against **KWin 6.7.5 in a nested Wayland session with XWayland**, hosted by Xvfb and using QPainter compositing. This exercises a real compositor and pointer/keyboard events. It is a controlled test environment, not a full Plasma Shell desktop.
 
 | Check | Result in that session |

@@ -10,6 +10,8 @@ jobs:
     timeout-minutes: 15
     env:
       XDG_SESSION_TYPE: wayland
+      XDG_CURRENT_DESKTOP: KDE
+      DESKTOP_SESSION: plasmawayland
     steps:
       - uses: actions/checkout@v6
         with:
@@ -17,15 +19,19 @@ jobs:
       - name: Isolate installation folders
         run: |
           printf 'XDG_DATA_HOME=%s/emberbox-installer/data\nXDG_CONFIG_HOME=%s/emberbox-installer/config\nXDG_CACHE_HOME=%s/emberbox-installer/cache\n' "$RUNNER_TEMP" "$RUNNER_TEMP" "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/emberbox-installer/config" "$RUNNER_TEMP/emberbox-installer/Рабочий стол"
+          printf 'XDG_DESKTOP_DIR="%s/emberbox-installer/Рабочий стол"\n' "$RUNNER_TEMP" > "$RUNNER_TEMP/emberbox-installer/config/user-dirs.dirs"
       - name: Test display infrastructure
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y xvfb dbus-x11
+          sudo apt-get install -y xvfb dbus-x11 desktop-file-utils
       - name: Install missing dependencies and desktop integration
         run: ./install.sh --yes --no-systemd --autostart --bin-dir "$RUNNER_TEMP/emberbox-installer/bin"
       - name: Check installed runtime and open GTK widget
         run: |
           ./install.sh --check --plain
+          test -x "$RUNNER_TEMP/emberbox-installer/Рабочий стол/emberbox-audio.desktop"
+          desktop-file-validate "$RUNNER_TEMP/emberbox-installer/Рабочий стол/emberbox-audio.desktop"
           ember_python=$(/usr/bin/python3 -B -c 'import json,os;from pathlib import Path;print(json.loads((Path(os.environ["XDG_DATA_HOME"])/"emberbox-audio/.emberbox-install.json").read_text())["python"])')
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a "$ember_python" -B tests/gui_smoke.py
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a "$ember_python" -B - <<'PY'

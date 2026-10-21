@@ -66,7 +66,7 @@ On unknown or immutable systems, Emberbox does not bypass the distribution's sof
 | `./install.sh --yes` | Explicitly accept package-manager confirmations; `sudo` may still ask for your password. |
 | `./install.sh --autostart` | Enable launch at desktop login. |
 | `./install.sh --no-autostart` | Disable launch at login. An update without either option keeps the previous setting. |
-| `./install.sh --desktop-shortcut` | Add an executable launcher to the configured desktop folder. GNOME needs a desktop-icons extension to display it. |
+| `./install.sh --desktop-shortcut` | Add an executable launcher to the configured desktop folder; automatic on KDE Plasma. Other desktops require this explicit option. |
 | `./install.sh --no-desktop-shortcut` | Remove the managed desktop shortcut. Updates otherwise preserve it. |
 | `./install.sh --no-systemd` | Use the direct launcher instead of a user service. This fallback is also automatic when a user service manager is unavailable. |
 | `./install.sh --lang ru` / `--lang en` | Choose the installer's language; normally selected from the locale. |
@@ -87,6 +87,8 @@ The widget uses X11 window-manager hints, including when running inside a Waylan
 The KWin check covered composited rounded transparency, below-app placement, real pointer and keyboard input, cover dragging, all-desktops placement for the widget, and fullscreen focus with Esc restoration. [Verified scope, placement options and KDE troubleshooting →](KDE.md)
 
 Application-menu launch and XDG autostart use the current desktop session's display environment. This avoids assuming GNOME-specific startup variables on KDE. The launcher can use either a systemd user service or a direct process.
+
+On **KDE Plasma**, installation also creates a desktop shortcut automatically, using your configured XDG desktop folder, including localized names. It uses the Emberbox icon and offers **Show**, **Hide** and **Close** in its context menu. Use `--no-desktop-shortcut` to opt out; updates preserve that choice. If the desktop folder is disabled, the application-menu entry is still installed. To pin Emberbox to a Plasma panel, use the application menu’s **Pin to Task Manager** action. GNOME installation does not create desktop icons automatically or enable a desktop-icons extension.
 
 For Plasma testers, please check:
 
