@@ -93,6 +93,7 @@ class YandexPanel(Gtk.Box):
 
     def request(self,method,**params):
         if self.closed:return
+        if method in ('play','wave'):getattr(self,'before_play',lambda:None)()
         self.generation+=1;generation=self.generation
         self.spinner.show();self.spinner.start()
         self.notice.set_text(text('Connecting your music…','Подключаю твою музыку…'))

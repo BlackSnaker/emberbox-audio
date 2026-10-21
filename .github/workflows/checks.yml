@@ -83,5 +83,7 @@ jobs:
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/fullscreen_smoke.py
       - name: Fullscreen shader and offscreen room
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1280x720x24' /usr/bin/python3 tests/reveal_smoke.py
+      - name: Fullscreen collection and listening queue
+        run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/library_smoke.py
       - name: Silent motion artwork
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/motion_smoke.py

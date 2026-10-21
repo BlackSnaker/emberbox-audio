@@ -28,6 +28,8 @@ Returning animates the cover back toward the desktop widget. Both normal/Mini tr
 
 The selected source still controls which playback and seek actions are available. Spotify, Apple Music, YouTube and Yandex Music use their existing Emberbox connection; fullscreen does not create a second player. The tubes follow the same measured application audio as the desktop widget.
 
+Collection, albums, search and the separate queue page are described in [Collection and listening queue](COLLECTION.md).
+
 ## Lyrics
 
 Fullscreen opens with a large centred cover. Press **Lyrics** in the header to show the text panel; **Artwork** returns to the cover. No lyric lookup, line rendering or scrolling runs before you ask for text.

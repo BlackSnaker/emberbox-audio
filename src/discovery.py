@@ -195,12 +195,17 @@ class LocalSpotify:
         script = TRACKS_SCRIPT.replace('EXPECTED', json.dumps(expected))
         current = self.evaluate(script)
         if not current:
-            self.home()
             found = self.evaluate(f'''(() => {{
               const a = Array.from(document.querySelectorAll('main a[href]'))
                 .find(a => a.getAttribute('href') === {json.dumps(href)});
               a?.click(); return !!a;
             }})()''')
+            if not found:
+                self.home()
+                found=self.evaluate(f'''(() => {{
+                  const a=Array.from(document.querySelectorAll('main a[href]')).find(a=>a.getAttribute('href')==={json.dumps(href)});
+                  a?.click();return !!a;
+                }})()''')
             if not found:
                 raise RuntimeError('This collection changed. Go back and refresh your picks.')
         best = None
@@ -216,6 +221,55 @@ class LocalSpotify:
         for track in best['tracks']:
             track['image'] = image_url(track['image'])
         return best
+
+    def search(self,term):
+        term=str(term).strip()[:200]
+        if not term:return {'items':[]}
+        entered=self.evaluate(r'''(() => {
+          const input=document.querySelector('input[data-testid="search-input"],input[role="searchbox"]');
+          if(!input){document.querySelector('a[href="/search"],[data-testid="search-button"]')?.click();return false;}
+          return true;
+        })()''')
+        if not entered:
+            for _ in range(20):
+                if self.evaluate('!!document.querySelector(\'input[data-testid="search-input"],input[role="searchbox"]\')'):break
+                time.sleep(.1)
+        ready=self.evaluate(r'''(() => {
+          const input=document.querySelector('input[data-testid="search-input"],input[role="searchbox"]');
+          if(!input)return false;
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,TERM);
+          input.dispatchEvent(new Event('input',{bubbles:true}));
+          input.dispatchEvent(new Event('change',{bubbles:true}));return true;
+        })()'''.replace('TERM',json.dumps(term)))
+        if not ready:raise ConnectionUnavailable('Spotify search is unavailable. Reconnect the desktop client.')
+        time.sleep(.8)
+        script=r'''(() => {
+          const items=[],seen=new Set();
+          for(const row of document.querySelectorAll('main [data-testid="tracklist-row"]')){
+            const link=row.querySelector('a[href^="/track/"]');
+            const id=link?.getAttribute('href')?.match(/^\/track\/([A-Za-z0-9]+)/)?.[1];
+            if(!id||seen.has(id))continue;seen.add(id);
+            const artists=Array.from(row.querySelectorAll('a[href^="/artist/"]')).map(a=>a.textContent.trim());
+            const duration=Array.from(row.querySelectorAll('[data-encore-id="text"]')).map(a=>a.textContent.trim()).find(t=>/^\d+:\d\d$/.test(t));
+            const parts=(duration||'').split(':').map(Number);
+            items.push({uri:'spotify:track:'+id,id,kind:'track',title:link.textContent.trim(),artist:artists.join(', '),
+              album:row.querySelector('a[href^="/album/"]')?.textContent.trim()||'',image:row.querySelector('img')?.src||'',
+              duration_ms:parts.length===2?(parts[0]*60+parts[1])*1000:0});
+          }
+          for(const link of document.querySelectorAll('main a[href^="/album/"]')){
+            const href=link.getAttribute('href');if(!/^\/album\/[A-Za-z0-9]+$/.test(href)||seen.has(href))continue;
+            const card=link.closest('[data-encore-id="card"]');if(!card)continue;seen.add(href);
+            items.push({uri:'spotify:'+href.slice(1).replace('/',':'),href,kind:'album',
+              title:card.querySelector('[data-encore-id="cardTitle"]')?.textContent.trim()||link.textContent.trim(),
+              subtitle:card.querySelector('[data-encore-id="cardSubtitle"]')?.textContent.trim()||'',image:card.querySelector('img')?.src||''});
+          }
+          return {items:items.filter(i=>i.title).slice(0,75)};
+        })()'''
+        for _ in range(35):
+            result=self.evaluate(script)
+            if result and result.get('items'):return result
+            time.sleep(.2)
+        return {'items':[]}
 
 
 def cached_home():

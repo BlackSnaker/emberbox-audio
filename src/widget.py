@@ -46,6 +46,7 @@ from kwin_desktop import KWinDesktop
 from widget_settings import SettingsMenu, settings_button, window_button
 from widget_control import WidgetControl
 from widget_morph import WidgetMorph
+from music_library import MusicService
 import widget_restart
 from youtube_audio import YouTubeAudio
 from youtube_panel import YouTubePanel
@@ -482,6 +483,8 @@ class Widget:
         card.pack_start(self.drawer, False, False, 0)
         self.drawer.connect('notify::child-revealed', lambda *_args: self.reflow())
 
+        self.music=MusicService(self)
+        self.yandex_panel.before_play=self.music.stop
         self.window.show_all()
         self.panel.show_home()
         self.apple_panel.show_home()
@@ -544,6 +547,7 @@ class Widget:
         if self.resources_closed:
             return
         self.resources_closed = True
+        self.music.close()
         self.layout_transition.finish(notify=False)
         if getattr(self,'fullscreen_prewarm',0):GLib.source_remove(self.fullscreen_prewarm);self.fullscreen_prewarm=0
         if hasattr(self,'widget_control'):self.widget_control.close()
@@ -781,6 +785,7 @@ class Widget:
             self.show_youtube_search()
         if self.apple_native() and not self.apple_web.state.get('title'):
             self.show_apple_library()
+        self.music.source_changed()
 
     def update_source_ui(self):
         names = {'spotify':'SPOTIFY', 'apple-music':'APPLE MUSIC', 'youtube':'YOUTUBE','yandex-music':text('YANDEX MUSIC','ЯНДЕКС МУЗЫКА')}
@@ -826,6 +831,7 @@ class Widget:
         self.save_position()
 
     def start_yandex_wave(self):
+        self.music.stop()
         if self.source!='yandex-music':self.select_source('yandex-music')
         self.yandex_panel.request('wave')
 
@@ -889,7 +895,8 @@ class Widget:
         self.youtube_panel.entry.grab_focus()
         self.save_position()
 
-    def play_youtube(self, item, queue, start=0):
+    def play_youtube(self, item, queue, start=0, managed=False):
+        if not managed:self.music.stop()
         if self.source != 'youtube' or self.youtube_mode != 'native':
             self.select_source('youtube')
         self.youtube.set_enabled(True)
@@ -954,6 +961,7 @@ class Widget:
                                                   'Подключение Firefox: см. docs/APPLE_MUSIC.ru.md'))
 
     def play_apple_uri(self, uri):
+        self.music.stop()
         if self.source != 'apple-music' or not uri.startswith('apple:'):
             return
         parts = uri.split(':', 2)
@@ -1018,6 +1026,7 @@ class Widget:
         threading.Thread(target=work, daemon=True).start()
 
     def play_uri(self, uri):
+        self.music.stop()
         if self.source != 'spotify':
             return
         if not uri.startswith(('spotify:track:', 'spotify:playlist:', 'spotify:album:')):
@@ -1130,6 +1139,7 @@ class Widget:
         return False
 
     def on_seek(self, _box, event):
+        self.music.watch.reset()
         if self.native_web():
             if event.button == 1 and self.length:
                 fraction = max(0.,min(1.,event.x/max(1,self.progress_event.get_allocated_width())))
@@ -1151,6 +1161,10 @@ class Widget:
         return True
 
     def on_action(self, _button, action):
+        if self.music.loading and action=='toggle':
+            self.music.stop(pause_pending=True);self.music.pause(self.source);return
+        if self.music.book.active==self.source and action in ('next','previous'):
+            self.music.step(1 if action=='next' else -1);return
         if self.source=='yandex-music':
             if action=='open':self.show_yandex()
             elif action=='toggle' and not self.yandex_web.state.get('title'):self.start_yandex_wave()
@@ -1234,6 +1248,7 @@ class Widget:
         self.sound.set_volume(value)
 
     def seek_to(self,seconds):
+        self.music.watch.reset()
         if self.native_web():
             self.native_web().action('seek',position=seconds)
         elif self.youtube_native():

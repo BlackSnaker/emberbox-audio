@@ -2,6 +2,14 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.9.0 — 2026-10-21
+
+- Fullscreen Listening / Collection / Queue pages, with large cover cards, album details and in-player search.
+- Add individual songs or loaded collections to a private, source-specific queue; reorder, remove, play from a row and preserve upcoming music across mode changes.
+- Keep automatic queue advancement in the widget, including desktop media controls, with guarded source changes, pause handling and no autoplay after restoration.
+- Async collection/playback requests, cancellation of superseded results, source capability notes and responsive English/Russian previews down to 1024×600.
+- Queue persistence/end-state tests, provider and Spotify DOM contracts, actual fullscreen interaction and desktop transport regressions.
+
 ## 0.8.1 — 2026-10-21
 
 - Prepare and cache silent artwork clips before animation, so network requests are outside the playback loop.

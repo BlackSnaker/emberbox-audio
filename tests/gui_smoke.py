@@ -132,6 +132,15 @@ try:
     count=len(app.monitor.calls);app.seek_to(22)
     assert len(app.monitor.calls)==count
     spotify.properties['CanSeek']=True
+    with patch.object(app.music.repository,'play') as queued_play:
+        app.music.play_all([{'uri':'spotify:track:QUEUEA','title':'Queue A'},
+                            {'uri':'spotify:track:QUEUEB','title':'Queue B'}])
+        settle(.15)
+        transport_count=len(app.monitor.calls)
+        app.on_action(None,'next');settle(.15)
+        assert [call.args[0]['id'] for call in queued_play.call_args_list]==['QUEUEA','QUEUEB']
+        assert len(app.monitor.calls)==transport_count,'Managed Next must use the custom queue'
+        app.music.stop()
     with patch('widget.launch_desktop') as launch:
         app.open_spotify_login()
         assert app.monitor.calls[-1]==(spotify.name,'Raise')
@@ -312,6 +321,7 @@ try:
 finally:
     # Gtk.main() is not entered by this synchronous harness.
     app.frame_health.close()
+    app.music.close()
     app.yandex_panel.close();app.yandex_web.close()
     app.accounts.close();app.mpris.close()
     app.youtube_panel.close();app.youtube.close();app.apple.close();app.apple_web.close();app.monitor.close();app.meter.stop();app.sound.close()
