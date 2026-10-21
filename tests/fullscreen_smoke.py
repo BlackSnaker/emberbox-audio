@@ -119,6 +119,8 @@ class FixtureHost:
         self.window.move(45, 60)
         self.drawer = Gtk.Revealer()
         self.drawer.set_reveal_child(True)
+        self.cover=Gtk.Image.new_from_pixbuf(cover.scale_simple(96,96,GdkPixbuf.InterpType.BILINEAR))
+        self.drawer.add(self.cover)
         self.window.add(self.drawer)
         self.window.show_all()
         self.compact, self.expanded = True, True
@@ -258,10 +260,20 @@ def run():
          patch.object(fullscreen, 'LyricsClient', FixtureLyrics), \
          patch.object(fullscreen.Artwork, 'load', image_load):
         stage = fullscreen.FullscreenPlayer(host)
+        entrance_frames=[]
+        advance=stage.reveal.advance
+        def record_entrance(now):
+            advance(now)
+            entrance_frames.append(stage.reveal.progress)
+        stage.reveal.advance=record_entrance
         try:
             assert not stage.visible
             stage.open()
+            assert stage.reveal.active
             settle()
+            assert any(0 < value < 1 for value in entrance_frames), 'Entrance must animate across frames'
+            if stage.reveal.active:
+                assert stage.reveal.flying_cover.get_mapped(), 'Cover must travel from the widget'
             assert stage.visible and stage.window.get_visible()
             assert stage.window.get_type_hint() != Gdk.WindowTypeHint.DESKTOP
             assert host.calls == [], 'Entering listening mode must not start or seek music'
@@ -277,6 +289,8 @@ def run():
                 settle()
                 assert stage.window.get_size() == (width,height), 'Controls must not force a wider window'
                 assert_controls_fit(stage)
+            assert not stage.reveal.active and not stage.reveal.get_visible()
+            assert stage.layout.get_opacity()==stage.background.get_opacity()==1.
             assert stage.knob.get_allocated_width() >= 88
             assert not hasattr(stage,'volume'), 'Fullscreen volume slider must be removed'
             assert stage.current_line == 1
@@ -352,7 +366,18 @@ def run():
             stage.open();settle()
             key(stage.window, 'F11');settle()
             assert not stage.visible
-            stage.open();settle()
+            assert not stage.reveal.active and stage.tick==0
+            stage.open()
+            stage.hide()
+            assert not stage.reveal.active and stage.reveal.cover_pixels is None
+            settings=stage.window.get_settings()
+            animations=settings.get_property('gtk-enable-animations')
+            try:
+                settings.set_property('gtk-enable-animations',False)
+                stage.open();settle()
+                assert not stage.reveal.active and stage.layout.get_opacity()==1.
+            finally:
+                settings.set_property('gtk-enable-animations',animations)
             stage.exit_button.clicked();settle()
             assert not stage.visible
         finally:

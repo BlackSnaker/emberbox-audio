@@ -7,6 +7,7 @@ from cover_tint import cover_color, BASE_COLOR
 from hardware_controls import MuteToggle, VolumeKnob
 from nixie_spectrum import NixieSpectrum
 from tube_meter import TubeMeter
+from stage_reveal import StageReveal
 from source_picker import SourcePicker, text
 from lyrics import LyricsClient, active_line
 from cover_sources import AppleMotion, apple_page
@@ -15,6 +16,8 @@ from motion_artwork import MotionCover
 
 CSS = b'''
 window.ember-stage { background-color: #171b18; color: #ebdbb2; }
+window.ember-stage.stage-opening { background-color: transparent; }
+.stage-opening-card { background-color: #2c2c29; border-radius: 26px; }
 .ember-stage { font-family: 'Noto Sans'; }
 .ember-stage button, .ember-stage button:focus { outline-style: none; outline-width: 0; }
 .stage-brand { color: #fbf1c7; font-size: 17px; font-weight: bold; letter-spacing: 4px; }
@@ -135,6 +138,8 @@ class FullscreenPlayer:
         self.window.set_name('emberbox-listening-room')
         self.window.get_style_context().add_class('ember-stage')
         self.window.set_decorated(False)
+        visual=self.window.get_screen().get_rgba_visual()
+        if visual:self.window.set_visual(visual)
         self.window.set_default_size(1280,800)
         self.window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self.window.connect('delete-event',lambda *_args:(self.hide(),True)[1])
@@ -248,6 +253,8 @@ class FullscreenPlayer:
         console.pack_end(volume_box,True,True,0)
         footer.pack_start(console,False,False,0)
         self.layout.pack_end(footer,False,False,0)
+        self.reveal=StageReveal(self.window,self.background,self.layout,self.cover,art_shell)
+        overlay.add_overlay(self.reveal);overlay.set_overlay_pass_through(self.reveal,True)
         self.source_picker=SourcePicker(lambda source,session=None:host.select_source(source,session),lambda:None,self.open_accounts)
         self.layout.show_all()
         self.follow.hide();self.retry_button.hide()
@@ -270,6 +277,10 @@ class FullscreenPlayer:
         native=self.host.window.get_window()
         monitor=display.get_monitor_at_window(native) if native else display.get_primary_monitor()
         if monitor:
+            geometry=monitor.get_geometry()
+            self.window.resize(geometry.width,geometry.height)
+        self.reveal.prepare(self.host,monitor)
+        if monitor:
             index=next((i for i in range(display.get_n_monitors()) if display.get_monitor(i)==monitor),0)
             self.window.fullscreen_on_monitor(self.window.get_screen(),index)
         else:self.window.fullscreen()
@@ -281,6 +292,7 @@ class FullscreenPlayer:
         if not self.tick:self.tick=self.window.add_tick_callback(self.animate)
 
     def hide(self):
+        self.reveal.finish()
         self.visible=False
         self.track=None
         self.lyrics.set_track('','')
@@ -522,6 +534,7 @@ class FullscreenPlayer:
     def animate(self,_window,clock):
         self.motion.tick()
         now=clock.get_frame_time()
+        self.reveal.advance(now)
         dt=min(.05,(now-self.frame_time)/1e6) if self.frame_time else 1/60
         self.frame_time=now
         if self.pending_center:self.center_line()

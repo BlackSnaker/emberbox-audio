@@ -38,6 +38,8 @@ The result is **physically inspired**, rather than an exact simulation of gas-di
 
 ## Interaction stays quiet
 
+The fullscreen entrance takes 720 ms. A rounded shell expands from the desktop widget while the cover travels to its listening-room position; the background, words and controls fade in with smooth acceleration and deceleration. GTK's frame clock drives the entrance without repeated window-manager resizing. Esc cancels it immediately, and disabling system animations skips it. Desktops without compositing keep an opaque background.
+
 No dotted focus rectangles or hover captions. Accessible names remain available for assistive technology. Main actions stay visible; miniature controls remain separated. Compact mode preserves the character of the instrument rather than reducing it to a generic transport bar.
 
 ## Original preview media

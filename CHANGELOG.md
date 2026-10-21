@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.7.5 — 2026-10-21
+
+- A 720 ms fullscreen entrance: expand the rounded player shell from the desktop widget, move the cover into place, and softly reveal the listening room.
+- Use GTK frame-clock timing, honour disabled system animations, and clean up immediately on Esc, hide or close. Preserve playback and the desktop widget's geometry.
+- Support an opaque fallback without compositing; no additional graphics dependencies.
+
 ## 0.7.4 — 2026-10-21
 
 - A larger tactile volume dial in fullscreen; replace the duplicate volume slider with a passive amber glass VU.
