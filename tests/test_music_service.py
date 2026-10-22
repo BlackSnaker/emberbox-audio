@@ -87,6 +87,58 @@ class Playback(unittest.TestCase):
         s.play_now(song('A'));drain(lambda:not s.loading)
         self.assertEqual(s.book.current('spotify')['id'],'A')
         self.assertEqual([i['id'] for _,i in s.book.upcoming('spotify')],['C'])
+    def test_search_click_starts_at_selection_and_continues_after_end(self):
+        s=self.service;items=[song('A'),song('B'),song('C')]
+        s.play_now(items[1],context=items);self.assertTrue(drain(lambda:not s.loading))
+        self.assertEqual(self.calls,['B']);self.assertEqual(s.book.current('spotify')['id'],'B')
+        self.assertEqual([i['id'] for _,i in s.book.upcoming('spotify')],['C'])
+        self.host.title.value='Song B';s.poll()
+        self.host.position=180_000_000;self.host.playing=False;s.poll()
+        self.assertTrue(drain(lambda:not s.loading));self.assertEqual(self.calls,['B','C'])
+    def test_new_search_replaces_automatic_tail_and_keeps_explicit_additions(self):
+        s=self.service;first=[song('A'),song('B'),song('C')]
+        s.play_now(first[0],context=first);drain(lambda:not s.loading)
+        s.add([song('D')]);second=[song('E'),song('F'),song('G')]
+        s.play_now(second[1],context=second);drain(lambda:not s.loading)
+        self.assertEqual(s.book.current('spotify')['id'],'F')
+        self.assertEqual([i['id'] for _,i in s.book.upcoming('spotify')],['D','G'])
+        restored=type(s.book)(s.book.path)
+        self.assertEqual([i['origin'] for _,i in restored.upcoming('spotify')],['manual','context'])
+        self.assertIsNone(restored.active)
+    def test_context_capacity_preserves_selection_and_manual_tracks(self):
+        s=self.service;s.add([song('M'+str(i)) for i in range(200)])
+        items=[song(str(i)) for i in range(250)]
+        s.play_now(items[220],context=items)
+        self.assertEqual(self.calls,[]);self.assertTrue(s.error)
+        self.assertEqual(s.book.queues['spotify'][-1]['id'],'M199')
+        s.book.remove('spotify',199)
+        s.play_now(items[220],context=items);drain(lambda:not s.loading)
+        self.assertEqual(len(s.book.queues['spotify']),200)
+        self.assertEqual(s.book.current('spotify')['id'],'220')
+        self.assertEqual(len(s.book.upcoming('spotify')),199)
+    def test_context_keeps_the_clicked_duplicate_occurrence(self):
+        s=self.service;items=[song('A'),song('B'),song('A'),song('C')]
+        s.play_now(items[2],context=items);drain(lambda:not s.loading)
+        self.assertEqual(s.book.indices['spotify'],2)
+        self.assertEqual([i['id'] for _,i in s.book.upcoming('spotify')],['C'])
+    def test_youtube_without_duration_advances_from_real_eof(self):
+        s=self.service;h=self.host;h.source='youtube';s.source_changed()
+        items=[{'uri':'youtube:jNQXAC9IVRw','title':'Live first'}, {'uri':'youtube:mNLJMTRvyj8','title':'Next'}]
+        h.play_youtube=MagicMock()
+        s.play_now(items[0],context=items)
+        h.youtube.current={'id':'jNQXAC9IVRw'};h.length=0;h.playing=True;s.poll()
+        h.youtube.eof=True;h.playing=False;s.poll()
+        self.assertEqual(h.play_youtube.call_args.args[0]['id'],'mNLJMTRvyj8')
+        self.assertEqual(h.play_youtube.call_count,2)
+    def test_apple_catalogue_search_uses_catalogue_id_for_continuation(self):
+        s=self.service;h=self.host;h.source='apple-music';s.source_changed()
+        items=[{'uri':'apple:songs:'+id,'title':'Apple '+id,'artist':'Artist'} for id in ('123','456')]
+        s.play_now(items[0],context=items);drain(lambda:not s.loading)
+        h.apple_web.state={'id':'i.library','catalogId':'123'}
+        h.title.value='Localised title';s.poll()
+        self.assertTrue(s.watch.seen)
+        h.position=h.length;h.playing=False;s.poll();drain(lambda:not s.loading)
+        self.assertEqual(self.calls,['123','456'])
     def test_late_browse_result_cannot_replace_new_source(self):
         entered=threading.Event();release=threading.Event();results=[]
         def load(*args):entered.set();release.wait(1);return {'items':[song()]}

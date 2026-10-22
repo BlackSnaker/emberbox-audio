@@ -28,6 +28,7 @@ class DiscoveryPanel(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.artwork = artwork
         self.play_uri = play_uri
+        self.play_tracks = None
         self.connect_spotify = connect_spotify
         self.data = cached_home()
         self.selected = None
@@ -296,7 +297,7 @@ class DiscoveryPanel(Gtk.Box):
             button.add(row)
             button.get_accessible().set_name(track['title'] + '\n' + track.get('artist', ''))
             button.set_sensitive(track.get('playable', True))
-            button.connect('clicked', lambda _b, uri=track['uri']: self.play_uri(uri))
+            button.connect('clicked', lambda _b, item=track: self.play_track(item))
             self.content.pack_start(button, False, False, 0)
             self.track_buttons.append((button, track))
         self.content.show_all()
@@ -305,6 +306,11 @@ class DiscoveryPanel(Gtk.Box):
         if len(data['tracks']) < data.get('total', 0):
             self.notice.set_text(f"Showing the first {len(data['tracks'])} tracks")
         GLib.idle_add(self.layout_changed)
+
+    def play_track(self,item):
+        if self.play_tracks:
+            self.play_tracks(item,[value for button,value in self.track_buttons if button.get_visible()])
+        else:self.play_uri(item['uri'])
 
     def filter_tracks(self, entry):
         query = entry.get_text().strip().casefold()

@@ -238,10 +238,11 @@ class LibraryView(Gtk.Box):
                 b.remove(b.get_child());b.add(box);flow.add(b);self.album_buttons.append((b,item))
             self.content.pack_start(flow,False,False,0)
         tracks=[i for i in self.items if not collection(i)]
+        context=tuple(self.songs())
         if tracks and collections:self.content.pack_start(label(text('TRACKS','ТРЕКИ'),'stage-section-label'),False,False,10)
         for index,item in enumerate(tracks):
             row=Gtk.Box(spacing=10);row.get_style_context().add_class('stage-track-row')
-            play=button('',lambda value=item:self.service.play_now(value),'stage-song',text('Play ','Слушать ')+item.get('title',''))
+            play=button('',lambda value=item,items=context:self.service.play_now(value,context=items),'stage-song',text('Play ','Слушать ')+item.get('title',''))
             box=Gtk.Box(spacing=12)
             number=label(f'{index+1:02}','stage-row-number');number.set_size_request(22,-1);box.pack_start(number,False,False,0)
             image=Gtk.Image();self.artwork.load(image,item.get('image',''),45,7);box.pack_start(image,False,False,0)

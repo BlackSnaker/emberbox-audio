@@ -108,6 +108,15 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         assert host.calls==before
         view.entry.emit('activate');wait(lambda:len(view.song_buttons)==4 and view.category=='search')
         assert calls[-1][2].strip()=='Night Drive' and stage.window.get_visible()
+        # Clicking a search result creates a continuation from that row.
+        view.song_buttons[1][0].clicked();wait(lambda:not service.loading)
+        assert plays[-1]=='spotify:track:B'
+        assert [i['id'] for _,i in service.book.upcoming('spotify')]==['C','D']
+        host.title.set_text(tracks[1]['title']);host.artist.set_text(tracks[1]['artist'])
+        host.length=tracks[1]['duration_ms']*1000;host.position=12_000_000;host.playing=True
+        service.poll();host.position=host.length;host.playing=False;service.poll()
+        wait(lambda:not service.loading)
+        assert plays[-1]=='spotify:track:C','Search playback stopped after its first song'
         stage.page_tabs['queue'].clicked();f.settle(.2)
         event=Gdk.Event.new(Gdk.EventType.KEY_PRESS);event.keyval=Gdk.KEY_f;event.state=Gdk.ModifierType.CONTROL_MASK
         stage.window.emit('key-press-event',event);f.settle(.25)

@@ -9,6 +9,7 @@ class YandexPanel(Gtk.Box):
     def __init__(self,artwork,player,wave,setup,changed):
         super().__init__(orientation=Gtk.Orientation.VERTICAL,spacing=9)
         self.artwork,self.player,self.wave,self.setup=artwork,player,wave,setup
+        self.play_tracks=None
         self.layout_changed=changed
         self.pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='yandex-library')
         self.closed=False;self.generation=0;self.category='collection';self.track_buttons=[]
@@ -110,6 +111,8 @@ class YandexPanel(Gtk.Box):
 
     def render(self,items):
         clear(self.content);self.track_buttons=[]
+        context=tuple(dict(item,uri=item.get('uri') or 'yandex:track:'+str(item.get('id','')))
+                      for item in items[:50] if item.get('kind')!='playlist')
         for item in items[:50]:
             b=Gtk.Button();b.get_style_context().add_class('track-row')
             row=Gtk.Box(spacing=9);image=Gtk.Image();self.artwork.load(image,item.get('image',''),42,7)
@@ -119,10 +122,15 @@ class YandexPanel(Gtk.Box):
             names.pack_start(label(text('Playlist · Open','Плейлист · Открыть') if item.get('kind')=='playlist' else str(item.get('artist','')),'caption',35),False,False,0)
             row.pack_start(names,True,True,0);b.add(row)
             if item.get('kind')=='playlist':b.connect('clicked',lambda _b,i=item['id']:self.open_playlist(i))
-            else:b.connect('clicked',lambda _b,i=item['id']:self.request('play',id=i))
+            else:b.connect('clicked',lambda _b,i=item['id'],values=context:self.play_track(i,values))
             self.content.pack_start(b,False,False,0);self.track_buttons.append(b)
         self.content.show_all()
         if not items:self.notice.set_text(text('No loaded playlists here yet.','Здесь пока нет загруженных плейлистов.') if self.category=='collection' else text('No loaded tracks here yet.','Здесь пока нет загруженных треков.'))
+
+    def play_track(self,identifier,context):
+        item=next((value for value in context if str(value.get('id'))==str(identifier)),None)
+        if self.play_tracks and item:self.play_tracks(item,context)
+        else:self.request('play',id=identifier)
 
     def close(self):
         self.closed=True;self.generation+=1;self.pool.shutdown(wait=False,cancel_futures=True)

@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.9.2 — 2026-10-22
+
+- Continue search results and loaded albums from the clicked song in fullscreen and desktop track lists.
+- Replace generated continuations on a new selection while retaining explicitly queued songs, avoiding automatic duplicates and silent loss at the queue limit.
+- Keep catalogue-ID matching for Apple Music and advance unknown-duration YouTube items from real EOF; ordinary pause and restored queues never start the next song.
+- Add regression checks for search-click completion, manual queue retention, duplicate rows, capacity and real GTK controls.
+
 ## 0.9.1 — 2026-10-22
 
 - Clickable audio-quality badge in the desktop widget and fullscreen: decoder codec/rate, channel details and measured YouTube bitrate.

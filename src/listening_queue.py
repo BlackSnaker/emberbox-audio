@@ -18,6 +18,7 @@ def track(value,source):
            re.fullmatch(r'yandex:track:\d{1,20}',uri))
     if not valid or not result['title'] or value.get('playable') is False:return None
     result['source']=source;result['id']=uri.rsplit(':',1)[-1]
+    result['origin']='context' if value.get('origin')=='context' else 'manual'
     if source=='apple-music':result['kind']=uri.split(':')[1]
     if source=='youtube':result['url']='https://www.youtube.com/watch?v='+result['id']
     try:result['duration_ms']=max(0,min(86400000,int(value.get('duration_ms') or 0)))
@@ -29,6 +30,7 @@ def track(value,source):
 def matches(item,snapshot):
     if snapshot.get('uri')==item['uri']:return True
     if snapshot.get('id')==item['id']:return True
+    if snapshot.get('catalogId')==item['id']:return True
     clean=lambda s:re.sub(r'[\W_]+','',str(s).casefold())
     title,artist=clean(snapshot.get('title')),clean(snapshot.get('artist'))
     expected=clean(item['artist'])
@@ -103,6 +105,8 @@ class EndWatch:
     def __init__(self):self.reset()
     def reset(self):self.seen=False;self.previous={}
     def observe(self,item,state):
+        if self.seen and state.get('ended') and (matches(item,state) or not state.get('valid')):
+            self.reset();return 'next'
         if not state.get('valid'):return None
         if matches(item,state):
             old=self.previous

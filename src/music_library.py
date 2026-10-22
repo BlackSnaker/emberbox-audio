@@ -5,7 +5,7 @@ import time
 from gi.repository import GLib
 from discovery import LocalSpotify
 from sources import choose_session
-from listening_queue import QueueBook,EndWatch,track
+from listening_queue import QueueBook,EndWatch,track,LIMIT
 from paths import CONFIG_DIR
 from source_picker import text
 from youtube_search import Search,video_url
@@ -84,6 +84,7 @@ def snapshot(host):
            'duration':host.length/1e6,'position':host.position/1e6,'valid':host.length>0,'id':'','uri':''}
     if source=='apple-music' and host.apple_mode=='native':
         data=host.apple_web.state;state['id']=str(data.get('id') or data.get('catalogId') or '')
+        state['catalogId']=str(data.get('catalogId') or '')
         state['ended']=bool(data.get('ended'))
     elif source=='yandex-music':
         state['id']=str(host.yandex_web.state.get('id') or '')
@@ -93,6 +94,7 @@ def snapshot(host):
         meta=host.session.metadata
         state['uri']=str(meta.get('xesam:url') or '')
         state['id']=str(meta.get('mpris:trackid') or '').rsplit('/',1)[-1]
+    state['valid']=bool(state['duration']>0 or state['id'] or state['uri'])
     return state
 
 
@@ -147,11 +149,12 @@ class MusicService:
         if self.browse_future:self.browse_future.cancel()
 
     def add(self,items):
-        count=self.book.add(self.host.source,items);self.error='';self.changed();return count
+        count=self.book.add(self.host.source,[dict(item,origin='manual') for item in items]);self.error='';self.changed();return count
 
-    def play_now(self,item):
+    def play_now(self,item,context=None):
         source=self.host.source;value=track(item,source)
         if not value:return
+        if context is not None and self.play_context(item,context):return
         self.book.compact(source)
         current=self.book.current(source)
         found=self.book.indices[source] if current and current['uri']==value['uri'] else next(
@@ -163,9 +166,41 @@ class MusicService:
             self.book.queues[source]=self.book.queues[source][:200]
         self.start(found)
 
+    def play_context(self,item,context):
+        """Continue the clicked result's visible list, retaining explicit additions."""
+        source=self.host.source;raw=list(context)
+        index=next((i for i,v in enumerate(raw) if v is item),None)
+        if index is None:index=next((i for i,v in enumerate(raw) if isinstance(v,dict) and v.get('uri')==item.get('uri')),None)
+        if index is None:return False
+        selected=raw[index];values=[];chosen=None
+        for value in raw[max(0,index-LIMIT+1):index+LIMIT]:
+            normalized=track(value,source)
+            if normalized:
+                normalized['origin']='context'
+                if value is selected:chosen=len(values)
+                values.append(normalized)
+        if chosen is None:return False
+        selected=values[chosen]
+        manual=[dict(value) for _,value in self.book.upcoming(source) if value.get('origin')!='context']
+        # If this click selects an explicitly queued song, consume that entry
+        # once; deliberately queued repeats remain in the manual tail.
+        for i,value in enumerate(manual):
+            if value['uri']==selected['uri']:del manual[i];break
+        if len(manual)>=LIMIT:
+            self.error=text('The queue is full. Remove a track before starting a new list.',
+                            'Очередь заполнена. Убери один трек, чтобы запустить новый список.')
+            self.changed();return True
+        manual=manual[:LIMIT-1];manual_uris={value['uri'] for value in manual}
+        room=LIMIT-1-len(manual)
+        after=[value for value in values[chosen+1:] if value['uri'] not in manual_uris][:room]
+        room-=len(after);before=values[:chosen][-room:] if room else []
+        self.play_generation+=1;self.loading=False;self.watch.reset()
+        self.book.replace(source,before+[selected]+manual+after)
+        self.start(len(before));return True
+
     def play_all(self,items):
         self.play_generation+=1;self.loading=False;self.watch.reset()
-        self.book.replace(self.host.source,items)
+        self.book.replace(self.host.source,[dict(item,origin='context') for item in items])
         if self.book.queues[self.host.source]:self.start(0)
         else:self.changed()
 

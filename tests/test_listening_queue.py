@@ -47,6 +47,10 @@ class QueueState(unittest.TestCase):
 
 
 class Ends(unittest.TestCase):
+    def test_explicit_end_survives_final_metadata_gap(self):
+        w=EndWatch();s=track(song(),'spotify');w.observe(s,state(position=179))
+        self.assertEqual(w.observe(s,{'valid':False,'playing':False,'ended':True}),'next')
+        self.assertIsNone(w.observe(s,{'valid':False,'playing':False,'ended':True}))
     def test_pause_does_not_skip_even_near_end(self):
         w=EndWatch();s=track(song(),'spotify');w.observe(s,state(position=177))
         self.assertIsNone(w.observe(s,state(position=179.5,playing=False)))

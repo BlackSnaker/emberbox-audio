@@ -291,9 +291,18 @@ try:
     assert ('wave',{}) in app.yandex_web.calls
     app.yandex_panel.entry.set_text('Fixture');app.yandex_panel.search();settle()
     assert ('search',{'term':'Fixture'}) in app.yandex_web.calls
-    app.yandex_panel.render([{'id':'123','title':'Fixture','artist':'Artist','image':''}])
-    app.yandex_panel.track_buttons[0].clicked();settle()
+    result={'id':'123','uri':'yandex:track:123','title':'Fixture','artist':'Artist','image':''}
+    app.yandex_panel.render([result,dict(result,id='456',uri='yandex:track:456',title='Next fixture')])
+    original_request=app.yandex_web.request
+    def queue_request(method,**params):
+        if method=='search':
+            app.yandex_web.calls.append((method,params));return {'items':[result]}
+        return original_request(method,**params)
+    with patch.object(app.yandex_web,'request',side_effect=queue_request):
+        app.yandex_panel.track_buttons[0].clicked();settle()
     assert ('play',{'id':'123'}) in app.yandex_web.calls
+    assert app.music.book.current('yandex-music')['id']=='123'
+    assert [v['id'] for _,v in app.music.book.upcoming('yandex-music')]==['456']
     app.yandex_panel.render([{'id':'/playlists/fixture','kind':'playlist','title':'Evening','image':''}])
     app.yandex_panel.track_buttons[0].clicked();settle()
     assert ('tracks',{'id':'/playlists/fixture'}) in app.yandex_web.calls

@@ -488,6 +488,10 @@ class Widget:
         self.drawer.connect('notify::child-revealed', lambda *_args: self.reflow())
 
         self.music=MusicService(self)
+        self.music_message='';self.music.subscribe(self.on_music_changed)
+        self.panel.play_tracks=lambda item,items:self.play_list_track('spotify',item,items)
+        self.apple_panel.play_tracks=lambda item,items:self.play_list_track('apple-music',item,items)
+        self.yandex_panel.play_tracks=lambda item,items:self.play_list_track('yandex-music',item,items)
         self.yandex_panel.before_play=self.music.stop
         self.window.show_all()
         self.panel.show_home()
@@ -965,6 +969,15 @@ class Widget:
         else:
             self.apple_panel.notice.set_text(text('See docs/APPLE_MUSIC.md to connect Firefox.',
                                                   'Подключение Firefox: см. docs/APPLE_MUSIC.ru.md'))
+
+    def play_list_track(self,source,item,items):
+        if self.source==source:self.music.play_now(item,context=items)
+
+    def on_music_changed(self):
+        panel={'spotify':self.panel,'apple-music':self.apple_panel,'youtube':self.youtube_panel,'yandex-music':self.yandex_panel}[self.source]
+        if self.music.error:panel.notice.set_text(self.music.error)
+        elif self.music_message and panel.notice.get_text()==self.music_message:panel.notice.set_text('')
+        self.music_message=self.music.error
 
     def play_apple_uri(self, uri):
         self.music.stop()

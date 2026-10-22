@@ -24,6 +24,8 @@ These pages reuse the existing connections in **Accounts**. They do not create a
 
 ## Build an evening
 
+Clicking a track in Search or a loaded album starts at that row and continues through the following visible songs. The generated continuation appears in **Queue** and keeps working when you leave fullscreen. A new list replaces the previous automatic continuation; songs added explicitly with **+** are retained ahead of the new continuation. Already queued copies are not also added automatically. With 200 explicit pending songs, remove one before starting a new list so none is silently lost. Only the loaded list is used; this does not start an endless recommendation stream.
+
 The queue heading follows the computer's local time: morning from 05:00, daytime from 12:00, evening from 18:00, and night from 23:00. It updates automatically while the page is open and when you return to it.
 
 ![Editable listening queue](../assets/listening-queue.png)
@@ -32,7 +34,7 @@ The queue heading follows the computer's local time: morning from 05:00, daytime
 
 Queues are separate for each source and contain up to **200 tracks**. They are stored privately on this device. Switching sources does not automatically start that source's saved queue. Restoring the widget also never starts a queue automatically. Adding more music discards older played history while preserving the current song and pending order.
 
-Leaving fullscreen or hiding the widget keeps queue control running. Fully quitting the widget stops its automatic queue transitions; the independent service player can finish its current music. A normal pause leaves the pending list intact. Selecting a different track through Emberbox's desktop panels releases queue control until you start the queue again.
+Leaving fullscreen or hiding the widget keeps queue control running. Fully quitting the widget stops its automatic queue transitions; the independent service player can finish its current music. A normal pause leaves the pending list intact. Choosing a song in a desktop track list creates the same continuation. Starting My Wave or a source-owned collection releases the custom queue until you start it again.
 
 ## Responsiveness and data
 
