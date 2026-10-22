@@ -2,6 +2,15 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.11.0 — 2026-10-22
+
+- Default karaoke to local UVR neural vocal separation, with a separate explicit fast stereo mode. Estimate vocals and blend them out without removing the entire stereo centre.
+- One-click optional setup: verified 30 MB model, private inference runtime, progress and repair; source audio is never saved or uploaded.
+- CPU calibration, short sliding context, overlap blending, smooth strength changes and bounded capture/inference/playback queues. Stop safely if the machine cannot keep up.
+- Delay-aware song/lyric/artwork/progress display and tubes metering the isolated processed return stream. Keep return audio excluded from source volume and routing; apply mute to it separately.
+- Wait for the return client before source movement to avoid a startup policy race; retain EOF/signal/forced-kill restoration.
+- Neural framing/mixing, model-integrity, delayed pause/seek/track-transition tests, real-model routing checks and bilingual usage/credits.
+
 ## 0.10.1 — 2026-10-22
 
 - Make the vocal dial directly reduce the vocal-band stereo centre: the previous dominance gate could leave it nearly unchanged under wide accompaniment.

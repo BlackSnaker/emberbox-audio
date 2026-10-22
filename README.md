@@ -34,7 +34,7 @@ Open **Listening room · Fullscreen** from settings, press the **⛶** header bu
 
 The fullscreen **Collection** page brings personal picks, saved albums and search into the room. **+** builds a private queue; its own **Queue** page lets you reorder, remove and play songs in sequence. Transport stays visible across the room. [Source support and queue controls →](docs/COLLECTION.md)
 
-**Karaoke** gives your voice a stage: large lyrics, amber lighting on supplied word timestamps, a gentle entry countdown and optional adjustable stereo vocal reduction. Automatic lyrics usually sync by line; enhanced LRC imports enable real word timing. [Karaoke controls and limitations →](docs/KARAOKE.md)
+**Karaoke** gives your voice a stage: large lyrics, amber lighting on supplied word timestamps, a gentle entry countdown and optional local UVR AI vocal reduction. Automatic lyrics usually sync by line; enhanced LRC imports enable real word timing. Prepare AI once inside the player; its measured buffering delay is shown on screen. [Karaoke controls and limitations →](docs/KARAOKE.md)
 
 ![Fullscreen collection with original fixture artwork](assets/collection.png)
 

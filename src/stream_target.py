@@ -11,6 +11,7 @@ class Target:
     pid: int = 0
     family: str = ''
     player: str = ''
+    processed: bool = False
 
 
 def descendant(pid, owner):
@@ -33,7 +34,10 @@ def matches(props, target):
     # The karaoke return stream is a descendant of Emberbox for native YouTube.
     # Never capture, reroute or apply the source volume to it a second time.
     if str(props.get('emberbox.karaoke','')).lower()=='true':
-        return False
+        try:pid=int(props.get('application.process.id',props.get('pipewire.sec.pid',0)))
+        except (TypeError,ValueError):pid=0
+        return bool(target and target.player and target.processed and descendant(pid,target.pid))
+    if target and target.processed:return False
     if not target or not target.player:
         return False
     values = [str(props.get(key, '')).lower() for key in

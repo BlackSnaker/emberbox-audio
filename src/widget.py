@@ -873,9 +873,9 @@ class Widget:
         self.player = ('yandex-native' if self.source=='yandex-music' else 'apple-native') if apple.connected else None
         target = Target(self.source, apple.pid, '', self.player or '')
         self.sound.refresh(target)
-        self.meter.set_target(target)
+        self.set_meter_target(target)
         self.playing = bool(apple.enabled and state.get('playing'))
-        self.meter.start() if self.playing else self.meter.stop()
+        self.meter.start() if self.audio_meter_active() else self.meter.stop()
         self.length = int(max(0, float(state.get('duration') or 0))*1_000_000)
         self.position = int(max(0, float(state.get('position') or 0))*1_000_000)
         self.track_id = None
@@ -931,9 +931,9 @@ class Widget:
         if time.monotonic() - self.youtube_last_sound >= .8 or getattr(self.sound, 'target', None) != target:
             self.sound.refresh(target)
             self.youtube_last_sound = time.monotonic()
-        self.meter.set_target(target)
+        self.set_meter_target(target)
         self.playing = bool(item and audio.loaded and not audio.paused and not audio.eof)
-        self.meter.start() if self.playing else self.meter.stop()
+        self.meter.start() if self.audio_meter_active() else self.meter.stop()
         self.length, self.position = int(audio.duration*1_000_000), int(audio.position*1_000_000)
         self.track_id = None
         self.title.set_text(str(item.get('title') if item else text('Find your next song','Найди свой следующий трек')))
@@ -1261,6 +1261,17 @@ class Widget:
         self.mute_toggle.set_state(sound.volume, sound.muted, sound.available)
         self.volume_knob.set_state(sound.volume, sound.muted, sound.available)
 
+    def karaoke_meter_target(self):
+        stage=getattr(self,'fullscreen',None)
+        if stage and stage.visible and stage.page=='karaoke':return stage.karaoke.meter_target()
+        return None
+
+    def set_meter_target(self,target):
+        self.meter.set_target(self.karaoke_meter_target() or target)
+
+    def audio_meter_active(self):
+        return self.playing or bool(self.karaoke_meter_target())
+
     def system_volume(self,value):
         if self.sound.muted and value>0:
             self.sound.toggle_mute()
@@ -1334,7 +1345,7 @@ class Widget:
         target = Target(self.source, session.pid if session else 0,
                         session.family if session else '', self.player or '')
         self.sound.refresh(target)
-        self.meter.set_target(target)
+        self.set_meter_target(target)
         if not session:
             self.playing = False
             self.meter.stop()
@@ -1356,7 +1367,7 @@ class Widget:
             return
         props, metadata = session.properties, session.metadata
         self.playing = props.get('PlaybackStatus') == 'Playing'
-        if self.playing:
+        if self.audio_meter_active():
             self.meter.start()
         else:
             self.meter.stop()

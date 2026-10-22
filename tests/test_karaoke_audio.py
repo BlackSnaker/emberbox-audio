@@ -73,6 +73,9 @@ class AudioTests(unittest.TestCase):
         props={'application.process.id':str(os.getpid()),'emberbox.karaoke':'true'}
         self.assertFalse(matches(props,target))
         self.assertTrue(matches({'application.process.id':str(os.getpid())},target))
+        processed=Target('karaoke',os.getpid(),'','karaoke',True)
+        self.assertTrue(matches(props,processed))
+        self.assertFalse(matches({'application.process.id':str(os.getpid())},processed))
 
     def test_quick_reenable_waits_for_old_route_cleanup_and_source_change_cancels(self):
         with patch('karaoke_audio.shutil.which',return_value=None):audio=KaraokeAudio()
@@ -109,6 +112,15 @@ class AudioTests(unittest.TestCase):
         self.assertNotIn(('move-sink-input','8','headphones'),calls)
         self.assertIn(('unload-module','456'),calls)
         self.assertNotIn(('unload-module','123'),calls)
+
+    def test_failed_runtime_repair_is_not_reported_ready_by_old_stamp(self):
+        with patch('karaoke_audio.shutil.which',return_value=None):audio=KaraokeAudio()
+        audio.pulse_available=True;process=Mock(returncode=1);audio.setup_process=process
+        with patch('karaoke_audio.karaoke_model.ready',return_value=True):audio._setup_done(process)
+        self.assertFalse(audio.model_ready);self.assertFalse(audio.available)
+        self.assertEqual(audio.error,'ai-setup-failed')
+        with patch('karaoke_audio.subprocess.Popen',side_effect=OSError('fixture')):audio.prepare()
+        self.assertIsNone(audio.setup_process);self.assertEqual(audio.error,'ai-setup-failed')
 
     def test_journal_recovery_skips_living_worker_and_foreign_names(self):
         with tempfile.TemporaryDirectory() as folder:

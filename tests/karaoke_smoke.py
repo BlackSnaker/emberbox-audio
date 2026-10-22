@@ -17,6 +17,7 @@ class FixtureAudio:
     def __init__(self,changed):
         self.changed=changed;self.available=True;self.active=self.starting=False
         self.error='';self.amount=.7;self.target=None;self.calls=[]
+        self.engine='ai';self.model_ready=True;self.pulse_available=True;self.setup_process=None
     def enable(self,target):
         self.target=target;self.active=True;self.calls.append(('on',target));self.changed()
     def disable(self):
@@ -25,6 +26,10 @@ class FixtureAudio:
     def check_target(self,target):
         if self.active and target!=self.target:self.disable()
     def close(self):self.disable()
+    def set_engine(self,engine):
+        self.disable();self.engine=engine;self.available=self.model_ready or engine=='stereo';self.changed()
+    def prepare(self):self.calls.append(('prepare',))
+    def set_muted(self,muted):self.muted=muted
 
 
 with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected network')), \
@@ -71,15 +76,22 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         stage.page_tabs['karaoke'].clicked();settle()
         client.state=word_state
         host.position=6_500_000;stage.update()
+        view.audio.model_ready=False;view.audio.available=False;view.audio_changed()
+        assert view.prepare_button.get_visible() and not view.voice_toggle.get_sensitive()
+        view.prepare_button.clicked();assert view.audio.calls[-1]==('prepare',)
         for width,height in ((1024,600),(1280,720),(1920,1080)):
             stage.window.unfullscreen();stage.window.resize(width,height);settle(.3)
             assert stage.window.get_size()==(width,height),(stage.window.get_size(),(width,height))
-            for child in (view.import_button,view.voice_knob,view.voice_toggle,stage.page_tabs['karaoke'],
+            for child in (view.import_button,view.voice_knob,view.voice_toggle,view.prepare_button,view.engine_choice,stage.page_tabs['karaoke'],
                           stage.exit_button,stage.progress,stage.play_button,stage.knob,stage.mute):
                 assert child.get_mapped(),type(child).__name__
                 point=child.translate_coordinates(stage.window,0,0);area=child.get_allocation()
                 assert point and point[0]>=0 and point[1]>=0
                 assert point[0]+area.width<=width and point[1]+area.height<=height,(type(child).__name__,point,area,width,height)
+        view.engine_choice.set_active_id('stereo');assert view.voice_toggle.get_sensitive()
+        view.engine_choice.set_active_id('ai');assert not view.voice_toggle.get_sensitive()
+        view.audio.model_ready=True;view.audio.available=True;view.audio_changed()
+        assert not view.prepare_button.get_visible()
         client.state=LyricsState('ready',word_state.lines,'', '')
         view.update();settle(.3)
         if '--screenshot' in sys.argv:

@@ -570,7 +570,7 @@ class FullscreenPlayer:
         self.update()
 
     def on_seek(self,_scale,_scroll,value):
-        if self.host.progress_event.get_sensitive():self.host.seek_to(value)
+        if self.progress.get_sensitive():self.host.seek_to(value)
         return True
 
     def on_key(self,_window,event):
@@ -581,7 +581,7 @@ class FullscreenPlayer:
         if isinstance(self.window.get_focus(),(Gtk.Entry,Gtk.TextView)):return False
         if key in ('space','XF86AudioPlay'):self.action('toggle');return True
         if key in ('Left','Right'):
-            if self.host.progress_event.get_sensitive() and self.host.length>0:
+            if self.progress.get_sensitive() and self.host.length>0:
                 self.host.seek_to(max(0,min(self.host.length/1e6,self.position+(-10 if key=='Left' else 10))))
             return True
         if key in ('Up','Down'):
@@ -742,7 +742,8 @@ class FullscreenPlayer:
         if self.page=='playing' and self.lyrics_visible and time.monotonic()-self.last_fade>.1:
             self.last_fade=time.monotonic();self.fade_lines()
         meter=self.host.meter
-        active=self.host.playing and not self.host.sound.muted and time.monotonic()-meter.last_sample<.35
+        playing=self.karaoke.heard_playing if self.page=='karaoke' and self.karaoke.audio.active else self.host.playing
+        active=playing and not self.host.sound.muted and time.monotonic()-meter.last_sample<.35
         targets=meter.levels if active else (0.,)*9
         self.volume_meter.advance(getattr(meter,'rms_level',0.) if active else 0.,dt)
         for i,(old,target) in enumerate(zip(self.levels,targets)):

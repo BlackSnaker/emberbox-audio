@@ -6,6 +6,7 @@ from itertools import accumulate
 from gi.repository import Gtk, Pango
 from hardware_controls import MuteToggle, VolumeKnob
 from karaoke_audio import KaraokeAudio
+from karaoke_timeline import HeardTimeline,PlaybackPoint
 from lyrics import active_line
 from source_picker import text
 
@@ -20,6 +21,9 @@ CSS=b'''
 .karaoke-panel { border-radius: 24px; padding: 10px 18px;
   background-image: linear-gradient(to bottom right,rgba(255,241,206,.035),rgba(0,0,0,.12));
   box-shadow: inset 0 1px 0 rgba(255,241,206,.035); }
+.karaoke-panel combobox button { color: #d5bd85; border-radius: 16px;
+  background-image: none; background-color: rgba(255,241,206,.035);
+  border: none; box-shadow: none; padding: 7px; font-size: 11px; }
 .ember-stage .small-screen .karaoke-current { font-size: 32px; }
 .ember-stage .small-screen .karaoke-neighbour { font-size: 17px; }
 '''
@@ -76,6 +80,7 @@ class KaraokeView(Gtk.Box):
         self.scene_key=None;self.word_key=None;self.scene_index=0;self.last_frame=0.
         self.active=False;self.import_dialog=None;self.import_key=None
         self.small=False;self.cover_key=None
+        self.timeline=HeardTimeline();self.heard_playing=False
         self.set_hexpand(True);self.set_vexpand(True)
         self.overline=caption(text('YOUR VOICE. YOUR MOMENT.','ТВОЙ ГОЛОС. ТВОЙ МОМЕНТ.'),'karaoke-overline')
         self.pack_start(self.overline,False,False,0)
@@ -113,6 +118,14 @@ class KaraokeView(Gtk.Box):
         self.audio_note.set_line_wrap(True);self.audio_note.set_max_width_chars(48)
         description.pack_start(self.audio_note,False,False,0)
         options.pack_start(description,True,True,0)
+        self.engine_choice=Gtk.ComboBoxText()
+        self.engine_choice.append('ai',text('AI · clearer','AI · чище'))
+        self.engine_choice.append('stereo',text('Fast · stereo','Быстро · стерео'))
+        self.engine_choice.set_active_id(getattr(self.audio,'engine','ai'))
+        self.engine_choice.connect('changed',self.choose_engine)
+        self.engine_choice.set_valign(Gtk.Align.CENTER);options.pack_start(self.engine_choice,False,False,0)
+        self.prepare_button=stage.button(text('Prepare AI','Подготовить AI'),self.prepare_audio,'stage-quiet')
+        self.prepare_button.set_valign(Gtk.Align.CENTER);options.pack_start(self.prepare_button,False,False,0)
         self.voice_knob=VolumeKnob(self.set_amount)
         self.voice_knob.get_accessible().set_name(text('Vocal reduction strength','Сила приглушения вокала'))
         self.voice_knob.shown=self.audio.amount;self.voice_knob._render()
@@ -130,7 +143,7 @@ class KaraokeView(Gtk.Box):
         self.audio_changed()
 
     def activate(self):
-        self.active=True;self.scene_key=None;self.update()
+        self.active=True;self.scene_key=None;self.timeline.clear();self.update()
 
     def resize(self,small):
         self.small=small
@@ -150,10 +163,28 @@ class KaraokeView(Gtk.Box):
     def set_amount(self,value):
         self.audio.set_amount(value);self.audio_changed()
 
+    def choose_engine(self,combo):
+        self.audio.set_engine(combo.get_active_id())
+
+    def prepare_audio(self):self.audio.prepare()
+
+    def meter_target(self):
+        if not self.active or not self.audio.active or not getattr(self.audio,'process',None):return None
+        from stream_target import Target
+        return Target('karaoke',self.audio.process.pid,'','karaoke',True)
+
     def audio_changed(self):
         enabled=self.audio.active or self.audio.starting
         self.voice_toggle.set_state(1.,not enabled,self.audio.available)
         self.voice_knob.set_state(self.audio.amount,False,self.audio.available)
+        ai=getattr(self.audio,'engine','ai')=='ai'
+        installing=bool(getattr(self.audio,'setup_process',None))
+        missing=not getattr(self.audio,'model_ready',True)
+        needs_setup=ai and (missing or self.audio.error in ('ai-model-invalid','ai-runtime-invalid','ai-setup-failed'))
+        self.prepare_button.set_no_show_all(not needs_setup)
+        self.prepare_button.set_visible(needs_setup)
+        self.prepare_button.set_sensitive(not installing)
+        self.engine_choice.set_sensitive(not installing)
         messages={
             'no-stream':text('Start a song, then enable the filter.','Включи трек, затем включи фильтр.'),
             'multiple-outputs':text('Use one stereo output for this player.','Выбери один стереовыход для плеера.'),
@@ -161,23 +192,47 @@ class KaraokeView(Gtk.Box):
             'output-lost':text('Output disconnected. Original routing restored.','Выход отключён. Возвращён обычный звук.'),
             'route-changed':text('Audio routing changed. Filter stopped.','Аудиовыход изменён. Фильтр выключен.'),
             'audio-failed':text('Filter stopped. Original routing restored.','Фильтр остановлен. Возвращён обычный звук.')}
+        messages.update({
+            'ai-too-slow':text('AI cannot keep up. Original sound restored.','AI не успевает. Возвращён обычный звук.'),
+            'ai-model-invalid':text('Model damaged. Prepare AI again.','Модель повреждена. Подготовь AI заново.'),
+            'ai-runtime-invalid':text('AI runtime needs repair. Prepare AI again.','Нужно восстановить модуль AI. Нажми «Подготовить AI».'),
+            'ai-invalid-output':text('AI stopped. Original sound restored.','AI остановлен. Возвращён обычный звук.'),
+            'ai-setup-failed':text('AI setup failed. Retry; details in karaoke-ai/setup.log.','Не удалось подготовить AI. Повтори; подробности в karaoke-ai/setup.log.')})
         note=(messages.get(self.audio.error,text('Filter unavailable.','Фильтр недоступен.')) if self.audio.error else
               text('Preparing the audio filter…','Подключаем звуковой фильтр…') if self.audio.starting else
               text('Vocal reduction on · stereo centre filter','Приглушение включено · фильтр центра стерео') if self.audio.active else
               text('Original sound · switch on to reduce vocals','Оригинальный звук · включи для приглушения голоса') if self.audio.available else
               text('Install PulseAudio utilities to enable the filter.','Для фильтра нужны утилиты PulseAudio.'))
+        if installing:
+            stage=getattr(self.audio,'setup_stage','')
+            note=(text('Downloading UVR model · ','Загружаем модель UVR · ')+f'{getattr(self.audio,"setup_fraction",0)*100:.0f}%'
+                  if stage=='download' else text('Installing the private AI runtime…','Устанавливаем отдельный модуль AI…'))
+        elif ai and missing and not self.audio.error:
+            note=text('Prepare AI once · 30 MB model + private runtime','Подготовь AI один раз · модель 30 МБ + отдельный модуль')
+        elif ai and self.audio.starting:
+            note=text('Preparing AI and buffering your audio…','Готовим AI и буфер звука…')
+        elif ai and self.audio.active:
+            note=text('Local UVR AI · delay ≈ ','Локальный AI UVR · задержка ≈ ')+f'{getattr(self.audio,"delay",0):.1f} '+text('s','с')
         self.audio_note.set_text(note)
+        h=self.stage.host
+        if self.active and hasattr(h,'set_meter_target') and getattr(h.sound,'target',None):
+            h.set_meter_target(h.sound.target)
+            if h.audio_meter_active():h.meter.start()
 
     def update(self):
         if not self.active:return
         h=self.stage.host
         self.audio.check_target(getattr(h.sound,'target',None))
-        self.song.set_text(h.title.get_text()+'  ·  '+h.artist.get_text())
-        if h.art_url!=self.cover_key:
-            self.cover_key=h.art_url
-            self.stage.artwork.load(self.cover,h.art_url or '',42,9,preserve=True)
+        if hasattr(self.audio,'set_muted'):self.audio.set_muted(h.sound.muted)
+        now=time.monotonic()
+        title,artist,album=h.title.get_text(),h.artist.get_text(),h.album.get_text()
+        identity=(h.source,title,artist,album,round(h.length/1e6))
+        position=h.position/1e6+(min(1.8,max(0,now-self.stage.anchor)) if h.playing else 0)
+        self.timeline.observe(PlaybackPoint(now,identity,title,artist,position,h.length/1e6,h.playing,h.art_url),self.stage.lyrics.state)
         self.import_button.set_sensitive(bool(self.stage.lyrics.key))
-        state=self.stage.lyrics.state
+        self.frame(now,force=True)
+
+    def show_timing(self,state):
         if state.status=='ready' and state.lines:
             word_sync=any(line.words for line in state.lines)
             note=text('Word timing where supplied','По словам, где есть таймкоды') if word_sync else text('Line timing · word timestamps unavailable','По строкам · таймкодов слов нет')
@@ -186,14 +241,27 @@ class KaraokeView(Gtk.Box):
             self.timing_note.set_text(text('Plain lyrics · no timing available','Обычный текст · без синхронизации'))
         else:self.timing_note.set_text(text('Load an enhanced LRC for precise word timing.','Для точной подсветки слов можно открыть расширенный LRC.'))
         self.auto_button.set_visible(state.status=='error' or state.status=='ready' and not state.source_url)
-        self.frame(time.monotonic(),force=True)
 
     def frame(self,now,force=False):
         if not self.active or (not force and now-self.last_frame<1/30):return
         self.last_frame=now
-        s=self.stage;state=s.lyrics.state
-        # Smooth between metadata polls, but do not run ahead after source stalls.
-        position=min(s.host.length/1e6 or s.position,s.host.position/1e6+min(1.8,max(0,now-s.anchor))) if s.host.playing else s.host.position/1e6
+        s=self.stage
+        ai=self.audio.active and getattr(self.audio,'engine','ai')=='ai'
+        point,state=self.timeline.at(now,getattr(self.audio,'delay',0.) if ai else 0.)
+        if point is None:return
+        state=state or s.lyrics.state;position=point.position;self.heard_playing=point.playing
+        self.song.set_text(point.title+'  ·  '+point.artist);self.show_timing(state)
+        if point.art_url!=self.cover_key:
+            self.cover_key=point.art_url
+            s.artwork.load(self.cover,point.art_url or '',42,9,preserve=True)
+        if ai:
+            s.position=position;s.progress.set_range(0,max(1,point.length));s.progress.set_value(position)
+            current=point.key==self.timeline.points[-1].key
+            s.progress.set_sensitive(current and s.host.progress_event.get_sensitive() and point.length>0)
+            s.elapsed.set_text(f'{int(position)//60}:{int(position)%60:02}')
+            s.total.set_text(f'{int(point.length)//60}:{int(point.length)%60:02}')
+            s.playing_caption.set_text(text('Now playing: ','Сейчас: ')+point.title+'  ·  '+point.artist)
+            self.import_button.set_sensitive(current and bool(s.lyrics.key))
         scene=moment(state,position)
         if scene:
             previous,current,following,index,countdown=scene

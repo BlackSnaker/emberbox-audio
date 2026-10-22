@@ -37,48 +37,59 @@ text does not stop the music.
 
 ## Vocal reduction
 
-The metal switch enables an **experimental stereo centre filter** for the
-selected player's output. Its separate small dial controls reduction strength;
-the large console dial continues to control overall volume. At 0% the routed
-signal passes through, with the filter's buffering delay.
+Choose **AI · clearer** (the default), then enable the metal switch. UVR's
+MDX-Net estimates a vocal stem and the dial blends it out of the original
+stereo signal. It does not remove the entire stereo centre. Results still
+vary by song; backing vocals, reverb or separation artifacts can remain.
 
-This is a real-time spectral mid/side effect, not AI stem separation. A voice
-mixed in the centre can be attenuated substantially; stereo backing vocals,
-reverb and off-centre voices can remain. Centred instruments can also become
-quieter. Bass below the vocal band and stereo side information are protected.
-The dial reduces the entire vocal-band mid signal, including when wide
-accompaniment overlaps it. It does not gate reduction on centre dominance.
-Try a moderate setting first. Mono and multichannel streams are not processed.
+On first use, **Prepare AI** downloads a pinned, SHA256-verified 30 MB UVR
+model from the authors' release and builds a separate Python environment with
+ONNX Runtime, ONNX and SciPy. Runtime packages add roughly 100–250 MB depending
+on existing dependencies. The operation shows download/setup progress and can
+be retried. System Python packages are not changed. Weights and runtime live
+in the private `karaoke-ai` cache directory; clearing that cache requires setup
+again. [Model credits, source, hash and license](THIRD_PARTY_KARAOKE.md).
 
-The effect runs in a separate Python/NumPy process with overlap-add and smoothed
-gain, outside GTK. Its algorithmic delay is 32 ms, plus audio-server
-buffering. It resamples to stereo float PCM at 48 kHz; an active filter is not
-a bit-perfect or lossless output path, regardless of the source-quality badge.
-It requires `pactl` and `pacat` (the installer checks both), and a compatible
-PipeWire-Pulse or PulseAudio server with null-sink support. It does not depend
-on GNOME or KDE desktop APIs.
+AI runs locally on CPU, with two inference threads and no account/API key.
+Audio is never saved or uploaded. The original 44.1 kHz model uses a bounded
+sliding context, resampling from/to the 48 kHz application route. Overlapping
+vocal estimates are blended at block boundaries; strength changes are smoothed.
+A startup benchmark chooses a block size. If the CPU cannot keep up or queues
+exceed their limit, the helper stops and restores original playback; it never
+silently switches to centre cancellation.
 
-Only the selected application is routed to a temporary sink. Other applications
-and the system mix are not captured. For an external browser, that application's
-shared audio output can include other tabs in the same browser session; use the
-isolated built-in Apple/Yandex engine when you need separation. No microphone
-is opened and audio is neither saved nor uploaded.
+AI needs buffering. On the development AMD four-core machine the expected
+buffer is around 1.5–2 seconds; the panel reports the measured delay rather
+than promising this for every computer. Karaoke lyrics, song information,
+artwork, progress and tubes follow the buffered output. Pause, seek and natural
+track changes reach your ears through that same buffer. Source transport
+buttons show the requested source state. Switching the effect off returns to
+live source audio and can skip the buffered interval. Mute is also applied to
+the return stream. The large dial still controls overall source volume.
 
-The effect is off initially. It switches off on leaving Karaoke/fullscreen or
-changing source. New streams from that same player are picked up while active.
-On failure, the helper restores original stream destinations; disconnected
-outputs fall back to the server's available default. It respects streams the
-user has manually moved elsewhere and never changes the default device.
-Closing Emberbox or killing its GUI closes the helper's control pipe and restores
-audio. If the helper itself is forcibly killed, the next Emberbox start recovers
-its abandoned route from a private journal. A brief interruption can occur when
-moving streams or losing an output device.
+**Fast · stereo** retains the lightweight centre filter, with much less delay
+and no model download. It also quiets centred instruments. Use the mode selector
+explicitly; the helper never substitutes it for AI after a failure.
+
+Both modes require `pactl` and `pacat` and a compatible PipeWire-Pulse or
+PulseAudio server with null-sink support. There is no GNOME/KDE-specific routing.
+Only the selected application is processed; an external browser can share audio
+across its tabs. The dedicated Apple/Yandex engine gives a separate application
+boundary. The processed return stream is excluded from source routing and source
+volume; only the meter can explicitly select it, without a feedback loop.
+
+The effect is off initially and stops on leaving Karaoke/fullscreen or changing
+source. On normal exit, GUI failure, device loss or helper termination, original
+stream destinations are restored. If the helper itself is forcibly killed, the
+next Emberbox start recovers its private route journal. Manually moved streams
+are respected and the default output is never changed. Processing is not a
+bit-perfect or lossless output path regardless of the original quality badge.
 
 ## Verification
 
 `tests/karaoke_smoke.py` checks actual GTK controls down to 1024×600, genuine
 word timing, pauses, seeks and filter lifecycle with offline fixtures.
-`test_karaoke_audio.py` checks synthetic DSP and restoration invariants.
+`test_karaoke_audio.py` checks synthetic DSP, neural framing/mixing, buffered metadata and restoration invariants.
 
 An opt-in `EMBERBOX_AUDIO_ROUTE_TEST=1 python3 tests/karaoke_route_smoke.py`
 creates original tones and private inaudible null sinks to verify real routing,
@@ -86,3 +97,8 @@ suppression, preserved bass/sides, EOF/SIGTERM cleanup and forced-kill recovery.
 It does not move existing application streams or change the default output.
 Live song separation quality still depends on each recording; synthetic checks
 cannot establish it for an entire music catalogue.
+
+Use the optional AI runtime interpreter and add `--ai` to the route smoke check
+to exercise real model inference, bounded buffering, EOF/SIGTERM and kill recovery.
+The check uses generated audio and a zero-strength mix to verify timing without
+assuming a learned model classifies test tones as vocals.

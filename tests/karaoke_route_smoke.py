@@ -11,6 +11,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
 import numpy as np
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -26,6 +27,8 @@ default=pactl('get-default-sink')
 module=None;producer=None;monitor=None;helper=None;stopped=threading.Event();recorded=bytearray()
 lock=threading.Lock()
 captured_bytes=0
+NEURAL='--ai' in sys.argv
+worker_messages={}
 
 
 def feed():
@@ -63,11 +66,16 @@ def spectrum():
 def start():
     target=Target('youtube',producer.pid,'','original-fixture')
     process=subprocess.Popen([sys.executable,'-B',str(ROOT/'src/karaoke_audio.py'),'--worker',
-        json.dumps(target.__dict__),'1.0'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
-    ready,_,_=select.select([process.stdout],[],[],6)
-    assert ready,'Worker failed to report readiness'
-    status=json.loads(process.stdout.readline())
-    assert status.get('active'),status
+        json.dumps(target.__dict__),'0.0' if NEURAL else '1.0','ai' if NEURAL else 'stereo'],
+        stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+    ready=threading.Event();messages=worker_messages[process.pid]=deque(maxlen=64)
+    def status_reader():
+        for row in process.stdout:
+            message=json.loads(row);messages.append(message)
+            if message.get('active') or message.get('error'):ready.set()
+    threading.Thread(target=status_reader,daemon=True).start()
+    assert ready.wait(20),'Worker failed to report readiness'
+    assert messages[-1].get('active'),list(messages)
     return process
 
 
@@ -105,14 +113,33 @@ try:
         time.sleep(.05)
     assert fresh>=RATE*8*2,'Output monitor did not deliver fresh processed PCM'
     wet=spectrum()
-    assert wet[1000]/dry[1000]<.15,(dry,wet)
+    if NEURAL:
+        # AI at zero strength still performs inference, then mixes the exact
+        # delayed dry block. Verify streaming continuity independently of what
+        # a learned separator thinks of synthetic tones.
+        for freq in (70,1000,3000):assert .94<wet[freq]/dry[freq]<1.06,(dry,wet)
+        delays=[m['delay'] for m in worker_messages[helper.pid] if m.get('active') and 'delay' in m]
+        assert delays and all(.3<d<5 for d in delays),delays
+        assert max(delays)-min(delays)<.8,delays
+        print('AI buffered playback delay:',round(sum(delays)/len(delays),2),'s',flush=True)
+    else:assert wet[1000]/dry[1000]<.15,(dry,wet)
     for freq in (70,3000):assert .8<wet[freq]/dry[freq]<1.2,(dry,wet)
+    for muted in (True,False):
+        helper.stdin.write(json.dumps({'muted':muted})+'\n');helper.stdin.flush()
+        deadline=time.monotonic()+2
+        while time.monotonic()<deadline:
+            streams=pactl('list','sink-inputs',json_output=True)
+            returns=[s for s in streams if s.get('properties',{}).get('emberbox.karaoke')=='true']
+            if returns and all(bool(s.get('mute'))==muted for s in returns):break
+            time.sleep(.05)
+        assert returns and all(bool(s.get('mute'))==muted for s in returns),'Return mute did not follow control'
+        assert not next(s for s in streams if s.get('properties',{}).get('application.process.id')==str(producer.pid))['mute']
     helper.stdin.close();restored(helper);helper=None
     # SIGTERM is the GUI's normal nonblocking exit path.
     helper=start();helper.terminate();restored(helper);helper=None
     # A forcibly killed helper is recovered on the next Emberbox startup.
     helper=start();helper.kill();helper.wait(timeout=3);recover();restored(helper);helper=None
-    print('PASS real null-sink routing, centre suppression, side/bass preservation, EOF, SIGTERM and forced-kill recovery')
+    print('PASS real null-sink routing, '+('neural streaming' if NEURAL else 'centre suppression')+', side/bass preservation, EOF, SIGTERM and forced-kill recovery')
     print('Synthetic amplitudes:',json.dumps({'dry':dry,'filtered':wet}))
 finally:
     stopped.set()
