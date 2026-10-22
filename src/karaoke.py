@@ -8,6 +8,7 @@ from gi.repository import Gtk, Pango
 from hardware_controls import MuteToggle, VolumeKnob
 from karaoke_audio import KaraokeAudio
 from karaoke_timeline import HeardTimeline,PlaybackPoint
+from karaoke_startup import KaraokeStartup,CSS as STARTUP_CSS
 from lyrics import active_line
 from source_picker import text
 
@@ -37,7 +38,7 @@ CSS=b'''
 .karaoke-panel combobox button:focus { outline-width: 0; outline-style: none; }
 .ember-stage .small-screen .karaoke-current { font-size: 32px; }
 .ember-stage .small-screen .karaoke-neighbour { font-size: 17px; }
-'''
+'''+STARTUP_CSS
 
 
 def caption(value,style):
@@ -128,7 +129,7 @@ class KaraokeView(Gtk.Box):
         self.song.set_max_width_chars(65);metadata.pack_start(self.song,False,False,0)
         self.pack_start(metadata,False,False,0)
         self.scenes=Gtk.Stack();self.scenes.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
-        self.scenes.set_transition_duration(280);self.scenes.set_vhomogeneous(True)
+        self.scenes.set_transition_duration(280);self.scenes.set_vhomogeneous(False)
         self.scenes.set_hexpand(True);self.scenes.set_vexpand(True)
         self.labels=[]
         for i in range(2):
@@ -141,6 +142,7 @@ class KaraokeView(Gtk.Box):
                 label.set_ellipsize(Pango.EllipsizeMode.END);label.set_lines(2 if style=='karaoke-current' else 1)
                 label.set_hexpand(True);box.pack_start(label,False,False,0);rows.append(label)
             self.labels.append(rows);self.scenes.add_named(box,str(i))
+        self.startup=KaraokeStartup();self.scenes.add_named(self.startup,'startup')
         self.pack_start(self.scenes,True,True,0)
         self.countdown=caption('','karaoke-countdown');self.countdown.set_size_request(-1,25)
         self.pack_start(self.countdown,False,False,0)
@@ -202,6 +204,7 @@ class KaraokeView(Gtk.Box):
 
     def resize(self,small):
         self.small=small
+        self.startup.set_small(small)
         self.overline.set_no_show_all(small);self.overline.set_visible(not small)
         for rows in self.labels:
             for label in (rows[0],rows[2]):
@@ -209,6 +212,10 @@ class KaraokeView(Gtk.Box):
 
     def deactivate(self):
         self.active=False;self.audio.disable()
+        self.startup.cancel()
+        self.scenes.set_transition_duration(0)
+        self.scenes.set_visible_child_name(str(self.scene_index))
+        self.scenes.set_transition_duration(280)
         if self.import_dialog:self.import_dialog.destroy();self.import_dialog=None
 
     def toggle_audio(self):
@@ -268,7 +275,11 @@ class KaraokeView(Gtk.Box):
             note=text('Preparing AI and buffering your audio…','Готовим AI и буфер звука…')
         elif ai and self.audio.active:
             note=text('Local UVR AI · delay ≈ ','Локальный AI UVR · задержка ≈ ')+f'{getattr(self.audio,"delay",0):.1f} '+text('s','с')
-        self.audio_note.set_text(note)
+        if self.audio_note.get_text()!=note:self.audio_note.set_text(note)
+        self.startup.sync(self.active and ai and self.audio.starting,
+                          self.active and ai and self.audio.active,
+                          getattr(self.audio,'phase',''),self.audio.error)
+        if self.active:self.frame(time.monotonic(),force=True)
         h=self.stage.host
         if self.active and hasattr(h,'set_meter_target') and getattr(h.sound,'target',None):
             h.set_meter_target(h.sound.target)
@@ -302,10 +313,14 @@ class KaraokeView(Gtk.Box):
     def frame(self,now,force=False):
         if not self.active or (not force and now-self.last_frame<1/30):return
         self.last_frame=now
+        startup=getattr(self,'startup',None)
+        waiting=startup.advance(now) if startup else False
         s=self.stage
         ai=self.audio.active and getattr(self.audio,'engine','ai')=='ai'
         point,state=self.timeline.at(now,getattr(self.audio,'delay',0.) if ai else 0.)
-        if point is None:return
+        if point is None:
+            if startup:self.show_scene('startup' if waiting else str(self.scene_index))
+            return
         state=state or s.lyrics.state;position=point.position;self.heard_playing=point.playing
         title=point.title+'  ·  '+point.artist
         if self.song.get_text()!=title:self.song.set_text(title)
@@ -349,12 +364,19 @@ class KaraokeView(Gtk.Box):
             rows=self.labels[self.scene_index]
             for label,value in zip(rows,(previous,current,following)):
                 label.set_attributes(None);label.set_text(value)
-            self.scenes.set_visible_child_name(str(self.scene_index))
-        if self.highlight:
+            if not startup:self.scenes.set_visible_child_name(str(self.scene_index))
+        if self.highlight and not waiting:
             attrs=self.highlight.attributes(position)
             if attrs is not None:self.labels[self.scene_index][1].set_attributes(attrs)
-        countdown=('●  '*countdown).strip() if countdown else ''
+        countdown=('●  '*countdown).strip() if countdown and not waiting else ''
         if self.countdown.get_text()!=countdown:self.countdown.set_text(countdown)
+        if startup:self.show_scene('startup' if waiting else str(self.scene_index))
+
+    def show_scene(self,name):
+        previous=self.scenes.get_visible_child_name()
+        if previous==name:return
+        self.scenes.set_transition_duration(620 if 'startup' in (previous,name) else 280)
+        self.scenes.set_visible_child_name(name)
 
     def choose_file(self):
         if self.import_dialog or not self.stage.lyrics.key:return

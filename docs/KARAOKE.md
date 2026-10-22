@@ -9,6 +9,16 @@ Leaving fullscreen returns to the desktop widget.
 
 ![Actual GTK karaoke scene with original demonstration lyrics](../assets/karaoke.png)
 
+## A warmer connection
+
+Enabling AI vocal reduction brings up warm embers, a gentle amber waiting bar
+and “Let the sound warm up”. Captions follow preparation and audio buffering.
+Once processed audio is ready, the timed lyrics softly return. The switch can
+cancel preparation at any time; an error ends the waiting scene. With system
+animations disabled, the same stages remain readable without motion.
+
+[Preview the connection](../assets/karaoke-startup.png).
+
 ## Words and timing
 
 - Automatic lyrics come from LRCLIB, using the same recording matching as the

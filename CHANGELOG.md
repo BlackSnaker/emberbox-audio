@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.11.3 — 2026-10-22
+
+- Welcome AI karaoke with warm breathing embers, an indeterminate amber light bar and clear preparation/buffering captions. Crossfade back to timed lyrics when the processed-audio helper actually reports readiness.
+- Keep cancellation and error states immediate. Drive the small indicator from the existing frame clock, stop it on exit and honour reduced-motion settings. Retain a compact layout at 1024×600.
+- Increase the metal toggle sprites by about 20–25% in normal and compact layouts, preserving their smooth travel and existing controls.
+- Check real GTK startup phases, reduced motion, cancellation/reopening, geometry and unchanged source transport; refresh English/Russian screenshots and guidance.
+
 ## 0.11.2 — 2026-10-22
 
 - Group karaoke controls in a centered 740 px Grunesphism card: switch/status together, mode and strength in a shared inset, stable status height and responsive setup controls. Refresh real GTK screenshots in both languages.

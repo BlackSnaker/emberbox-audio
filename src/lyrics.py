@@ -198,7 +198,7 @@ class LyricsClient:
         self.cache = OrderedDict()
         self.cache_dir = Path(cache_dir) if cache_dir is not None else CACHE_DIR/'lyrics'
         self.import_dir = self.cache_dir/'imports' if cache_dir is not None else CONFIG_DIR/'lyrics'
-        version = '0.11.2'
+        version = '0.11.3'
         for directory in (Path(__file__).resolve().parent, Path(__file__).resolve().parent.parent):
             try:
                 version = (directory/'VERSION').read_text().strip()

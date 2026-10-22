@@ -91,7 +91,7 @@ def switch_frame(index, compact):
       <path d="M17.8 {tip-2.3:.2f}v4.6" stroke="#f6efda" stroke-opacity=".45" stroke-width=".6"/>
       <text x="20" y="60" text-anchor="middle" font-family="monospace" font-size="9" fill="{'#928374' if muted else '#bdae93'}">{'OFF' if muted else 'ON'}</text>
     </svg>'''
-    return pixbuf(svg, 24 if compact else 30, 40 if compact else 48)
+    return pixbuf(svg, 30 if compact else 36, 48 if compact else 58)
 
 
 class VolumeKnob(Gtk.EventBox):
