@@ -2,6 +2,14 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.10.0 — 2026-10-22
+
+- Fullscreen Karaoke page with large lyrics, soft line transitions, timed entry countdowns and the existing audio-responsive tubes.
+- Preserve genuine enhanced-LRC word timing, including Unicode, offsets, repeated lines and explicit vocal rests; privately import timed lyrics for a recording or return to automatic LRCLIB text.
+- Opt-in, adjustable stereo vocal reduction in an isolated DSP process. Protect bass and stereo side content; explicitly distinguish the effect from stem separation and source stream quality.
+- Temporary per-application audio routing, restoration on exit/failure and recovery after forced helper termination. Never capture a microphone or change the default output.
+- Check both pactl/pacat during installation, add bilingual usage/limitations documentation, synthetic DSP tests and actual GTK/audio routing checks.
+
 ## 0.9.2 — 2026-10-22
 
 - Continue search results and loaded albums from the clicked song in fullscreen and desktop track lists.

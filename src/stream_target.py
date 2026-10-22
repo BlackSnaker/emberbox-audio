@@ -30,6 +30,10 @@ def descendant(pid, owner):
 
 
 def matches(props, target):
+    # The karaoke return stream is a descendant of Emberbox for native YouTube.
+    # Never capture, reroute or apply the source volume to it a second time.
+    if str(props.get('emberbox.karaoke','')).lower()=='true':
+        return False
     if not target or not target.player:
         return False
     values = [str(props.get(key, '')).lower() for key in

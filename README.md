@@ -30,9 +30,11 @@ The **≋ quality badge** shows the current decoder format; click for sample rat
 
 ![Fullscreen listening room with original demonstration artwork and verse](assets/fullscreen.png)
 
-Open **Listening room · Fullscreen** from settings, press the **⛶** header button or **F11**. A centred large cover, a cover-tinted atmosphere and live tubes bring the same Grunesphism materials to a whole screen. Press **Lyrics** to load line-synchronized text from LRCLIB; **Artwork** returns to the cover. No lyric lookup or line layout runs before that button. Click a timed line to seek; **Esc** brings back your desktop widget exactly where you left it. Plain lyrics and instrumental/missing-text views keep the scene useful when timecodes are unavailable.
+Open **Listening room · Fullscreen** from settings, press the **⛶** header button or **F11**. A centred large cover, a cover-tinted atmosphere and live tubes bring the same Grunesphism materials to a whole screen. Press **Lyrics** to load line-synchronized text from LRCLIB; **Artwork** returns to the cover. No lyric lookup or line layout runs until you choose Lyrics or Karaoke. Click a timed line to seek; **Esc** brings back your desktop widget exactly where you left it. Plain lyrics and instrumental/missing-text views keep the scene useful when timecodes are unavailable.
 
-The fullscreen **Collection** page brings personal picks, saved albums and search into the room. **+** builds a private queue; its own **Queue** page lets you reorder, remove and play songs in sequence. Transport stays visible across all three pages. [Source support and queue controls →](docs/COLLECTION.md)
+The fullscreen **Collection** page brings personal picks, saved albums and search into the room. **+** builds a private queue; its own **Queue** page lets you reorder, remove and play songs in sequence. Transport stays visible across the room. [Source support and queue controls →](docs/COLLECTION.md)
+
+**Karaoke** gives your voice a stage: large lyrics, amber lighting on supplied word timestamps, a gentle entry countdown and optional adjustable stereo vocal reduction. Automatic lyrics usually sync by line; enhanced LRC imports enable real word timing. [Karaoke controls and limitations →](docs/KARAOKE.md)
 
 ![Fullscreen collection with original fixture artwork](assets/collection.png)
 

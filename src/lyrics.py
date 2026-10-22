@@ -24,7 +24,7 @@ import urllib.parse
 import urllib.request
 
 from gi.repository import GLib
-from paths import CACHE_DIR
+from paths import CACHE_DIR, CONFIG_DIR
 
 API = 'https://lrclib.net/api/'
 MAX_BYTES = 512_000
@@ -32,14 +32,64 @@ MAX_TEXT = 120_000
 STAMP = re.compile(r'\[(\d{1,3}):([0-5]\d)(?:[.:](\d{1,3}))?\]')
 OFFSET = re.compile(r'^\[offset:([+-]?\d+)\]$', re.I)
 FEATURE = re.compile(r'\s*(?:[([](?:feat\.?|ft\.?|featuring)\s+[^)\]]+[)\]]|[-–—]\s*(?:feat\.?|ft\.?|featuring)\s+.+)$', re.I)
-WORD_STAMP = re.compile(r'<\d{1,3}:[0-5]\d(?:\.\d{1,3})?>')
+WORD_STAMP = re.compile(r'<(\d{1,3}):([0-5]\d)(?:\.(\d{1,3}))?>')
 CONTROL = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
+
+
+@dataclass(frozen=True)
+class LyricWord:
+    seconds: float
+    end: float | None
+    start: int
+    stop: int
 
 
 @dataclass(frozen=True)
 class LyricLine:
     seconds: float
     text: str
+    words: tuple = ()
+
+
+def _seconds(match):
+    return int(match[1])*60+int(match[2])+(int(match[3])/10**len(match[3]) if match[3] else 0)
+
+
+def _words(content, shift=0.):
+    """Keep supplied enhanced-LRC timing; never divide a line into fake beats."""
+    tags=list(WORD_STAMP.finditer(content))
+    plain=WORD_STAMP.sub('',content)
+    left=len(plain)-len(plain.lstrip());plain=plain.strip()
+    words=[];removed=0;previous=-1.
+    for index,tag in enumerate(tags):
+        start=tag.start()-removed-left
+        removed+=tag.end()-tag.start()
+        stop=(tags[index+1].start()-removed-left if index+1<len(tags) else len(plain))
+        begin=max(0.,_seconds(tag)+shift)
+        end=max(0.,_seconds(tags[index+1])+shift) if index+1<len(tags) else None
+        # Invalid or backwards tags must not produce convincing false timing.
+        if begin<previous or (end is not None and end<begin):return plain,()
+        previous=begin
+        start,stop=max(0,start),min(len(plain),stop)
+        if start<stop and plain[start:stop].strip():words.append(LyricWord(begin,end,start,stop))
+    return plain,tuple(words)
+
+
+def serialize_lrc(lines):
+    def stamp(seconds,open='[',close=']'):
+        return f'{open}{int(seconds)//60:02}:{seconds%60:06.3f}{close}'
+    rows=[]
+    for line in lines:
+        content=line.text
+        if line.words:
+            pieces=[];cursor=0
+            for word in line.words:
+                pieces.extend((content[cursor:word.start],stamp(word.seconds,'<','>'),content[word.start:word.stop]))
+                cursor=word.stop
+            if line.words[-1].end is not None:pieces.append(stamp(line.words[-1].end,'<','>'))
+            pieces.append(content[cursor:]);content=''.join(pieces)
+        rows.extend(stamp(line.seconds)+part for part in content.split('\n'))
+    return '\n'.join(rows)
 
 
 @dataclass(frozen=True)
@@ -55,11 +105,11 @@ class LyricsState:
 
 
 def parse_lrc(value):
-    """Parse line-level LRC, including repeated timestamps and silent gaps.
+    """Parse line and genuine word timing, repeated timestamps and silent gaps.
 
     Empty timed lines deliberately remain: an instrumental passage must stop
-    highlighting the preceding sung line. Enhanced word timings are stripped;
-    the player advertises line synchronization rather than invented karaoke.
+    highlighting the preceding sung line. Enhanced LRC retains supplied word
+    starts/ends. A missing final end stays unknown, rather than being invented.
     """
     if not isinstance(value, str):
         return ()
@@ -79,14 +129,14 @@ def parse_lrc(value):
             if match.start() != end:
                 break
             end = match.end()
-            stamps.append(int(match[1])*60 + int(match[2]) +
-                          (int(match[3]) / 10**len(match[3]) if match[3] else 0))
-        content = WORD_STAMP.sub('', raw[end:]).strip()
-        lines.extend((stamp, content) for stamp in stamps)
+            stamps.append(_seconds(match))
+        for stamp in stamps:
+            lines.append((stamp,raw[end:],stamp-stamps[0]))
     # LRC's positive offset advances the lyric relative to the audio.
     result = []
-    for stamp, content in sorted(lines, key=lambda row: row[0]):
-        line = LyricLine(max(0., stamp-offset), content)
+    for stamp, raw, shift in sorted(lines, key=lambda row: row[0]):
+        content,words=_words(raw,shift-offset)
+        line = LyricLine(max(0., stamp-offset), content,words)
         if result and result[-1].seconds == line.seconds:
             if line.text and line.text != result[-1].text:
                 result[-1] = LyricLine(line.seconds, '\n'.join(filter(None, (result[-1].text, line.text))))
@@ -129,7 +179,8 @@ def _record(record):
     plain = _body(value).strip() if isinstance(value, str) else ''
     if not plain and lines:
         plain = '\n'.join(line.text for line in lines)
-    return LyricsState('ready' if lines or plain else 'missing', lines, plain)
+    return LyricsState('ready' if lines or plain else 'missing', lines, plain,
+                       '' if record.get('local') is True else 'https://lrclib.net')
 
 
 class LyricsClient:
@@ -146,7 +197,8 @@ class LyricsClient:
         self.next_request = 0.
         self.cache = OrderedDict()
         self.cache_dir = Path(cache_dir) if cache_dir is not None else CACHE_DIR/'lyrics'
-        version = '0.9.2'
+        self.import_dir = self.cache_dir/'imports' if cache_dir is not None else CONFIG_DIR/'lyrics'
+        version = '0.10.0'
         for directory in (Path(__file__).resolve().parent, Path(__file__).resolve().parent.parent):
             try:
                 version = (directory/'VERSION').read_text().strip()
@@ -193,6 +245,54 @@ class LyricsClient:
     def _path(self, key):
         return self.cache_dir/(hashlib.sha256(json.dumps(key, ensure_ascii=False).encode()).hexdigest()+'.json')
 
+    def _import_path(self,key):
+        return self.import_dir/self._path(key).name
+
+    def import_file(self,path):
+        if self.closed or not self.key:return
+        self.generation+=1;generation=self.generation;key=self.key
+        if self.future:self.future.cancel()
+        self.state=LyricsState('loading')
+        self.future=self.pool.submit(self._import,path,key,generation)
+        self.future.add_done_callback(lambda future:GLib.idle_add(self._deliver,generation,key,future,priority=GLib.PRIORITY_DEFAULT))
+        self._notify(generation)
+
+    def _import(self,path,key,generation):
+        try:
+            with Path(path).open('rb') as source:raw=source.read(MAX_TEXT+1)
+            if len(raw)>MAX_TEXT:raise ValueError('Lyrics file too large')
+            value=raw.decode('utf-8-sig');lines=parse_lrc(value)
+            if not lines:raise ValueError('No timed lyrics')
+            state=LyricsState('ready',lines,'\n'.join(line.text for line in lines),'')
+            if self._current(generation):
+                self.import_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
+                path=self._import_path(key);temporary=path.with_suffix('.next')
+                with temporary.open('w') as output:
+                    os.chmod(temporary,0o600)
+                    json.dump({'syncedLyrics':serialize_lrc(lines),'local':True},output,ensure_ascii=False)
+                # Recheck after disk work; an import belongs only to the song
+                # selected when its file chooser was opened.
+                if self._current(generation):temporary.replace(path)
+                else:temporary.unlink(missing_ok=True)
+            return state
+        except (OSError,ValueError,UnicodeError):return LyricsState('error')
+
+    def use_automatic(self):
+        if self.closed or not self.key:return
+        self.generation+=1;generation=self.generation;key=self.key
+        if self.future:self.future.cancel()
+        self.cache.pop(key,None)
+        self.state=LyricsState('loading')
+        self.future=self.pool.submit(self._automatic,key,generation)
+        self.future.add_done_callback(lambda future:GLib.idle_add(self._deliver,generation,key,future,priority=GLib.PRIORITY_DEFAULT))
+        self._notify(generation)
+
+    def _automatic(self,key,generation):
+        if not self._current(generation):return LyricsState()
+        try:self._import_path(key).unlink(missing_ok=True)
+        except OSError:return LyricsState('error')
+        return self._lookup(key,generation,force=True)
+
     def _cached(self, key):
         try:
             path = self._path(key)
@@ -214,8 +314,8 @@ class LyricsClient:
         try:
             self.cache_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
             record = {'instrumental': state.status == 'instrumental', 'plainLyrics': state.plain,
-                      'syncedLyrics': '\n'.join(f'[{int(line.seconds)//60:02}:{line.seconds%60:06.3f}]{part}'
-                                                for line in state.lines for part in line.text.split('\n'))}
+                      'local':not bool(state.source_url),
+                      'syncedLyrics': serialize_lrc(state.lines)}
             data = {'version': 1, 'expires': time.time()+self._ttl(state), 'record': record}
             path = self._path(key)
             temporary = path.with_suffix('.next.json')
@@ -271,6 +371,12 @@ class LyricsClient:
     def _lookup(self, key, generation, force=False):
         if not self._current(generation):
             return LyricsState()
+        try:
+            path=self._import_path(key)
+            if path.stat().st_size<=MAX_BYTES:
+                state=_record(json.loads(path.read_text()))
+                if state.synced:return state
+        except (OSError,ValueError,TypeError):pass
         if not force:
             cached = self._cached(key)
             if cached:

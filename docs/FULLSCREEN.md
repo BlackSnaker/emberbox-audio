@@ -30,6 +30,8 @@ The selected source still controls which playback and seek actions are available
 
 Collection, albums, search and the separate queue page are described in [Collection and listening queue](COLLECTION.md).
 
+The **Karaoke** tab adds a large sing-along stage, genuine word timing where supplied and optional stereo vocal reduction. See [Karaoke controls and limitations](KARAOKE.md).
+
 ## Lyrics
 
 Fullscreen opens with a large centred cover. Press **Lyrics** in the header to show the text panel; **Artwork** returns to the cover. No lyric lookup, line rendering or scrolling runs before you ask for text.
@@ -38,7 +40,7 @@ While the text panel is open, Emberbox looks for lyrics matching the current son
 
 Some songs have no matching text, are instrumental, or only have plain lyrics. A failed lookup leaves the cover and playback controls usable. Lyrics availability depends on the song and the lyrics database; a music-service subscription does not guarantee lyrics.
 
-**Network disclosure:** a lookup sends the song's title, artist, album and duration to LRCLIB. This happens only while fullscreen and its text panel are shown. Signing in to a music service remains part of that service's existing account connection.
+**Network disclosure:** a lookup sends the song's title, artist, album and duration to LRCLIB. This happens only while fullscreen Lyrics or Karaoke is shown. Signing in to a music service remains part of that service's existing account connection.
 
 ## Visual character
 

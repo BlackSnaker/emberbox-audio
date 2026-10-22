@@ -18,6 +18,7 @@ from motion_surface import MotionSurface
 from music_library import MusicService
 from listening_library import LibraryView,QueueView,CSS as LIBRARY_CSS
 from quality_badge import QualityBadge,CSS as QUALITY_CSS
+from karaoke import KaraokeView,CSS as KARAOKE_CSS
 
 
 CSS = b'''
@@ -160,7 +161,7 @@ class FullscreenPlayer:
         self.window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self.window.connect('delete-event',lambda *_args:(self.dismiss(),True)[1])
         self.window.connect('key-press-event',self.on_key)
-        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS)
+        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS+KARAOKE_CSS)
         Gtk.StyleContext.add_provider_for_screen(self.window.get_screen(),provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+5)
         self.provider=provider
         overlay=Gtk.Overlay();overlay.add(Gtk.Box());self.window.add(overlay)
@@ -169,14 +170,14 @@ class FullscreenPlayer:
         self.layout=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18)
         self.layout.set_halign(Gtk.Align.FILL);self.layout.set_valign(Gtk.Align.FILL)
         overlay.add_overlay(self.layout)
-        header=Gtk.Box(spacing=12)
+        header=Gtk.Box(spacing=8)
         wordmark=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3)
         wordmark.pack_start(label('EMBER','stage-brand'),False,False,0)
         wordmark.pack_start(label(text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'),'stage-overline'),False,False,0)
         header.pack_start(wordmark,False,False,0)
         navigation=Gtk.Box(spacing=2);navigation.get_style_context().add_class('stage-nav')
         navigation.set_halign(Gtk.Align.CENTER);self.page_tabs={}
-        for key,name in [('playing',text('Listening','Слушать')),('library',text('Collection','Коллекция')),('queue',text('Queue','Очередь'))]:
+        for key,name in [('playing',text('Listening','Слушать')),('library',text('Collection','Коллекция')),('queue',text('Queue','Очередь')),('karaoke',text('Karaoke','Караоке'))]:
             b=Gtk.ToggleButton(label=name);b.get_style_context().add_class('stage-tab');b.set_has_tooltip(False)
             b.connect('clicked',lambda _b,k=key:self.show_page(k) if not self.nav_sync else None)
             navigation.pack_start(b,False,False,0);self.page_tabs[key]=b
@@ -253,6 +254,7 @@ class FullscreenPlayer:
         self.library_view=LibraryView(self.music,self.artwork,self.open_accounts)
         self.queue_view=QueueView(self.music,self.artwork)
         self.pages.add_named(self.library_view,'library');self.pages.add_named(self.queue_view,'queue')
+        self.karaoke=KaraokeView(self);self.pages.add_named(self.karaoke,'karaoke')
         self.pages.set_visible_child_name('playing');self.layout.pack_start(self.pages,True,True,0)
         footer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10)
         self.playing_caption=label('','stage-library-note');self.playing_caption.set_ellipsize(Pango.EllipsizeMode.END)
@@ -318,15 +320,19 @@ class FullscreenPlayer:
         if not force and (self.reveal.active or page==self.page):
             self.music_changed();return
         self.library_view.deactivate();self.queue_view.deactivate()
+        if self.page=='karaoke':self.karaoke.deactivate()
         self.page=page;self.pages.set_visible_child_name(page)
         self.lyrics_button.set_no_show_all(page!='playing');self.lyrics_button.set_visible(page=='playing')
         self.playing_caption.set_visible(page!='playing')
         if page=='library':self.library_view.activate()
         elif page=='queue':self.queue_view.activate()
+        elif page=='karaoke':self.track=None;self.karaoke.activate()
         else:self.track=None
-        if page!='playing':
+        if page not in ('playing','karaoke'):
             self.lyrics.set_track('','');self.motion.set_playing(False)
+        if page=='karaoke':self.motion.set_playing(False)
         self.music_changed()
+        if self.visible:self.update()
 
     def open(self):
         if self.closed:return
@@ -370,6 +376,7 @@ class FullscreenPlayer:
         self.dismiss_pending=False
         self.visible=False
         self.library_view.deactivate();self.queue_view.deactivate()
+        self.karaoke.deactivate()
         self.track=None
         self.lyrics.set_track('','')
         self.motion_lookup.set_track('')
@@ -455,6 +462,7 @@ class FullscreenPlayer:
         if self.closed:return
         self.hide();self.closed=True
         self.library_view.close();self.queue_view.close();self.music_unsubscribe()
+        self.karaoke.close()
         if self.owns_music:self.music.close()
         self.lyrics.close()
         self.motion_lookup.close()
@@ -468,6 +476,7 @@ class FullscreenPlayer:
         self.layout_size=(width,height)
         self.library_view.card_size=max(128,min(240,(width-230)//6-26))
         small=height<850 or width<1200
+        self.karaoke.resize(height<800)
         self.equalizer.set_compact(small)
         context=self.layout.get_style_context()
         context.add_class('small-screen') if small else context.remove_class('small-screen')
@@ -619,15 +628,18 @@ class FullscreenPlayer:
             self.motion_lookup.set_track(self.motion_page() if self.motion.executable else '',h.art_url or '')
             self.motion.set_playing(h.playing)
         identity=(h.source,title,artist,album,round(h.length/1e6))
-        if identity!=self.track and self.lyrics_visible and self.page=='playing' and not self.reveal.active:
+        if identity!=self.track and (self.page=='karaoke' or self.lyrics_visible and self.page=='playing') and not self.reveal.active:
             self.track=identity;self.current_line=-2;self.manual_until=0.;self.last_position=None
             # No network activity for the desktop widget or empty player states.
             valid=bool(h.length>0 and title and artist)
             self.lyrics.set_track(title if valid else '',artist if valid else '',album if valid else '',h.length/1e6)
         if self.lyrics_visible and self.page=='playing':self.update_line()
+        if self.page=='karaoke':self.karaoke.update()
         return True
 
     def on_lyrics(self,force=False):
+        if self.page=='karaoke' and self.visible and not self.closed:
+            self.karaoke.update();return
         if self.closed or not self.visible or not self.lyrics_visible or self.page!='playing':return
         if self.reveal.active and not force:return
         state=self.lyrics.state
@@ -646,7 +658,7 @@ class FullscreenPlayer:
             self.lines_box.show_all()
             self.lyric_stack.set_visible_child_name('lines')
             self.lyric_note.set_text(text('Tap a line to go there','Нажми на строку, чтобы перемотать') if state.synced else text('Text without timecodes','Текст без таймкодов'))
-            self.credit.show()
+            self.credit.set_visible(bool(state.source_url))
             self.follow.set_visible(state.synced)
             GLib.idle_add(self.update_line,True,priority=GLib.PRIORITY_DEFAULT)
         else:
@@ -725,8 +737,9 @@ class FullscreenPlayer:
         self.motion.tick(now/1e6)
         dt=min(.05,(now-self.frame_time)/1e6) if self.frame_time else 1/60
         self.frame_time=now
-        if self.lyrics_visible and self.pending_center:self.center_line()
-        if self.lyrics_visible and time.monotonic()-self.last_fade>.1:
+        if self.page=='karaoke':self.karaoke.frame(time.monotonic())
+        if self.page=='playing' and self.lyrics_visible and self.pending_center:self.center_line()
+        if self.page=='playing' and self.lyrics_visible and time.monotonic()-self.last_fade>.1:
             self.last_fade=time.monotonic();self.fade_lines()
         meter=self.host.meter
         active=self.host.playing and not self.host.sound.muted and time.monotonic()-meter.last_sample<.35
@@ -738,7 +751,7 @@ class FullscreenPlayer:
             self.levels[i]=max(0,min(1,target+(offset+momentum*dt)*decay))
             self.velocities[i]=(self.velocities[i]-rate*momentum*dt)*decay
         self.equalizer.set_levels(self.levels)
-        if self.lyrics_visible and self.scroll_target is not None and time.monotonic()>=self.manual_until:
+        if self.page=='playing' and self.lyrics_visible and self.scroll_target is not None and time.monotonic()>=self.manual_until:
             adjustment=self.lyrics_scroll.get_vadjustment();current=adjustment.get_value()
             difference=self.scroll_target-current
             adjustment.set_value(self.scroll_target if abs(difference)<.5 else current+difference*(1-math.exp(-dt*7)))

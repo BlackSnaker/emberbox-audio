@@ -10,7 +10,7 @@ import urllib.error
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'src'))
 from gi.repository import GLib
-from lyrics import LyricsClient, LyricsState, LyricLine, active_line, parse_lrc
+from lyrics import LyricsClient, LyricsState, LyricLine, LyricWord, active_line, parse_lrc, serialize_lrc
 
 
 def drain_until(predicate, timeout=2):
@@ -36,7 +36,7 @@ class LyricsTests(unittest.TestCase):
         parsed = parse_lrc('[ar:Synthetic artist]\n[offset:500]\n'
                            '[00:01.00][00:05.000]<00:01.00>Ember fixture\n'
                            '[00:03.50]\n[00:05.000]Перевод\nmalformed line')
-        self.assertEqual(parsed, (LyricLine(.5, 'Ember fixture'), LyricLine(3., ''),
+        self.assertEqual(parsed, (LyricLine(.5, 'Ember fixture',(LyricWord(.5,None,0,13),)), LyricLine(3., ''),
                                   LyricLine(4.5, 'Ember fixture\nПеревод')))
         self.assertEqual(active_line(parsed, 0), -1)
         self.assertEqual(active_line(parsed, .5), 0)
@@ -44,6 +44,42 @@ class LyricsTests(unittest.TestCase):
         self.assertEqual(active_line(parsed, 6), 2)
         self.assertEqual(active_line(parsed, 1), 0)  # Seeking backwards.
         self.assertEqual(active_line(parsed, float('nan')), -1)
+
+    def test_real_words_offsets_repeats_unicode_and_invalid_order(self):
+        value='[00:02][00:12]<00:02>Тёплый <00:03.5>свет<00:05>\n[offset:500]'
+        lines=parse_lrc(value)
+        self.assertEqual(lines[0].text,'Тёплый свет')
+        self.assertEqual(lines[0].words,(LyricWord(1.5,3.,0,7),LyricWord(3.,4.5,7,11)))
+        self.assertEqual(lines[1].words[0].seconds,11.5)
+        self.assertEqual(parse_lrc(serialize_lrc(lines)),lines)
+        broken=parse_lrc('[00:01]<00:03>One <00:02>two')
+        self.assertEqual(broken[0].words,())
+        self.assertEqual(broken[0].text,'One two')
+        self.assertEqual(parse_lrc('[00:01]No word timing')[0].words,())
+
+    def test_import_is_private_bound_to_recording_and_can_return_to_auto(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source=Path(folder)/'fixture.lrc'
+            source.write_text('[00:02]<00:02>Warm <00:03>light<00:04>')
+            client=LyricsClient(lambda:None,Path(folder)/'cache')
+            try:
+                with patch.object(client,'_request',return_value=record()):
+                    client.set_track('Fixture','Fixture artist',duration=180)
+                    self.assertTrue(drain_until(lambda:client.state.status=='ready'))
+                    client.import_file(source)
+                    self.assertTrue(drain_until(lambda:client.state.status=='ready' and not client.state.source_url))
+                    local=client.state
+                    self.assertEqual(len(local.lines[0].words),2)
+                    path=client._import_path(client.key)
+                    self.assertEqual(path.stat().st_mode&0o777,0o600)
+                    client.set_track('Other recording','Fixture artist',duration=180)
+                    self.assertTrue(drain_until(lambda:client.state.status=='ready'))
+                    client.set_track('Fixture','Fixture artist',duration=180)
+                    self.assertTrue(drain_until(lambda:client.state==local))
+                    client.use_automatic()
+                    self.assertTrue(drain_until(lambda:client.state.status=='ready' and bool(client.state.source_url)))
+                    self.assertFalse(path.exists())
+            finally:client.close()
 
     def test_slow_old_request_never_blocks_gui_or_replaces_new_track(self):
         entered, release = threading.Event(), threading.Event()
