@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.10.1 — 2026-10-22
+
+- Make the vocal dial directly reduce the vocal-band stereo centre: the previous dominance gate could leave it nearly unchanged under wide accompaniment.
+- Retain smooth strength changes, bass protection and unchanged side information; explicitly show when reduction is on.
+- Add a regression with centred vocals masked by louder stereo backing, and wait for fresh captured PCM in routing checks.
+
 ## 0.10.0 — 2026-10-22
 
 - Fullscreen Karaoke page with large lyrics, soft line transitions, timed entry countdowns and the existing audio-responsive tubes.

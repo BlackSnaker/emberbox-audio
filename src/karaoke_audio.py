@@ -47,9 +47,12 @@ class VocalFilter:
         spectrum=np.fft.rfft(self.input*self.window[:,None],axis=0)
         left,right=spectrum[:,0],spectrum[:,1]
         mid=(left+right)*.5;side=(left-right)*.5
-        centre=np.clip((np.abs(mid)-np.abs(side))/(np.abs(mid)+np.abs(side)+1e-9),0,1)
         self.amount+=(self.target-self.amount)*(1-math.exp(-HOP/RATE/.085))
-        desired=1-self.amount*.97*self.band*centre**1.5
+        # A coherence gate can leave a centred voice nearly untouched whenever
+        # wide accompaniment occupies the same bins. Reduce the vocal-band mid
+        # directly: the dial must have an audible, predictable effect in a mix.
+        # Side and low bass remain intact; other centred instruments can change.
+        desired=1-self.amount*.97*self.band
         self.gain+=.32*(desired-self.gain)
         mid*=self.gain
         filtered=np.column_stack((mid+side,mid-side))

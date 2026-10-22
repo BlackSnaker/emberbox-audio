@@ -55,6 +55,19 @@ class AudioTests(unittest.TestCase):
         bad=processor.process(np.full((HOP,2),np.nan))
         self.assertTrue(np.isfinite(bad).all())
 
+    def test_centred_voice_is_reduced_even_under_louder_stereo_backing(self):
+        # A centred vocal and wide accompaniment share the same spectral bins.
+        # The old mid/side dominance gate saw side > mid and did nothing at all.
+        t=np.arange(HOP*140)/RATE
+        voice=.11*np.sin(2*np.pi*1000*t)+.07*np.sin(2*np.pi*2000*t)
+        backing=.18*np.cos(2*np.pi*1000*t)+.12*np.cos(2*np.pi*2000*t)
+        pcm=np.column_stack((voice+backing,voice-backing))
+        output=render(pcm,1.)[RATE:]
+        original=pcm[RATE-(SIZE-HOP):-(SIZE-HOP)]
+        self.assertLess(np.std(output.mean(axis=1))/np.std(original.mean(axis=1)),.04)
+        np.testing.assert_allclose((output[:,0]-output[:,1])*.5,
+                                   (original[:,0]-original[:,1])*.5,atol=1e-6)
+
     def test_return_stream_can_never_match_native_player(self):
         target=Target('youtube',os.getpid(),'','fixture')
         props={'application.process.id':str(os.getpid()),'emberbox.karaoke':'true'}

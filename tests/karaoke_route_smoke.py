@@ -25,6 +25,7 @@ name=f'emberbox_fixture_{os.getuid()}_{os.getpid()}'
 default=pactl('get-default-sink')
 module=None;producer=None;monitor=None;helper=None;stopped=threading.Event();recorded=bytearray()
 lock=threading.Lock()
+captured_bytes=0
 
 
 def feed():
@@ -39,6 +40,7 @@ def feed():
 
 
 def read():
+    global captured_bytes
     while not stopped.is_set():
         try:
             ready,_,_=select.select([monitor.stdout],[],[],.2)
@@ -47,6 +49,7 @@ def read():
             if not data:break
             with lock:
                 recorded.extend(data)
+                captured_bytes+=len(data)
                 if len(recorded)>RATE*8*3:del recorded[:-RATE*8*3]
         except (OSError,ValueError):break
 
@@ -90,7 +93,18 @@ try:
     threading.Thread(target=feed,daemon=True).start();threading.Thread(target=read,daemon=True).start()
     time.sleep(1.4);dry=spectrum()
     assert dry[1000]>.08,dry
-    helper=start();time.sleep(1.6);wet=spectrum()
+    helper=start()
+    with lock:boundary=captured_bytes
+    deadline=time.monotonic()+6
+    # Follow captured sample progress, not a sleep: the server can re-clock a
+    # monitor during stream movement. Never analyse an unchanged dry ring.
+    while time.monotonic()<deadline:
+        with lock:fresh=captured_bytes-boundary
+        if fresh>=RATE*8*2:break
+        if helper.poll() is not None:raise AssertionError('Filter worker exited during processing')
+        time.sleep(.05)
+    assert fresh>=RATE*8*2,'Output monitor did not deliver fresh processed PCM'
+    wet=spectrum()
     assert wet[1000]/dry[1000]<.15,(dry,wet)
     for freq in (70,3000):assert .8<wet[freq]/dry[freq]<1.2,(dry,wet)
     helper.stdin.close();restored(helper);helper=None

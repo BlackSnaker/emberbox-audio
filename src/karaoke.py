@@ -163,7 +163,7 @@ class KaraokeView(Gtk.Box):
             'audio-failed':text('Filter stopped. Original routing restored.','Фильтр остановлен. Возвращён обычный звук.')}
         note=(messages.get(self.audio.error,text('Filter unavailable.','Фильтр недоступен.')) if self.audio.error else
               text('Preparing the audio filter…','Подключаем звуковой фильтр…') if self.audio.starting else
-              text('Stereo centre filter · may affect instruments','Стереофильтр центра · может затрагивать инструменты') if self.audio.active else
+              text('Vocal reduction on · stereo centre filter','Приглушение включено · фильтр центра стерео') if self.audio.active else
               text('Original sound · switch on to reduce vocals','Оригинальный звук · включи для приглушения голоса') if self.audio.available else
               text('Install PulseAudio utilities to enable the filter.','Для фильтра нужны утилиты PulseAudio.'))
         self.audio_note.set_text(note)

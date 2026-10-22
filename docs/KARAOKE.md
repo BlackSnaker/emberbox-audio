@@ -46,6 +46,8 @@ This is a real-time spectral mid/side effect, not AI stem separation. A voice
 mixed in the centre can be attenuated substantially; stereo backing vocals,
 reverb and off-centre voices can remain. Centred instruments can also become
 quieter. Bass below the vocal band and stereo side information are protected.
+The dial reduces the entire vocal-band mid signal, including when wide
+accompaniment overlaps it. It does not gate reduction on centre dominance.
 Try a moderate setting first. Mono and multichannel streams are not processed.
 
 The effect runs in a separate Python/NumPy process with overlap-add and smoothed
