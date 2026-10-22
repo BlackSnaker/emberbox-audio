@@ -1,0 +1,44 @@
+from pathlib import Path
+import sys,unittest
+from types import SimpleNamespace
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
+from audio_quality import describe,current
+
+
+class QualityTests(unittest.TestCase):
+    def test_catalogue_never_becomes_playback_evidence(self):
+        value=describe({'availableFormats':['dolby-atmos','hi-res-lossless','lossless'],
+                        'audioQuality':{'codec':'flac','sampleRate':192000}})
+        self.assertFalse(value['known']);self.assertEqual(value['name'],'')
+        self.assertIn('Dolby Atmos',value['available'])
+    def test_verified_aac_and_lossless_have_different_badges(self):
+        value=describe({'audioQuality':{'codec':'aac','sampleRate':44100,'channels':2,'evidence':'decoder'},
+                        'availableFormats':['dolby-atmos','lossless']})
+        self.assertEqual(value['name'],'AAC');self.assertIn('44',value['badge'])
+        self.assertNotIn('Lossless',value['badge']);self.assertNotIn('Atmos',value['badge'])
+        for rate,name in ((44100,'Lossless'),(48000,'Lossless'),(96000,'Hi‑Res Lossless')):
+            q=describe({'audioQuality':{'codec':'alac','sampleRate':rate,'evidence':'decoder'}})
+            self.assertEqual(q['name'],name)
+    def test_eac3_and_multichannel_do_not_imply_atmos(self):
+        q=describe({'audioQuality':{'codec':'eac3','channels':6,'sampleRate':48000,'evidence':'decoder'}})
+        self.assertEqual(q['name'],'Dolby Digital Plus')
+    def test_maximum_preference_cannot_invent_quality(self):
+        q=describe({'qualityPreference':{'mode':'maximum','applied':True}})
+        self.assertFalse(q['known']);self.assertNotEqual(q['policy'],'')
+        self.assertNotIn('Lossless',q['badge'])
+    def test_malformed_fields_are_ignored(self):
+        q=describe({'audioQuality':{'codec':'aac','sampleRate':'nan','channels':{},'bitrate':float('inf'),'evidence':'mpv'},'availableFormats':{}})
+        self.assertEqual(q['details'],'AAC');self.assertEqual(q['available'],[])
+        self.assertFalse(describe({'audioQuality':[]})['known'])
+    def test_source_switch_cannot_leak_native_quality_to_mpris(self):
+        host=SimpleNamespace(source='apple-music',apple_mode='native',
+            apple_web=SimpleNamespace(state={'audioQuality':{'codec':'aac','evidence':'decoder'}}))
+        self.assertEqual(current(host)['name'],'AAC')
+        host.source='spotify';self.assertFalse(current(host)['known'])
+        host.source='apple-music';host.apple_mode='browser';self.assertFalse(current(host)['known'])
+        host.source='youtube';host.youtube_mode='native';host.youtube=SimpleNamespace(loaded=False,quality={'codec':'opus','evidence':'mpv'})
+        self.assertFalse(current(host)['known']);host.youtube.loaded=True
+        self.assertEqual(current(host)['name'],'Opus')
+
+
+if __name__=='__main__':unittest.main()

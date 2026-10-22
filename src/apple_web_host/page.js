@@ -2,11 +2,43 @@
 async function emberboxAppleCommand(request) {
   if (location.origin !== 'https://music.apple.com') throw Error('Apple Music tab required');
   const music = window.MusicKit?.getInstance?.();
+  let maximumApplied=false;
+  // MusicKit's public HIGH value is a playback preference, never proof of the
+  // actual codec/bitrate. Do not lower a future, higher supported setting.
+  const high=window.MusicKit?.PlaybackBitrate?.HIGH;
+  const identity=String(music?.nowPlayingItem?.id||'');
+  const previousMaximum=window.__emberboxMaximumMusic;
+  if(music&&Number.isFinite(high)&&high>0&&window.__emberboxPlaybackAllowed!==false) {
+    try {
+      if(!previousMaximum||previousMaximum.music!==music||previousMaximum.id!==identity||
+         ['play','transport'].includes(request.method)) {
+        if(Number.isFinite(music.bitrate)&&music.bitrate<high)music.bitrate=high;
+        window.__emberboxMaximumMusic={music,id:identity};
+      }
+      maximumApplied=Number.isFinite(music.bitrate)&&music.bitrate>=high;
+    }catch{} // A changed/unsupported setting must not prevent playback.
+  }
   if (request.method === 'status') {
     const player = music?.player || music;
     const queue = music?.queue || player?.queue;
     const current = music?.nowPlayingItem || player?.nowPlayingItem || queue?.currentItem || queue?.items?.[queue.position || 0];
     const a = current?.attributes || current || {};
+    const variantNames=['dolby-atmos','dolby-audio','hi-res-lossless','lossless','lossy-stereo'];
+    const variants=value=>Array.isArray(value)?[...new Set(value.filter(v=>variantNames.includes(v)))]:[];
+    const directVariants=variants(a.audioVariants);
+    const catalogId=String(a.playParams?.catalogId||current?.id||'');
+    const cache=window.__emberboxAudioVariants||(window.__emberboxAudioVariants={});
+    if(cache.id!==catalogId){cache.id=catalogId;cache.values=[];cache.requested=false;}
+    // Extended catalogue attributes are optional. Fetch once per song, without
+    // delaying the status/transport response or exposing account credentials.
+    const storefront=String(music?.storefrontId||'');
+    if(!directVariants.length&&!cache.requested&&music?.isAuthorized&&typeof music?.api?.music==='function'&&
+       /^\d{1,20}$/.test(catalogId)&&/^[a-z]{2}$/.test(storefront)) {
+      cache.requested=true;
+      Promise.resolve().then(()=>music.api.music(`/v1/catalog/${storefront}/songs/${catalogId}`,{extend:'audioVariants'}))
+        .then(result=>{if(cache.id===catalogId)cache.values=variants((result?.data?.data||result?.data||[])[0]?.attributes?.audioVariants);})
+        .catch(()=>{});
+    }
     const metadata = navigator.mediaSession?.metadata;
     const audio = Array.from(document.querySelectorAll('audio,video')).find(m => !m.paused)
       || document.querySelector('audio,video');
@@ -22,6 +54,8 @@ async function emberboxAppleCommand(request) {
       title:String(a.name || a.title || metadata?.title || ''), artist:String(a.artistName || metadata?.artist || ''),
       album:String(a.albumName || metadata?.album || ''), image:image(a.artwork) || String(metadata?.artwork?.[0]?.src || ''),
       id:String(current?.id || a.playParams?.id || ''), catalogId:String(a.playParams?.catalogId || ''),
+      availableFormats:directVariants.length?directVariants:cache.values||[],
+      qualityPreference:{mode:'maximum',applied:maximumApplied},
       url:publicUrl(a.url), canNext:!!music, canPrevious:!!music};
   }
   if (!music?.api) throw Error('MusicKit is not ready. Reload the Apple Music tab and sign in.');

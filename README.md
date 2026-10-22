@@ -26,6 +26,8 @@ A warm desktop companion for **Spotify, Apple Music, YouTube and Yandex Music**,
 
 ## Step inside the music
 
+The **≋ quality badge** shows the current decoder format; click for sample rate, channels and available stream details. Apple catalogue labels such as Dolby Atmos and Lossless appear separately from actual playback. [Audio quality and source support →](docs/AUDIO_QUALITY.md)
+
 ![Fullscreen listening room with original demonstration artwork and verse](assets/fullscreen.png)
 
 Open **Listening room · Fullscreen** from settings, press the **⛶** header button or **F11**. A centred large cover, a cover-tinted atmosphere and live tubes bring the same Grunesphism materials to a whole screen. Press **Lyrics** to load line-synchronized text from LRCLIB; **Artwork** returns to the cover. No lyric lookup or line layout runs before that button. Click a timed line to seek; **Esc** brings back your desktop widget exactly where you left it. Plain lyrics and instrumental/missing-text views keep the scene useful when timecodes are unavailable.

@@ -27,6 +27,7 @@ class YouTubeAudio:
         self.watchdog = 0
         self.save_timer = 0
         self.open_request = 0
+        self.quality = {}
         try:
             saved = json.loads(STATE.read_text())
             from youtube_search import video_url
@@ -58,7 +59,8 @@ class YouTubeAudio:
                 script_opts='ytdl_hook-ytdl_path='+mpv_quoted(yt_dlp_executable()),
                 ytdl_raw_options=ytdl_raw_options())
             for name in ('time-pos', 'duration', 'pause', 'eof-reached',
-                         'paused-for-cache', 'media-title', 'metadata'):
+                         'paused-for-cache', 'media-title', 'metadata',
+                         'audio-codec-name','audio-params','audio-bitrate'):
                 self.mpv.observe_property(name, self._property)
             @self.mpv.event_callback('file-loaded')
             def file_loaded(_event):
@@ -101,6 +103,7 @@ class YouTubeAudio:
                            if entry.get('id') == self.current.get('id')), 0)
         self.position, self.duration = float(start), float(item.get('duration') or 0)
         self.loaded, self.loading, self.failed, self.eof = False, True, False, False
+        self.quality = {}
         self.paused = not self.enabled
         self.error = ''
         self.save()
@@ -137,6 +140,14 @@ class YouTubeAudio:
     def _on_property(self, name, value):
         if self.closed:
             return False
+        if name in ('audio-codec-name','audio-params','audio-bitrate'):
+            if not (self.loading or self.loaded) or self.failed:return False
+            self.quality['evidence']='mpv'
+            if name=='audio-codec-name':self.quality['codec']=str(value or '').lower()
+            elif name=='audio-params':
+                params=value if isinstance(value,dict) else {}
+                self.quality.update(sampleRate=params.get('samplerate',0),channels=params.get('channel-count',0))
+            else:self.quality['bitrate']=value or 0
         if name == 'time-pos' and value is not None:
             self.position = max(0., float(value))
             if not self.save_timer:
@@ -175,6 +186,7 @@ class YouTubeAudio:
             return False
         self.error = message
         self.loading, self.loaded, self.paused, self.failed = False, False, True, True
+        self.quality = {}
         if self.watchdog:
             GLib.source_remove(self.watchdog)
             self.watchdog = 0

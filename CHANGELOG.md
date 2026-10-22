@@ -2,6 +2,14 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.9.1 — 2026-10-22
+
+- Clickable audio-quality badge in the desktop widget and fullscreen: decoder codec/rate, channel details and measured YouTube bitrate.
+- Prefer the highest supported built-in stream: MusicKit HIGH, Yandex High quality for recognised Plus accounts and YouTube best-audio selection. Report the request separately from actual playback.
+- Separate optional Apple catalogue formats from actual playback; never infer Atmos, Lossless or bit depth from subscription, settings or mixer output.
+- Bounded Chromium Media observer, active-player and track-change guards, packaged native-engine updates and source-safe unknown states.
+- Local-time queue heading and English/Russian quality documentation.
+
 ## 0.9.0 — 2026-10-21
 
 - Fullscreen Listening / Collection / Queue pages, with large cover cards, album details and in-player search.

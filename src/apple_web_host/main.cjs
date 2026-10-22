@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const http = require('node:http');
 const net = require('node:net');
+const {attach:attachMediaQuality}=require(path.join(__dirname,'media_quality.cjs'));
 const yandex = process.env.EMBERBOX_WEB_SERVICE === 'yandex';
 const service = yandex ? {title:'Yandex Music',origin:'https://music.yandex.ru/',
   url:'https://music.yandex.ru/',command:'emberboxYandexCommand',page:'yandex.js',error:'YANDEX_REQUEST_FAILED'} :
@@ -71,6 +72,7 @@ function makeWindow(show=true) {
     webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,
       allowRunningInsecureContent:false,webviewTag:false,safeDialogs:true,backgroundThrottling:false}});
   if(typeof win.setMenu==='function')win.setMenu(null);
+  win.emberboxQuality=attachMediaQuality(win.webContents);
   win.on('page-title-updated',event=>event.preventDefault());
   if (process.env.EMBERBOX_APPLE_SOCKET) {
     win.on('close',event=>{if(!app.isQuitting){event.preventDefault();win.hide();}});
@@ -122,7 +124,7 @@ async function command(win, request, navigations=0) {
   if(!methods.includes(request.method)) throw Error('UNSUPPORTED');
   if(!win.webContents.getURL().startsWith(service.origin)) {
     if(yandex&&request.method!=='status')throw Error('SIGN_IN_REQUIRED');
-    return {ready:false,authorized:false,integrationVersion:yandex?3:2};
+    return {ready:false,authorized:false,integrationVersion:yandex?4:3};
   }
   const reasons=['CONTENT_EQUIVALENT','CONTENT_UNAVAILABLE','CONTENT_UNSUPPORTED','DEVICE_LIMIT','GEO_BLOCK',
     'INVALID_ARGUMENTS','MEDIA_LICENSE','MEDIA_KEY','MEDIA_PLAYBACK','NETWORK_ERROR','SUBSCRIPTION_ERROR','TypeError','ReferenceError','Error',
@@ -150,7 +152,9 @@ async function command(win, request, navigations=0) {
     playing:!!result.playing,position:Number(result.position)||0,duration:Number(result.duration)||0,
     hasTrack:!!result.title,windowVisible:win.isVisible()});
   if(request.method==='status') {
-    result.integrationVersion=yandex?3:2;
+    result.integrationVersion=yandex?4:3;
+    result.audioQuality=win.emberboxQuality?.snapshot(String(result.id||result.title||''))||{};
+    record({audioQuality:result.audioQuality,maximumQualityRequested:result.qualityPreference?.applied===true});
     if(yandex)record({capabilities:Object.fromEntries(['player','wave','navigation','metadata','store','legacy'].map(key=>[key,result.capabilities?.[key]===true]))});
   }
   return result;

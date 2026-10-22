@@ -30,6 +30,7 @@ from spotify_volume import SpotifyVolume
 from sources import Monitor, choose_session
 from stream_target import Target
 from source_picker import SourcePicker, text
+from quality_badge import QualityBadge,CSS as QUALITY_CSS
 from apple_bridge import AppleBridge
 from apple_library import AppleLibraryPanel
 from apple_web import AppleWeb
@@ -192,7 +193,7 @@ def stamp(microseconds):
 class Widget:
     def __init__(self):
         provider = Gtk.CssProvider()
-        provider.load_from_data(CSS)
+        provider.load_from_data(CSS+QUALITY_CSS)
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -390,7 +391,10 @@ class Widget:
         self.album.set_ellipsize(Pango.EllipsizeMode.END)
         self.album.set_max_width_chars(40)
         self.album.get_style_context().add_class('album')
-        details.pack_start(self.album, False, False, 0)
+        self.album_row=Gtk.Box(spacing=7)
+        self.album_row.pack_start(self.album,True,True,0)
+        self.quality=QualityBadge();self.album_row.pack_end(self.quality,False,False,0)
+        details.pack_start(self.album_row, False, False, 0)
 
         self.progress = Gtk.ProgressBar()
         self.progress.get_style_context().add_class('progress')
@@ -665,7 +669,7 @@ class Widget:
         self.transport.set_spacing(8 if self.compact else 7)
         self.mute_toggle.set_compact(self.compact)
         self.volume_knob.set_compact(self.compact)
-        for child in (self.header, self.title, self.artist, self.album,
+        for child in (self.header, self.title, self.artist, self.album_row,
                       self.progress_event, self.time_row, self.open, self.discovery_button):
             child.set_visible(not self.compact)
         self.compact_source.set_visible(self.compact)
@@ -875,6 +879,7 @@ class Widget:
         self.title.set_text(state.get('title') or (text('Yandex Music','Яндекс Музыка') if self.source=='yandex-music' else 'Apple Music'))
         self.artist.set_text(state.get('artist') or (text('Your library is inside Emberbox','Медиатека внутри плеера') if authorized else text('Connecting your music…','Подключаю твою музыку…')))
         self.album.set_text(apple.error or state.get('album') or '')
+        self.quality.update(self)
         self.time.set_text(f'{stamp(self.position)}  /  {stamp(self.length)}')
         self.progress.set_fraction(max(0.,min(1.,self.position/self.length)) if self.length else 0.)
         self.progress_event.set_sensitive(bool(authorized and self.length))
@@ -930,6 +935,7 @@ class Widget:
         self.title.set_text(str(item.get('title') if item else text('Find your next song','Найди свой следующий трек')))
         self.artist.set_text(str(item.get('channel') or 'YouTube') if item else text('Search or paste a YouTube link','Поиск или ссылка YouTube'))
         self.album.set_text(audio.error or (text('Loading audio…','Загружаю музыку…') if audio.loading else 'YouTube · '+text('audio','музыка')))
+        self.quality.update(self)
         self.time.set_text(f'{stamp(self.position)}  /  {stamp(self.length)}' if self.length else 'LIVE' if audio.loaded else '0:00  /  0:00')
         self.progress.set_fraction(max(0.,min(1.,self.position/self.length)) if self.length else 0.)
         self.progress_event.set_sensitive(bool(audio.loaded and self.length))
@@ -1325,6 +1331,7 @@ class Widget:
                                  else text('Start YouTube · choose its browser','Включи YouTube · выбери браузер') if self.source == 'youtube'
                                  else text('Start Apple Music · choose its browser', 'Включи Apple Music · выбери браузер'))
             self.album.set_text('')
+            self.quality.update(self)
             self.time.set_text('0:00  /  0:00')
             self.progress.set_fraction(0)
             self.play.set_sensitive(True)
@@ -1347,6 +1354,7 @@ class Widget:
         artists = metadata.get('xesam:artist') or []
         self.artist.set_text(', '.join(artists) if artists else text('Music', 'Музыка'))
         self.album.set_text(str(metadata.get('xesam:album') or ''))
+        self.quality.update(self)
         if self.source == 'spotify':
             track_id = str(metadata.get('mpris:trackid') or '').rsplit('/', 1)[-1]
             self.panel.update_current('spotify:track:' + track_id)

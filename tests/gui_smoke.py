@@ -208,11 +208,21 @@ try:
     assert app.apple_panel.bridge is app.apple_web and app.apple_panel.native
     assert app.library_stack.get_visible_child() is app.apple_panel and app.expanded
     app.apple_web.state={'ready':True,'authorized':True,'title':'Apple fixture','artist':'Fixture artist',
-                         'duration':200,'position':20,'playing':True,'canNext':True,'canPrevious':True}
+                         'duration':200,'position':20,'playing':True,'canNext':True,'canPrevious':True,
+                         'audioQuality':{'codec':'aac','sampleRate':44100,'channels':2,'evidence':'decoder'},
+                         'availableFormats':['dolby-atmos','lossless']}
     app.render_apple()
     assert app.title.get_text()=='Apple fixture' and app.playing
     assert app.sound.target.pid==12345 and app.sound.target.source=='apple-music'
     assert app.sound.target.family==''
+    settle(.6)  # The source change may still be revealing the full widget.
+    assert app.quality.get_mapped() and 'AAC' in app.quality.get_label()
+    assert not app.quality.get_has_tooltip()
+    app.quality.clicked();settle(.15)
+    assert app.quality.popover.get_visible()
+    assert app.quality.model['available']==['Dolby Atmos','Lossless']
+    assert 'Atmos' not in app.quality.get_label()
+    app.quality.popover.popdown()
     # Natural track changes briefly report empty/paused metadata. Cached cover
     # replacement, tint transitions and spectrum updates must keep painting.
     paints=app.frame_health.paints

@@ -17,6 +17,7 @@ from motion_artwork import MotionCover
 from motion_surface import MotionSurface
 from music_library import MusicService
 from listening_library import LibraryView,QueueView,CSS as LIBRARY_CSS
+from quality_badge import QualityBadge,CSS as QUALITY_CSS
 
 
 CSS = b'''
@@ -159,7 +160,7 @@ class FullscreenPlayer:
         self.window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self.window.connect('delete-event',lambda *_args:(self.dismiss(),True)[1])
         self.window.connect('key-press-event',self.on_key)
-        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS)
+        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS)
         Gtk.StyleContext.add_provider_for_screen(self.window.get_screen(),provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+5)
         self.provider=provider
         overlay=Gtk.Overlay();overlay.add(Gtk.Box());self.window.add(overlay)
@@ -211,6 +212,7 @@ class FullscreenPlayer:
         self.left.pack_start(self.artist,False,False,0)
         self.album=label('','stage-album');self.album.set_ellipsize(Pango.EllipsizeMode.END)
         self.left.pack_start(self.album,False,False,0)
+        self.quality=QualityBadge();self.left.pack_start(self.quality,False,False,0)
         self.body.pack_start(self.left,False,False,0)
         right=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=14)
         self.right=right
@@ -421,6 +423,7 @@ class FullscreenPlayer:
         self.body.set_halign(Gtk.Align.FILL if visible else Gtk.Align.CENTER)
         self.left.set_halign(Gtk.Align.START if visible else Gtk.Align.CENTER)
         for item in (self.title,self.artist,self.album):item.set_xalign(0. if visible else .5)
+        self.quality.set_halign(Gtk.Align.START if visible else Gtk.Align.CENTER)
         self.lyrics_button.set_label(text('Artwork','Обложка') if visible else text('Lyrics','Текст песни'))
         self.lyrics_button.get_accessible().set_name(text('Show artwork','Показать обложку') if visible else text('Show lyrics','Показать текст песни'))
         self.layout_size=None;self.track=None
@@ -587,6 +590,7 @@ class FullscreenPlayer:
         title,artist,album=h.title.get_text(),h.artist.get_text(),h.album.get_text()
         for item,value in ((self.title,title),(self.artist,artist),(self.album,album)):
             if item.get_text()!=value:item.set_text(value)
+        self.quality.update(h)
         names={'spotify':'Spotify','apple-music':'Apple Music','youtube':'YouTube','yandex-music':text('Yandex Music','Яндекс Музыка')}
         for button,value in ((self.source_button,'●  '+names.get(h.source,h.source)+'  ⌄'),(self.play_button,'Ⅱ' if h.playing else '▶')):
             if button.get_label()!=value:

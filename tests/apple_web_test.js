@@ -6,7 +6,7 @@ const calls = [];
 const resource = {id:'i.fixture',type:'library-songs',attributes:{name:'Fixture',artistName:'Artist',
   durationInMillis:180000,artwork:{url:'https://example.invalid/{w}x{h}.jpg'},playParams:{id:'i.fixture'}},
   privateToken:'NEVER_EXPORT',relationships:{account:{credentials:'NEVER_EXPORT'}}};
-const music = {isAuthorized:true,isPlaying:false,currentPlaybackTime:12,currentPlaybackDuration:180,
+const music = {isAuthorized:true,isPlaying:false,bitrate:64,currentPlaybackTime:12,currentPlaybackDuration:180,
   nowPlayingItem:resource,storefrontId:'us',api:{music:async(path,query)=>{
     calls.push({path,query});return {data:path.includes('/catalog/')
       ? {results:{songs:{data:[{...resource,id:'123',type:'songs'}]}}}
@@ -17,17 +17,25 @@ const music = {isAuthorized:true,isPlaying:false,currentPlaybackTime:12,currentP
   skipToNextItem:async()=>calls.push('next'),skipToPreviousItem:async()=>calls.push('previous'),
   seekToTime:async value=>calls.push({seek:value})};
 const context = vm.createContext({location:{origin:'https://music.apple.com'},
-  window:{MusicKit:{getInstance:()=>music}},navigator:{},
+  window:{MusicKit:{getInstance:()=>music,PlaybackBitrate:{STANDARD:64,HIGH:256}}},navigator:{},
   document:{querySelectorAll:()=>[],querySelector:()=>null},URL});
 vm.runInContext(fs.readFileSync('src/apple_web_host/page.js','utf8'),context);
 const call = (method,params={})=>context.emberboxAppleCommand({method,params});
 (async()=>{
   let result = await call('status');
   assert.equal(result.title,'Fixture');assert.equal(result.playing,false);
+  assert.equal(music.bitrate,256);assert.equal(result.qualityPreference.applied,true);
+  music.bitrate=512;
+  await call('status');assert.equal(music.bitrate,512,'A future higher quality must not be lowered');
   resource.attributes.playParams.catalogId='12345';resource.attributes.url='https://music.apple.com/us/album/fixture/45678?i=12345';
   result=await call('status');assert.equal(result.catalogId,'12345');
   assert.equal(result.url,'https://music.apple.com/us/album/fixture/45678');
   assert(!JSON.stringify(result).includes('NEVER_EXPORT'));
+  resource.attributes.audioVariants=['dolby-atmos','lossless','SECRET_INVALID'];
+  result=await call('status');
+  assert.deepEqual(Array.from(result.availableFormats),['dolby-atmos','lossless']);
+  assert.equal(result.audioQuality,undefined,'Catalogue variants are not decoder evidence');
+  delete resource.attributes.audioVariants;
   result = await call('browse',{category:'songs'});
   assert.equal(calls.at(-1).path,'/v1/me/library/songs');
   assert.equal(result.items[0].uri,'apple:library-songs:i.fixture');

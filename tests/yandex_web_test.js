@@ -10,9 +10,12 @@ const store={user:{isAuthorized:true,hasPlus:true,privateToken:'NEVER_EXPORT'},
 const engine={togglePause:async()=>calls.push('toggle'),pause:async()=>calls.push('pause'),
   resume:async()=>calls.push('resume'),moveForward:async()=>calls.push('next'),moveBackward:async()=>calls.push('previous'),
   setProgress:async value=>calls.push({seek:value}),playContext:async params=>calls.push({context:params})};
+const quality={quality:{value:'balanced'},setQuality(value){this.quality.value=value;}};
+store.sonataState.quality='balanced';store.sonataState.setQuality=value=>{store.sonataState.quality=value;};
 const location={origin:'https://music.yandex.ru',pathname:'/',search:''};
 const router={replace(){},prefetch(){},push(route){const u=new URL(route,location.origin);location.pathname=u.pathname;location.search=u.search;calls.push({route});}};
 const fiber={memoizedProps:{value:store},return:{memoizedProps:{value:engine},return:{memoizedProps:{value:router}}}};
+fiber.dependencies={firstContext:{memoizedValue:quality}};
 const root={__reactFiber$fixture:fiber};
 let hoverControls=true;
 const control={matches:()=>true,querySelector:()=>null,disabled:false,getAttribute:()=>null,getClientRects:()=>[{}],click:()=>calls.push('click')};
@@ -31,6 +34,8 @@ vm.runInContext(fs.readFileSync('src/apple_web_host/yandex.js','utf8'),context);
 const call=(method,params={})=>context.emberboxYandexCommand({method,params});
 (async()=>{
   const status=await call('status');assert.equal(status.authorized,true);assert.equal(status.title,'Fixture');
+  assert.equal(status.qualityPreference.applied,true);assert.equal(quality.quality.value,'high_quality');
+  assert.equal(store.sonataState.quality,'high_quality');assert.equal(status.audioQuality,undefined);
   assert.equal(status.position,0);assert.equal(status.image,'https://avatars.yandex.net/fixture/400x400');
   assert(!JSON.stringify(status).includes('NEVER_EXPORT'));
   await call('wave');const wave=calls.at(-1).context.contextData;
@@ -69,11 +74,15 @@ const call=(method,params={})=>context.emberboxYandexCommand({method,params});
   await assert.rejects(call('executeJavaScript',{code:'anything'}),/UNSUPPORTED/);
   const starts=calls.filter(value=>value.context||value==='resume'||value==='toggle').length;
   context.window.__emberboxPlaybackAllowed=false;
+  quality.quality.value='balanced';store.sonataState.quality='balanced';
   await call('wave');await call('play',{id:'123'});await call('transport',{action:'toggle'});
+  assert.equal(quality.quality.value,'balanced','Inactive source must not change quality');
   assert.equal(calls.filter(value=>value.context||value==='resume'||value==='toggle').length,starts);
   await call('transport',{action:'pause'});assert.equal(calls.at(-1),'pause');
   context.window.__emberboxPlaybackAllowed=true;
   store.user.hasPlus=false;
+  assert.equal((await call('status')).qualityPreference.reason,'subscription');
+  assert.equal(quality.quality.value,'balanced');
   await assert.rejects(call('wave'),/SUBSCRIPTION_REQUIRED/);
   store.user.isAuthorized=false;
   assert.equal((await call('status')).authorized,false);

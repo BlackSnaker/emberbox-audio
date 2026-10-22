@@ -51,6 +51,8 @@ async function emberboxYandexCommand(request) {
         if(value?.user&&value?.sonataState)found.store=value;
         if(value&&typeof value.togglePause==='function'&&typeof value.playContext==='function')found.engine=value;
         if(value&&typeof value.push==='function'&&typeof value.replace==='function'&&typeof value.prefetch==='function')found.router=value;
+        if(value&&typeof value.setQuality==='function'&&value.quality&&
+           ['high_quality','balanced','efficient','preview'].includes(value.quality.value))found.qualityController=value;
       }catch{} // A detached MobX provider must not hide the live provider.
     };
     // Start with the actual player, which can be outside <main>. Re-read
@@ -58,6 +60,7 @@ async function emberboxYandexCommand(request) {
     const anchors=[...document.querySelectorAll('[data-test-id$="PLAYERBAR_DESKTOP"], [data-test-id$="VIBE_PLAYERBAR"], [class*="PlayerBar_root"], [class*="PlayerBarDesktop_root"], main, body > div')];
     const nodes=[...anchors,...Array.from(document.querySelectorAll('main,main *,body > div')).slice(0,120)];
     for(const element of new Set(nodes))fibers(element,accept);
+    if(found.store&&found.store!==state.store&&!found.qualityController)delete state.qualityController;
     Object.assign(state,found);
   }
   context();
@@ -86,6 +89,19 @@ async function emberboxYandexCommand(request) {
   const user=state.store?.user;
   const authorized=user?.isAuthorized===true||!!test('USER_PROFILE_USERNAME');
   const subscribed=typeof user?.hasPlus==='boolean'?user.hasPlus:null;
+  let maximumApplied=false;
+  // Use the same two setters as the official site's "High quality" control.
+  // high_quality lets Yandex select Lossless where the song/account support it.
+  if(authorized&&subscribed===true&&window.__emberboxPlaybackAllowed!==false) {
+    try {
+      const quality=state.qualityController;
+      if(typeof quality?.setQuality==='function'&&typeof view?.setQuality==='function') {
+        if(quality.quality.value!=='high_quality')quality.setQuality('high_quality');
+        if(view.quality!=='high_quality')view.setQuality('high_quality');
+        maximumApplied=quality.quality.value==='high_quality'&&view.quality==='high_quality';
+      }
+    }catch{} // Subscription/adapter changes keep the existing stream available.
+  }
   const status={ready:document.readyState==='complete'&&!!(state.store||external||bar||button('MY_VIBE_PLAY_BUTTON')||test('USER_PROFILE_USERNAME')),authorized,subscribed,regionBlocked:region,
     capabilities:{player:!!state.engine,wave:!!state.engine?.playContext||!!button('MY_VIBE_PLAY_BUTTON'),
       navigation:!!state.router,metadata:!!(view||meta||extTrack),store:!!state.store,legacy:!!external},
@@ -93,7 +109,8 @@ async function emberboxYandexCommand(request) {
     id:String(track?.id||extTrack?.id||title).slice(0,300),image:cover(rawCover),duration,position,
     canNext:!!view?.canMoveForward||!!button('NEXT_TRACK_BUTTON')||!!external?.next,
     canPrevious:!!view?.canMoveBackward||!!button('PREVIOUS_TRACK_BUTTON')||!!external?.prev,
-    wave:!!state.store?.sonataState?.isVibeContext||!!button('MY_VIBE_PAUSE_BUTTON')};
+    wave:!!state.store?.sonataState?.isVibeContext||!!button('MY_VIBE_PAUSE_BUTTON'),
+    qualityPreference:{mode:'maximum',applied:maximumApplied,reason:subscribed===false?'subscription':maximumApplied?'':'adapter'}};
   if(request.method==='status')return status;
   if(region)throw Error('REGION_UNAVAILABLE');
   if(!authorized)throw Error('SIGN_IN_REQUIRED');

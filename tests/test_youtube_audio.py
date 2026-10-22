@@ -54,6 +54,17 @@ class YouTubeAudioTests(unittest.TestCase):
         self.assertEqual(self.audio.current['id'],B['id'])
         self.assertEqual(self.audio.index,1)
 
+    def test_quality_is_decoder_data_and_clears_for_next_track(self):
+        self.audio.set_enabled(True);self.audio.play(A,[A,B])
+        self.audio._on_property('audio-codec-name','opus')
+        self.audio._on_property('audio-params',{'samplerate':48000,'channel-count':2,'format':'floatp'})
+        self.audio._on_property('audio-bitrate',128000)
+        self.audio._loaded()
+        self.assertEqual(self.audio.quality['sampleRate'],48000)
+        self.assertNotIn('bitDepth',self.audio.quality)
+        self.audio.play(B);self.assertEqual(self.audio.quality,{})
+        self.audio._failure('Fixture error');self.assertEqual(self.audio.quality,{})
+
     def test_restart_retains_queue_but_never_starts_playback(self):
         self.audio.set_enabled(True);self.audio.play(A,[A,B]);self.audio.position=8.;self.audio.save()
         restored=youtube_audio.YouTubeAudio(lambda:None)
