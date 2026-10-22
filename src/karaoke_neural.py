@@ -6,11 +6,13 @@ vocals, compensation1.035. UVR authors permit third-party model use under MIT
 with credit; see docs/THIRD_PARTY_KARAOKE.md.
 """
 import math
+import os
 import time
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
 from scipy.signal import resample_poly
 from karaoke_model import verified_model
+from karaoke_limiter import StereoPeakLimiter
 
 RATE=48000
 MODEL_RATE=44100
@@ -55,7 +57,10 @@ class NeuralSeparator:
             # This convolutional model accepts shorter time windows. Only I/O
             # shape declarations change; learned tensors remain byte-identical.
             for item in (*graph.graph.input,*graph.graph.output):item.type.tensor_type.shape.dim[3].dim_value=FRAMES
-            options=ort.SessionOptions();options.intra_op_num_threads=2;options.inter_op_num_threads=1
+            # Polarity denoising needs two predictions. A bounded pool leaves
+            # logical CPUs available to GTK and the source playback engine.
+            cpus=len(os.sched_getaffinity(0)) if hasattr(os,'sched_getaffinity') else os.cpu_count() or 2
+            options=ort.SessionOptions();options.intra_op_num_threads=min(4,max(1,cpus-2));options.inter_op_num_threads=1
             options.execution_mode=ort.ExecutionMode.ORT_SEQUENTIAL
             options.add_session_config_entry('session.intra_op.allow_spinning','0')
             self.session=ort.InferenceSession(graph.SerializeToString(),options,providers=['CPUExecutionProvider'])
@@ -67,20 +72,34 @@ class NeuralSeparator:
         if np.max(np.abs(pcm))<1e-7:return np.zeros_like(pcm)
         audio=resample_poly(pcm.T,147,160,axis=1)[:,:MODEL_SAMPLES].astype(np.float32)
         spectrum=stft(audio)[:,:,:FREQUENCIES,:].copy();spectrum[:,:,:3,:]=0
-        prediction=self.session.run(None,{self.input:spectrum})[0]
-        if prediction.shape!=(1,4,FREQUENCIES,FRAMES) or not np.isfinite(prediction).all():
-            raise RuntimeError('ai-invalid-output')
+        # UVR's MDX denoise pass: reverse polarity, undo it in the estimate,
+        # and average. This cancels sign-independent model noise rather than
+        # filtering the accompaniment or secretly reducing vocal strength.
+        positive=self.session.run(None,{self.input:spectrum})[0]
+        negative=self.session.run(None,{self.input:-spectrum})[0]
+        for prediction in (positive,negative):
+            if prediction.shape!=(1,4,FREQUENCIES,FRAMES) or not np.isfinite(prediction).all():
+                raise RuntimeError('ai-invalid-output')
+        prediction=positive*.5-negative*.5
+        if not np.isfinite(prediction).all():raise RuntimeError('ai-invalid-output')
         voice=istft(prediction[0])*1.035
         return resample_poly(voice,160,147,axis=1).T[:WINDOW_SAMPLES].astype(np.float32)
 
     def benchmark(self):
         zero=np.random.default_rng(7).normal(0,.002,(WINDOW_SAMPLES,2)).astype(np.float32)
+        # Prime ORT's allocator/kernel caches before measuring sustained work.
+        # Charging a one-time cold prediction to every audio block can reject
+        # a CPU that comfortably meets the live inference budget afterwards.
+        self.vocals(zero)
         times=[]
         for _ in range(2):
             start=time.monotonic();self.vocals(zero);times.append(time.monotonic()-start)
         estimate=max(times)
-        block=max(32768,math.ceil(estimate*1.65*RATE/1024)*1024)
-        if block>51200:raise RuntimeError('ai-too-slow')
+        block=max(32768,math.ceil((estimate*1.35+.025)*RATE/1024)*1024)
+        # Retain at least 4096 real samples before the emitted interval, in
+        # addition to the existing future context. Never grow past the model.
+        maximum=(WINDOW_SAMPLES-LOOKAHEAD-4096)//1024*1024
+        if block>maximum:raise RuntimeError('ai-too-slow')
         return block,estimate
 
 
@@ -94,6 +113,7 @@ class NeuralBlocks:
         self.separator=separator;self.block=block;self.target=float(amount);self.amount=float(amount)
         self.history=np.zeros((WINDOW_SAMPLES,2),np.float32)
         self.first=True;self.ahead=None
+        self.limiter=StereoPeakLimiter()
 
     @property
     def required(self):return self.block+LOOKAHEAD if self.first else self.block
@@ -110,6 +130,13 @@ class NeuralBlocks:
             predicted[:OVERLAP]=self.ahead*(1-weight)+predicted[:OVERLAP]*weight
         self.ahead=voice[end:end+OVERLAP].copy()
         # Strength follows the physical dial smoothly across a whole block.
-        ramp=(self.target+(self.amount-self.target)*np.exp(-np.arange(self.block)/RATE/.085)).astype(np.float32)
-        self.amount=float(ramp[-1]);self.first=False
-        return np.clip(self.history[begin:end]-ramp[:,None]*predicted,-1,1).astype('<f4')
+        future=self.limiter.required_future
+        ramp=(self.target+(self.amount-self.target)*np.exp(-np.arange(self.block+future)/RATE/.085)).astype(np.float32)
+        bypass=self.amount==0 and self.target==0
+        self.amount=float(ramp[self.block-1]);self.first=False
+        if bypass:
+            self.limiter.deficit=0.
+            return self.history[begin:end].copy()
+        predicted=np.concatenate((predicted,voice[end:end+future]))
+        wet=self.history[begin:end+future]-ramp[:,None]*predicted
+        return self.limiter.process(wet,self.block)

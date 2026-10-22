@@ -53,6 +53,14 @@ FFT6144, hop1024, dim_f2048 at 44.1 kHz and UVR's vocal compensation1.035.
 64 кадров для потоковой CPU-обработки. STFT: FFT6144, шаг1024, dim_f2048,
 44,1 кГц; коэффициент вокала UVR1.035.
 
+Emberbox follows the original MDX polarity-denoising formula: half the positive
+prediction minus half the prediction for the inverted input. The two predictions
+use the same weights. [UVR implementation](https://github.com/Anjok07/ultimatevocalremovergui/blob/master/separate.py#L619-L629).
+
+Антишум повторяет формулу MDX: половина обычного предсказания минус половина
+предсказания входа с обратной полярностью. Оба прохода используют одни и те же
+веса; дополнительная модель не загружается.
+
 ## Quality checks / Проверки качества
 
 The implementation is tested with original generated PCM and an original

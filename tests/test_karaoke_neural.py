@@ -65,5 +65,33 @@ class NeuralTests(unittest.TestCase):
         with patch.object(separator,'vocals'),patch('karaoke_neural.time.monotonic',side_effect=(0,1.,2.,3.)):
             with self.assertRaisesRegex(RuntimeError,'ai-too-slow'):separator.benchmark()
 
+    def test_denoise_cancels_polarity_independent_model_noise(self):
+        class Session:
+            def __init__(self):self.inputs=[]
+            def get_inputs(self):return [type('Input',(),{'name':'fixture'})()]
+            def run(self,_,inputs):
+                value=inputs['fixture'];self.inputs.append(value.copy())
+                # A signal-independent texture in both polarity predictions
+                # must cancel without changing the genuine vocal component.
+                return [value*.5+np.random.default_rng(8).normal(0,.1,value.shape).astype(np.float32)]
+        session=Session();separator=NeuralSeparator(session=session)
+        t=np.arange(WINDOW_SAMPLES)/48000
+        pcm=np.column_stack((np.sin(2*np.pi*1000*t),np.cos(2*np.pi*1000*t))).astype(np.float32)*.2
+        result=separator.vocals(pcm)
+        self.assertEqual(len(session.inputs),2)
+        np.testing.assert_array_equal(session.inputs[1],-session.inputs[0])
+        np.testing.assert_allclose(result[4096:-4096],pcm[4096:-4096]*.5175,atol=.001)
+
+    def test_full_strength_overload_is_limited_without_flat_clipped_peaks(self):
+        class Voice:
+            def vocals(self,pcm):return -pcm  # A phase error can enlarge a residual.
+        block=32768;engine=NeuralBlocks(Voice(),block,1.)
+        t=np.arange(block+LOOKAHEAD)/48000
+        wave=(.7*np.sin(2*np.pi*1000*t)).astype(np.float32)
+        result=engine.process(np.column_stack((wave,wave*.5)))
+        self.assertLessEqual(float(np.max(np.abs(result))),.98)
+        self.assertEqual(int(np.sum(np.abs(result)>=.999999)),0)
+        np.testing.assert_array_equal(result[:,1],result[:,0]*.5)
+
 
 if __name__=='__main__':unittest.main()

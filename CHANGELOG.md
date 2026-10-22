@@ -2,6 +2,14 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.11.2 — 2026-10-22
+
+- Group karaoke controls in a centered 740 px Grunesphism card: switch/status together, mode and strength in a shared inset, stable status height and responsive setup controls. Refresh real GTK screenshots in both languages.
+- Add UVR's polarity denoising to neural karaoke: average positive and reversed-polarity predictions to cancel sign-independent model artifacts, without lowering the requested vocal reduction or low-pass filtering the mix.
+- Warm inference kernels before speed calibration and use a bounded CPU pool of up to four threads. Calibrate for both passes, retain past/future model context and keep the existing overload/queue safety gates. Buffering can be longer.
+- Replace hard clipping of the residual with stereo-linked anticipatory peak protection. Use existing future audio, a smooth attack and carried release; no extra inference or audio delay from the limiter. Preserve exact initial 0% bypass.
+- Add regressions for polarity noise cancellation, 100% overload, stereo balance, gain recovery and sample-identical limiter block boundaries.
+
 ## 0.11.1 — 2026-10-22
 
 - Keep karaoke frame updates out of GTK layout when titles, timing notes, counters and transport metadata have not changed; prepare lyric neighbours once and allocate word colours only during actual fades.

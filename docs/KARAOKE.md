@@ -50,7 +50,8 @@ be retried. System Python packages are not changed. Weights and runtime live
 in the private `karaoke-ai` cache directory; clearing that cache requires setup
 again. [Model credits, source, hash and license](THIRD_PARTY_KARAOKE.md).
 
-AI runs locally on CPU, with two inference threads and no account/API key.
+AI runs locally on CPU, with a bounded pool of up to four inference threads
+and no account/API key.
 Audio is never saved or uploaded. The original 44.1 kHz model uses a bounded
 sliding context, resampling from/to the 48 kHz application route. Overlapping
 vocal estimates are blended at block boundaries; strength changes are smoothed.
@@ -58,8 +59,19 @@ A startup benchmark chooses a block size. If the CPU cannot keep up or queues
 exceed their limit, the helper stops and restores original playback; it never
 silently switches to centre cancellation.
 
+The model processes both signal polarities and averages its estimates using
+UVR's denoising method. This reduces sign-independent model artifacts, especially
+at full vocal subtraction; a requested 100% is not silently reduced. There is
+no global low-pass filter on the accompaniment. Some separation artifacts remain
+possible for individual recordings.
+
+A stereo-linked peak limiter anticipates residual peaks above 0.98 instead of
+hard-clipping them. It uses future audio already present in the model context,
+adding no model passes or extra audio delay itself. Quiet signals are not boosted,
+stereo balance is retained and an initial 0% returns the exact original PCM.
+
 AI needs buffering. On the development AMD four-core machine the expected
-buffer is around 1.5–2 seconds; the panel reports the measured delay rather
+buffer with denoising is around 2–3 seconds; the panel reports the measured delay rather
 than promising this for every computer. Karaoke lyrics, song information,
 artwork, progress and tubes follow the buffered output. Pause, seek and natural
 track changes reach your ears through that same buffer. Source transport

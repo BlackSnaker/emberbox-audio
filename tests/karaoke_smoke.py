@@ -82,6 +82,18 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         for width,height in ((1024,600),(1280,720),(1920,1080)):
             stage.window.unfullscreen();stage.window.resize(width,height);settle(.3)
             assert stage.window.get_size()==(width,height),(stage.window.get_size(),(width,height))
+            card=view.control_card.get_allocation()
+            card_at=view.control_card.translate_coordinates(stage.window,0,0)
+            assert 740<=card.width<=800,(width,card.width)
+            assert abs(card_at[0]+card.width/2-width/2)<=1,(width,card_at,card.width)
+            for child in (view.voice_toggle,view.engine_choice,view.voice_knob,view.prepare_button):
+                at=child.translate_coordinates(view.control_card,0,0);area=child.get_allocation()
+                assert at and at[0]>=0 and at[1]>=0
+                assert at[0]+area.width<=card.width and at[1]+area.height<=card.height
+                assert not child.get_has_tooltip()
+            engine_at=view.engine_choice.translate_coordinates(view.control_card,0,0)
+            knob_at=view.voice_knob.translate_coordinates(view.control_card,0,0)
+            assert knob_at[0]-(engine_at[0]+view.engine_choice.get_allocated_width())>=12
             for child in (view.import_button,view.voice_knob,view.voice_toggle,view.prepare_button,view.engine_choice,stage.page_tabs['karaoke'],
                           stage.exit_button,stage.progress,stage.play_button,stage.knob,stage.mute):
                 assert child.get_mapped(),type(child).__name__
@@ -92,9 +104,18 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         view.engine_choice.set_active_id('ai');assert not view.voice_toggle.get_sensitive()
         view.audio.model_ready=True;view.audio.available=True;view.audio_changed()
         assert not view.prepare_button.get_visible()
+        settle(.1);card_height=view.control_card.get_allocated_height()
+        view.audio.starting=True;view.audio_changed();settle(.1)
+        assert view.control_card.get_allocated_height()==card_height,'Buffering should not move the controls'
+        view.audio.starting=False;view.toggle_audio();settle(.1)
+        assert view.control_card.get_allocated_height()==card_height,'AI status should not move the controls'
+        view.audio.error='output-lost';view.audio_changed();settle(.1)
+        assert view.control_card.get_allocated_height()==card_height,'A normal error should not move the controls'
+        view.toggle_audio()
         client.state=LyricsState('ready',word_state.lines,'', '')
         view.update();settle(.3)
         if '--screenshot' in sys.argv:
+            view.set_amount(.7);view.audio.delay=1.8;view.toggle_audio();settle(2.5)
             pixbuf=Gdk.pixbuf_get_from_window(stage.window.get_window(),0,0,1920,1080)
             pixbuf.savev('/tmp/emberbox-karaoke.png','png',[],[])
         stage.hide();assert not view.active and not view.audio.active

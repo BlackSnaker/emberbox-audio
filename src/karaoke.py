@@ -19,12 +19,22 @@ CSS=b'''
   letter-spacing: -1px; text-shadow: 0 2px 22px rgba(250,189,47,.12); }
 .karaoke-neighbour { color: #868c79; font-size: 23px; font-weight: bold; }
 .karaoke-countdown { color: #fabd2f; font-size: 16px; letter-spacing: 4px; }
-.karaoke-panel { border-radius: 24px; padding: 10px 18px;
-  background-image: linear-gradient(to bottom right,rgba(255,241,206,.035),rgba(0,0,0,.12));
-  box-shadow: inset 0 1px 0 rgba(255,241,206,.035); }
-.karaoke-panel combobox button { color: #d5bd85; border-radius: 16px;
-  background-image: none; background-color: rgba(255,241,206,.035);
-  border: none; box-shadow: none; padding: 7px; font-size: 11px; }
+.karaoke-panel { border-radius: 23px; padding: 12px 18px;
+  border: 1px solid rgba(235,219,178,.055);
+  background-image: linear-gradient(to bottom right,rgba(67,65,51,.68),rgba(29,34,26,.78));
+  box-shadow: inset 1px 1px 0 rgba(255,241,206,.055), inset -1px -2px 3px rgba(0,0,0,.16); }
+.karaoke-control-title { color: #ebdbb2; font-size: 13px; font-weight: bold; }
+.karaoke-control-label { color: #9f957e; font-size: 9px; letter-spacing: 1px; }
+.karaoke-divider { background-color: rgba(235,219,178,.075); min-width: 1px; }
+.karaoke-control-well { border-radius: 16px; padding: 8px 12px;
+  background-color: rgba(15,21,15,.24);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.2), inset 0 -1px 0 rgba(255,241,206,.035); }
+.karaoke-panel combobox button { color: #d5bd85; border-radius: 11px;
+  background-image: linear-gradient(to bottom,rgba(255,241,206,.055),rgba(255,241,206,.025));
+  background-color: transparent; border: 1px solid rgba(235,219,178,.04);
+  box-shadow: inset 0 1px 0 rgba(255,241,206,.025); padding: 6px 9px; font-size: 11px; }
+.karaoke-panel combobox button:hover { color: #fff1cd; background-color: rgba(255,241,206,.025); }
+.karaoke-panel combobox button:focus { outline-width: 0; outline-style: none; }
 .ember-stage .small-screen .karaoke-current { font-size: 32px; }
 .ember-stage .small-screen .karaoke-neighbour { font-size: 17px; }
 '''
@@ -134,29 +144,47 @@ class KaraokeView(Gtk.Box):
         self.pack_start(self.scenes,True,True,0)
         self.countdown=caption('','karaoke-countdown');self.countdown.set_size_request(-1,25)
         self.pack_start(self.countdown,False,False,0)
-        options=Gtk.Box(spacing=12);options.get_style_context().add_class('karaoke-panel')
+        options=self.control_card=Gtk.Box(spacing=18)
+        options.get_style_context().add_class('karaoke-panel')
+        options.set_halign(Gtk.Align.CENTER);options.set_size_request(740,-1)
+        voice=Gtk.Box(spacing=13);voice.set_valign(Gtk.Align.CENTER)
         self.voice_toggle=MuteToggle(self.toggle_audio);self.voice_toggle.set_compact(True)
         self.voice_toggle.get_accessible().set_name(text('Vocal reduction','Приглушение вокала'))
-        options.pack_start(self.voice_toggle,False,False,0)
-        description=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4)
-        title=caption(text('Vocal reduction','Приглушение вокала'),'karaoke-title');title.set_xalign(0)
+        voice.pack_start(self.voice_toggle,False,False,0)
+        description=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5)
+        description.set_valign(Gtk.Align.CENTER)
+        title=caption(text('Vocal reduction','Приглушение вокала'),'karaoke-control-title');title.set_xalign(0)
         description.pack_start(title,False,False,0)
         self.audio_note=caption('','karaoke-hint');self.audio_note.set_xalign(0)
-        self.audio_note.set_line_wrap(True);self.audio_note.set_max_width_chars(48)
+        self.audio_note.set_line_wrap(True);self.audio_note.set_max_width_chars(34)
+        self.audio_note.set_ellipsize(Pango.EllipsizeMode.END);self.audio_note.set_lines(2)
+        self.audio_note.set_size_request(-1,34)
         description.pack_start(self.audio_note,False,False,0)
-        options.pack_start(description,True,True,0)
+        self.prepare_button=stage.button(text('Prepare AI','Подготовить AI'),self.prepare_audio,'stage-quiet')
+        self.prepare_button.set_halign(Gtk.Align.START);description.pack_start(self.prepare_button,False,False,2)
+        voice.pack_start(description,True,True,0);options.pack_start(voice,True,True,0)
+        divider=Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        divider.get_style_context().add_class('karaoke-divider')
+        divider.set_margin_top(8);divider.set_margin_bottom(8);options.pack_start(divider,False,False,0)
+        controls=Gtk.Box(spacing=18);controls.set_valign(Gtk.Align.CENTER)
+        controls.get_style_context().add_class('karaoke-control-well')
+        mode=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=6);mode.set_valign(Gtk.Align.CENTER)
+        mode_label=caption(text('PROCESSING','ОБРАБОТКА'),'karaoke-control-label');mode_label.set_xalign(0)
+        mode.pack_start(mode_label,False,False,0)
         self.engine_choice=Gtk.ComboBoxText()
         self.engine_choice.append('ai',text('AI · clearer','AI · чище'))
         self.engine_choice.append('stereo',text('Fast · stereo','Быстро · стерео'))
         self.engine_choice.set_active_id(getattr(self.audio,'engine','ai'))
         self.engine_choice.connect('changed',self.choose_engine)
-        self.engine_choice.set_valign(Gtk.Align.CENTER);options.pack_start(self.engine_choice,False,False,0)
-        self.prepare_button=stage.button(text('Prepare AI','Подготовить AI'),self.prepare_audio,'stage-quiet')
-        self.prepare_button.set_valign(Gtk.Align.CENTER);options.pack_start(self.prepare_button,False,False,0)
+        self.engine_choice.set_has_tooltip(False);mode.pack_start(self.engine_choice,False,False,0)
+        controls.pack_start(mode,False,False,0)
+        strength=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=2)
+        strength.pack_start(caption(text('AMOUNT','СИЛА'),'karaoke-control-label'),False,False,0)
         self.voice_knob=VolumeKnob(self.set_amount)
         self.voice_knob.get_accessible().set_name(text('Vocal reduction strength','Сила приглушения вокала'))
         self.voice_knob.shown=self.audio.amount;self.voice_knob._render()
-        options.pack_start(self.voice_knob,False,False,0)
+        strength.pack_start(self.voice_knob,False,False,0);controls.pack_start(strength,False,False,0)
+        options.pack_start(controls,False,False,0)
         self.pack_start(options,False,False,0)
         foot=Gtk.Box(spacing=10)
         self.timing_note=caption('','karaoke-hint');self.timing_note.set_xalign(0)
