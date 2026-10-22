@@ -1,6 +1,7 @@
 """A quiet, large-type sing-along stage. Only real lyric timing drives words."""
 import math
 import time
+from bisect import bisect_right
 from functools import lru_cache
 from itertools import accumulate
 from gi.repository import Gtk, Pango
@@ -40,24 +41,48 @@ def byte_offsets(value):
     return (0,*accumulate(len(character.encode('utf-8')) for character in value))
 
 
-def word_attributes(line,position):
-    """Pango uses UTF-8 bytes. An 120 ms warm fade is purely visual easing;
-    words start only at the supplied time, and unknown ends stay unknown.
+class WordHighlight:
+    """Allocate Pango attributes only while the supplied word timing changes.
+
+    Most frames fall between words, or after the line is fully coloured. Keep
+    those frames out of Pango/GTK: even an equal AttrList invalidates layout.
     """
-    attrs=Pango.AttrList()
-    key=[];offsets=byte_offsets(line.text)
-    for word in line.words:
-        if position<word.seconds:continue
-        fade=min(1.,max(0.,(position-word.seconds)/.12))
-        shade=tuple(round(a+(b-a)*fade)*257 for a,b in zip((255,241,205),(250,189,75)))
-        attr=Pango.attr_foreground_new(*shade)
-        attr.start_index=offsets[word.start]
-        attr.end_index=offsets[word.stop]
-        attrs.insert(attr);key.append((word.start,word.stop,shade))
-    return attrs,tuple(key)
+    def __init__(self,line):
+        self.line=line;self.starts=tuple(word.seconds for word in line.words)
+        self.offsets=byte_offsets(line.text);self.key=None
+
+    def attributes(self,position):
+        begun=bisect_right(self.starts,position)
+        completed=bisect_right(self.starts,position-.12)
+        shades=tuple(tuple(round(a+(b-a)*max(0.,(position-start)/.12))*257
+                           for a,b in zip((255,241,205),(250,189,75)))
+                     for start in self.starts[completed:begun])
+        key=(completed,begun,shades)
+        if key==self.key:return None
+        self.key=key;attrs=Pango.AttrList()
+        for index,word in enumerate(self.line.words[:begun]):
+            shade=(250*257,189*257,75*257) if index<completed else shades[index-completed]
+            attr=Pango.attr_foreground_new(*shade)
+            attr.start_index=self.offsets[word.start];attr.end_index=self.offsets[word.stop]
+            attrs.insert(attr)
+        return attrs
 
 
-def moment(state,position):
+class LyricScenes:
+    """Prepare neighbouring nonblank lines once per immutable lyrics state."""
+    def __init__(self,state):
+        self.state=state;self.previous=[];self.following=[None]*(len(state.lines)+1)
+        previous=''
+        for line in state.lines:
+            self.previous.append(previous)
+            if line.text.strip():previous=line.text
+        following=None
+        for index in range(len(state.lines)-1,-1,-1):
+            if state.lines[index].text.strip():following=state.lines[index]
+            self.following[index]=following
+
+
+def moment(state,position,prepared=None):
     """Previous/current/next strings plus exact current index and countdown."""
     if state.status!='ready' or not state.lines:return None
     lines=state.lines;index=active_line(lines,position)
@@ -66,9 +91,10 @@ def moment(state,position):
         last=lines[index].words[-1]
         ended=last.end is not None and position>=last.end
     current=lines[index].text if index>=0 and not ended else ''
-    previous=next((line.text for line in reversed(lines[:max(0,index)]) if line.text.strip()),'')
-    following=next((line.text for line in lines[max(0,index+1):] if line.text.strip()),'')
-    next_line=next((line for line in lines[max(0,index+1):] if line.text.strip()),None)
+    prepared=prepared or LyricScenes(state)
+    previous=prepared.previous[index] if index>=0 else ''
+    next_line=prepared.following[max(0,index+1)]
+    following=next_line.text if next_line else ''
     countdown=(max(1,math.ceil(next_line.seconds-position)) if not current.strip() and next_line and 0<next_line.seconds-position<=5 else None)
     return previous,current or '♪',following,index if not ended else -1,countdown
 
@@ -77,7 +103,8 @@ class KaraokeView(Gtk.Box):
     def __init__(self,stage):
         super().__init__(orientation=Gtk.Orientation.VERTICAL,spacing=10)
         self.stage=stage;self.audio=KaraokeAudio(self.audio_changed)
-        self.scene_key=None;self.word_key=None;self.scene_index=0;self.last_frame=0.
+        self.scene_key=None;self.highlight=None;self.scene_index=0;self.last_frame=0.
+        self.prepared_lyrics=None;self.timing_state=None
         self.active=False;self.import_dialog=None;self.import_key=None
         self.small=False;self.cover_key=None
         self.timeline=HeardTimeline();self.heard_playing=False
@@ -143,7 +170,7 @@ class KaraokeView(Gtk.Box):
         self.audio_changed()
 
     def activate(self):
-        self.active=True;self.scene_key=None;self.timeline.clear();self.update()
+        self.active=True;self.scene_key=None;self.timing_state=None;self.timeline.clear();self.update()
 
     def resize(self,small):
         self.small=small
@@ -229,10 +256,11 @@ class KaraokeView(Gtk.Box):
         identity=(h.source,title,artist,album,round(h.length/1e6))
         position=h.position/1e6+(min(1.8,max(0,now-self.stage.anchor)) if h.playing else 0)
         self.timeline.observe(PlaybackPoint(now,identity,title,artist,position,h.length/1e6,h.playing,h.art_url),self.stage.lyrics.state)
-        self.import_button.set_sensitive(bool(self.stage.lyrics.key))
         self.frame(now,force=True)
 
     def show_timing(self,state):
+        if state is self.timing_state:return
+        self.timing_state=state
         if state.status=='ready' and state.lines:
             word_sync=any(line.words for line in state.lines)
             note=text('Word timing where supplied','По словам, где есть таймкоды') if word_sync else text('Line timing · word timestamps unavailable','По строкам · таймкодов слов нет')
@@ -240,7 +268,8 @@ class KaraokeView(Gtk.Box):
         elif state.status=='ready' and state.plain:
             self.timing_note.set_text(text('Plain lyrics · no timing available','Обычный текст · без синхронизации'))
         else:self.timing_note.set_text(text('Load an enhanced LRC for precise word timing.','Для точной подсветки слов можно открыть расширенный LRC.'))
-        self.auto_button.set_visible(state.status=='error' or state.status=='ready' and not state.source_url)
+        visible=state.status=='error' or state.status=='ready' and not state.source_url
+        self.auto_button.set_no_show_all(not visible);self.auto_button.set_visible(visible)
 
     def frame(self,now,force=False):
         if not self.active or (not force and now-self.last_frame<1/30):return
@@ -250,19 +279,30 @@ class KaraokeView(Gtk.Box):
         point,state=self.timeline.at(now,getattr(self.audio,'delay',0.) if ai else 0.)
         if point is None:return
         state=state or s.lyrics.state;position=point.position;self.heard_playing=point.playing
-        self.song.set_text(point.title+'  ·  '+point.artist);self.show_timing(state)
+        title=point.title+'  ·  '+point.artist
+        if self.song.get_text()!=title:self.song.set_text(title)
+        self.show_timing(state)
         if point.art_url!=self.cover_key:
             self.cover_key=point.art_url
             s.artwork.load(self.cover,point.art_url or '',42,9,preserve=True)
         if ai:
-            s.position=position;s.progress.set_range(0,max(1,point.length));s.progress.set_value(position)
+            s.position=position
+            if getattr(self,'delayed_length',None)!=point.length:
+                self.delayed_length=point.length;s.progress.set_range(0,max(1,point.length))
+            if s.progress.get_value()!=position:s.progress.set_value(position)
             current=point.key==self.timeline.points[-1].key
-            s.progress.set_sensitive(current and s.host.progress_event.get_sensitive() and point.length>0)
-            s.elapsed.set_text(f'{int(position)//60}:{int(position)%60:02}')
-            s.total.set_text(f'{int(point.length)//60}:{int(point.length)%60:02}')
-            s.playing_caption.set_text(text('Now playing: ','Сейчас: ')+point.title+'  ·  '+point.artist)
-            self.import_button.set_sensitive(current and bool(s.lyrics.key))
-        scene=moment(state,position)
+            sensitive=current and s.host.progress_event.get_sensitive() and point.length>0
+            if s.progress.get_sensitive()!=sensitive:s.progress.set_sensitive(sensitive)
+            for label,value in ((s.elapsed,f'{int(position)//60}:{int(position)%60:02}'),
+                                (s.total,f'{int(point.length)//60}:{int(point.length)%60:02}'),
+                                (s.playing_caption,text('Now playing: ','Сейчас: ')+title)):
+                if label.get_text()!=value:label.set_text(value)
+        else:self.delayed_length=None;current=True
+        can_import=current and bool(s.lyrics.key)
+        if self.import_button.get_sensitive()!=can_import:self.import_button.set_sensitive(can_import)
+        if self.prepared_lyrics is None or self.prepared_lyrics.state is not state:
+            self.prepared_lyrics=LyricScenes(state)
+        scene=moment(state,position,self.prepared_lyrics)
         if scene:
             previous,current,following,index,countdown=scene
         else:
@@ -276,15 +316,17 @@ class KaraokeView(Gtk.Box):
             previous=following='';index=-1;countdown=None
         key=(id(state),index,previous,current,following)
         if key!=self.scene_key:
-            self.scene_key=key;self.word_key=None;self.scene_index=1-self.scene_index
+            self.scene_key=key;self.scene_index=1-self.scene_index
+            self.highlight=WordHighlight(state.lines[index]) if index>=0 and state.lines[index].words else None
             rows=self.labels[self.scene_index]
             for label,value in zip(rows,(previous,current,following)):
                 label.set_attributes(None);label.set_text(value)
             self.scenes.set_visible_child_name(str(self.scene_index))
-        if index>=0 and state.lines[index].words:
-            attrs,key=word_attributes(state.lines[index],position)
-            if key!=self.word_key:self.labels[self.scene_index][1].set_attributes(attrs);self.word_key=key
-        self.countdown.set_text(('●  '*countdown).strip() if countdown else '')
+        if self.highlight:
+            attrs=self.highlight.attributes(position)
+            if attrs is not None:self.labels[self.scene_index][1].set_attributes(attrs)
+        countdown=('●  '*countdown).strip() if countdown else ''
+        if self.countdown.get_text()!=countdown:self.countdown.set_text(countdown)
 
     def choose_file(self):
         if self.import_dialog or not self.stage.lyrics.key:return

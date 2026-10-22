@@ -611,16 +611,23 @@ class FullscreenPlayer:
             index=self.music.book.indices[h.source]
             self.next_button.set_sensitive(index+1<len(self.music.book.queues[h.source]))
             self.previous_button.set_sensitive(bool(self.music.book.current(h.source)))
-        self.playing_caption.set_text(text('Now playing: ','Сейчас: ')+title+'  ·  '+artist)
+        delayed=self.page=='karaoke' and self.karaoke.audio.active and self.karaoke.audio.engine=='ai'
+        if not delayed:
+            value=text('Now playing: ','Сейчас: ')+title+'  ·  '+artist
+            if self.playing_caption.get_text()!=value:self.playing_caption.set_text(value)
         if self.page=='library' and self.library_view.source!=h.source:self.library_view.activate()
         if self.page=='queue':self.queue_view.render()
         seconds=max(0,h.position/1e6)
         if self.last_position!=h.position or not h.playing:
             self.last_position=h.position;self.anchor=time.monotonic()
-        self.position=min(h.length/1e6 if h.length else seconds,seconds+min(1.8,time.monotonic()-self.anchor) if h.playing else seconds)
-        self.progress.set_range(0,max(1,h.length/1e6));self.progress.set_value(self.position)
-        self.progress.set_sensitive(h.progress_event.get_sensitive() and h.length>0)
-        self.elapsed.set_text(clock_text(self.position));self.total.set_text(clock_text(h.length/1e6))
+        if not delayed:
+            self.position=min(h.length/1e6 if h.length else seconds,seconds+min(1.8,time.monotonic()-self.anchor) if h.playing else seconds)
+            upper=max(1,h.length/1e6)
+            if self.progress.get_adjustment().get_upper()!=upper:self.progress.set_range(0,upper)
+            self.progress.set_value(self.position)
+            self.progress.set_sensitive(h.progress_event.get_sensitive() and h.length>0)
+            for item,value in ((self.elapsed,clock_text(self.position)),(self.total,clock_text(h.length/1e6))):
+                if item.get_text()!=value:item.set_text(value)
         self.mute.set_state(h.sound.volume,h.sound.muted,h.sound.available)
         self.knob.set_state(h.sound.volume,h.sound.muted,h.sound.available)
         self.load_art()

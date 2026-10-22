@@ -1,13 +1,17 @@
 """A passive glass discharge VU, driven by measured stereo PCM energy."""
 import math
 from functools import lru_cache
+from pathlib import Path
 
-from gi.repository import Atk, Gtk
-from hardware_controls import pixbuf
+from gi.repository import Atk, GdkPixbuf, Gtk
+
+FRAME_COLUMNS=16
+FRAME_WIDTH,FRAME_HEIGHT=146,66
+ATLAS=Path(__file__).with_name('tube-meter-v1.png')
 
 
-@lru_cache(maxsize=201)
-def tube_frame(index):
+def tube_svg(index):
+    """Authoring source; render offline with tools/render_tube_frames.py."""
     level = index / 200
     end = 17 + 112 * level
     glow = min(1., level * 5)
@@ -43,7 +47,19 @@ def tube_frame(index):
         <text x="73" y="60">−30</text><text x="101" y="60">−15</text><text x="129" y="60">0 dB</text>
       </g>
     </svg>'''
-    return pixbuf(svg, 146, 66)
+    return svg
+
+
+@lru_cache(maxsize=1)
+def tube_frames():
+    # Blurring SVG on a GTK animation tick can spend an entire frame rendering
+    # a single new level. This lossless atlas contains the same 201 sprites.
+    atlas=GdkPixbuf.Pixbuf.new_from_file(str(ATLAS))
+    return tuple(atlas.new_subpixbuf(index%FRAME_COLUMNS*FRAME_WIDTH,
+        index//FRAME_COLUMNS*FRAME_HEIGHT,FRAME_WIDTH,FRAME_HEIGHT) for index in range(201))
+
+
+def tube_frame(index):return tube_frames()[index]
 
 
 class TubeMeter(Gtk.Image):

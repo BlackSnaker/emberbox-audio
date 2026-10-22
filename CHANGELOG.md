@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.11.1 — 2026-10-22
+
+- Keep karaoke frame updates out of GTK layout when titles, timing notes, counters and transport metadata have not changed; prepare lyric neighbours once and allocate word colours only during actual fades.
+- Let the delayed karaoke timeline own its progress and footer. Periodic source polling no longer overwrites them with raw undelayed values between animation frames.
+- Ship all 201 VU glass frames in a small lossless atlas, generated from the original SVG. No SVG blur/rasterisation runs inside animation ticks; artwork and level resolution are unchanged.
+- Retain the UVR model, inference framing, precision and audio mixing settings. Add regressions for idle layout, timed words, delayed track transitions and exact atlas pixels.
+
 ## 0.11.0 — 2026-10-22
 
 - Default karaoke to local UVR neural vocal separation, with a separate explicit fast stereo mode. Estimate vocals and blend them out without removing the entire stereo centre.
