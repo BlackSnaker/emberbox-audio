@@ -47,6 +47,8 @@ text does not stop the music.
 
 ## Vocal reduction
 
+[Hardware guidance and additional AI requirements →](REQUIREMENTS.md)
+
 Choose **AI · clearer** (the default), then enable the metal switch. UVR's
 MDX-Net estimates a vocal stem and the dial blends it out of the original
 stereo signal. It does not remove the entire stereo centre. Results still

@@ -3,7 +3,7 @@
   <h1>Emberbox Audio</h1>
   <p><strong>Your music, a little warmer.</strong></p>
   <p>Linux · GTK 3 · PipeWire · MIT · Early release</p>
-  <p><a href="#get-started">Get started</a> · <a href="docs/DESIGN.md">Grunesphism</a> · <a href="README.ru.md">Русский</a> · <a href="https://github.com/BlackSnaker/emberbox-video">Emberbox Video</a></p>
+  <p><a href="#get-started">Get started</a> · <a href="#system-requirements">System requirements</a> · <a href="docs/DESIGN.md">Grunesphism</a> · <a href="README.ru.md">Русский</a> · <a href="https://github.com/BlackSnaker/emberbox-video">Emberbox Video</a></p>
 </div>
 
 ![Emberbox Audio: full and compact interfaces in a warm Gruvbox presentation](assets/hero.png)
@@ -59,6 +59,26 @@ Select **YouTube · Search & play**, search by title or paste a YouTube/YouTube 
 ![Yandex Music interface with original demo artwork and synthetic playback](assets/yandex-music.png)
 
 **Experimental Yandex Music integration:** start **My Wave**, send like/dislike reactions and browse loaded search, collection and queue tracks inside the widget. Connect Yandex ID from **Settings → Accounts**. Full playback requires Yandex Plus. Subscription playback is **awaiting testers**; interface, routing and adapter checks use fixtures. [Setup and tester checklist →](docs/YANDEX_MUSIC.md)
+
+## System requirements
+
+**Linux desktop · X11 or Wayland + XWayland · PipeWire · Python ≥ 3.10 · GTK 3.**
+The currently tested target is **x86_64**; built-in Apple/Yandex DRM uses Linux
+x64 Widevine. Windows and macOS are unsupported.
+
+| Resource | Playback and fullscreen | Local AI karaoke |
+| --- | --- | --- |
+| CPU starting point | 2 modern cores | 4 modern cores / 8 threads; startup benchmark decides suitability |
+| System RAM starting point | 4 GB | 8 GB or more; 16 GB in the tested development machine |
+| Free-space planning budget | 1 GB | 2 GB total, including the player |
+| Display and graphics | Fullscreen layout tested from 1024×600 logical pixels; integrated graphics, OpenGL 3.2 recommended for animation | Same; AI runs on CPU, without CUDA or a discrete GPU |
+
+CPU, RAM and storage figures are **provisional sizing recommendations, not
+benchmarked minima**. Additional source applications, distribution packages and
+growing caches need their own headroom. AI is optional and needs more resources
+than ordinary playback.
+
+[Full requirements, source dependencies and tested configurations →](docs/REQUIREMENTS.md)
 
 ## Get started
 

@@ -2,6 +2,8 @@
 
 **English** · [Русский](INSTALL.ru.md)
 
+[System requirements: hardware guidance, AI karaoke and source dependencies →](REQUIREMENTS.md)
+
 ## Get started
 
 Use a recent Linux desktop with PipeWire and **X11 or Wayland with XWayland**. Run the installer as your normal user:
