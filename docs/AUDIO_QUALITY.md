@@ -4,6 +4,8 @@
 
 The small **≋** badge beside the album in the desktop widget, and beneath it in fullscreen, describes the current audio stream. Click it for details. Nothing opens on hover; Mini keeps its compact layout.
 
+The material is warm frosted glass, with fine grain and a soft edge highlight. The detail card blurs one in-memory snapshot of its own player window when opened; no capture timer runs. A matte gradient remains available if the window cannot be sampled.
+
 ## Prefer the best available stream
 
 Built-in playback prefers maximum supported quality automatically:
