@@ -3,6 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 const requests=[],transport=[],deadlines=[];
 let collaboration=false,missingRelationship=false,latestOnly=false,mismatchArtist=false,hangProfile=false,quickTimers=false;
 const viewBehavior=new Map();
+let catalogueNext,failCatalogue=false;
 const artist=id=>({id:String(id),type:'artists',attributes:{name:'Emberbox Sessions '+id,
   artwork:{url:'https://example.invalid/{w}x{h}.jpg'},genreNames:['Alternative'],
   editorialNotes:{standard:'<p>Original fixture biography &amp; story.</p>'},
@@ -17,6 +18,7 @@ const album=id=>({id:String(id),type:'albums',attributes:{name:'Original album '
     {...song(124),attributes:{...song(124).attributes,playParams:undefined}},{id:'999',type:'music-videos',attributes:{name:'Not an audio song'}}],
     next:'/v1/catalog/us/albums/'+id+'/tracks?offset=100'}}});
 const release=(id,attributes={})=>({...album(id),attributes:{...album(id).attributes,...attributes}});
+const catalogue=Array.from({length:317},(_,i)=>release(2000+i,{name:'Same title',isSingle:i%3===0,isCompilation:i%3===1}));
 const viewData={
   'top-songs':[song(123),song(124)],'latest-release':[album(456)],
   'full-albums':[album(456),album(459)],'singles':[release(460,{isSingle:true})],
@@ -27,6 +29,11 @@ const music={isAuthorized:true,bitrate:256,storefrontId:'us',api:{music:async(pa
   requests.push({path,query});let response;
   if(path.endsWith('/search'))response={results:{artists:{data:[artist(100),artist(101)]}}};
   else if(/\/songs\/[^/]+\/catalog$/.test(path)||/\/songs\/\d+$/.test(path))response={data:[song(123)]};
+  else if(/\/artists\/\d+\/albums$/.test(path)){
+    if(failCatalogue)throw Error('Fixture network error');
+    const start=query.offset||0;
+    response={data:catalogue.slice(start,start+100),next:catalogueNext!==undefined?catalogueNext:start+100<catalogue.length?path+'?offset='+(start+100):null};
+  }
   else if(/\/artists\/\d+$/.test(path)){
     if(hangProfile)return new Promise(()=>{});
     response={data:[{...artist(mismatchArtist?999:path.split('/').at(-1)),views:{
@@ -118,6 +125,29 @@ const section=(result,id)=>result.sections.find(s=>s.id===id);
   assert.equal(result.items[0].kind,'albums');assert.equal(result.next,24);
   assert.equal(requests.at(-1).path,'/v1/catalog/us/artists/100/view/full-albums');
   await call('artistSection',{id:'100',section:'singles',offset:24});assert.equal(requests.at(-1).query.offset,24);
+  // The full relationship must not inherit the curated views or a 200-release
+  // client limit. Every edition is retained, even when titles are identical.
+  const complete=[];let cursor=0;
+  do {
+    result=await call('artistSection',{id:'100',section:'discography',offset:cursor,storefront:'us'});
+    assert.equal(result.catalog,true);assert.equal(result.storefront,'us');
+    assert.equal(requests.at(-1).path,'/v1/catalog/us/artists/100/albums');
+    assert.equal(requests.at(-1).query.limit,100);
+    complete.push(...result.items);cursor=result.next;
+  }while(cursor!==null);
+  assert.equal(complete.length,317);assert.equal(new Set(complete.map(v=>v.id)).size,317);
+  for(const next of ['/v1/catalog/us/artists/100/albums?offset=0','/v1/catalog/us/artists/999/albums?offset=100',
+      '/v1/catalog/gb/artists/100/albums?offset=100','https://evil.invalid/v1/catalog/us/artists/100/albums?offset=100',
+      '/v1/catalog/us/artists/100/albums?offset=wrong']) {
+    catalogueNext=next;await assert.rejects(call('artistSection',{id:'100',section:'discography'}),/continuation/);
+  }
+  catalogueNext=undefined;failCatalogue=true;
+  await assert.rejects(call('artistSection',{id:'100',section:'discography',offset:200}));
+  failCatalogue=false;
+  result=await call('artistSection',{id:'100',section:'discography',offset:200});
+  assert.equal(result.items.length,100);assert.equal(result.next,300,'A failed page remains retryable');
+  await assert.rejects(call('artistSection',{id:'100',section:'discography',offset:-1}));
+  await assert.rejects(call('artistSection',{id:'100',section:'discography',storefront:'../account'}));
   await call('artistSection',{id:'100',section:'compilations'});
   assert.equal(requests.at(-1).path,'/v1/catalog/us/artists/100/view/compilation-albums');
   assert.equal((await call('artistSection',{id:'100',section:'featured-albums'})).items[0].id,'461');

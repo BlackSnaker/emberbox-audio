@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.12.2 — 2026-10-23
+
+- Load the full Apple artist albums relationship automatically through every next page; retain editions by ID and remove the 200-release artist-list ceiling.
+- Add All releases, catalogue-based category filters, loaded/complete/region status and a resumable failed-page action. Keep 48 covers on screen per catalogue page, with source/page cancellation and repeated-continuation protection.
+- Preserve the Apple account and wait for authorization before restoring playback during the adapter update. Verify 1,100 releases, duplicate titles, interrupted scans, cancellation, transport responsiveness and English/Russian GTK layouts.
+
 ## 0.12.1 — 2026-10-23
 
 - Redesign the artist overview around a panoramic portrait, larger name and genre badges. Merge category navigation into the toolbar to bring more music onto the first screen.

@@ -17,7 +17,7 @@ restrained background and clearer right edge. Missing photos
 retain a quiet fallback. Image preparation runs away from GTK and completed
 banners use a small bounded cache.
 
-**Overview**, **Albums**, **Singles & EPs**, **Compilations**, **Appears on** and
+**Overview**, **All releases** (Apple Music), **Albums**, **Singles & EPs**, **Compilations**, **Appears on** and
 **About** share the compact toolbar above the scroll area. Overview pairs a
 horizontal featured release with compact popular songs, followed by album,
 single and compilation shelves. Releases are deduplicated across the overview.
@@ -26,6 +26,28 @@ appears beside it instead of repeated covers. About shows the source's descripti
 attribution; biographies are not generated. Collaborations and unresolved names
 offer artist cards for an explicit choice. Exact recording relationships take
 precedence; name searches are never silently assigned to a namesake.
+
+## Complete Apple Music discography
+
+Opening an Apple artist automatically scans the **artist albums relationship**,
+one page of up to 100 releases per background request. **All releases** retains
+every ID supplied by that catalogue, including alternate editions and releases
+without playback access. Albums, Singles & EPs and Compilations filter this same
+loaded catalogue; EPs use the source's singles view and title designation.
+The compact overview remains a preview, with small shelves.
+
+The footer reports the loaded count and region. Only the source's final page
+marks the scan complete. A network error retains the loaded releases and offers
+**Continue loading the discography**, retrying the failed page. Leaving the
+artist or changing source discards late replies; returning to the same artist
+resumes or reuses its catalogue. Refresh starts a new scan. The region stays
+fixed throughout pagination. “Complete” means the releases returned for that
+artist by this Apple Music storefront, not recordings absent from its catalogue.
+Appearances still use Apple's separate, paged appearances view.
+
+There is no 200-release catalogue ceiling. Cover pages contain **48 releases**
+with previous/next controls, so a large catalogue does not create thousands of
+GTK controls at once. Distinct IDs with the same title are never merged.
 
 ## Open a release
 
@@ -39,8 +61,9 @@ liner notes** softly unfolds the source's album description when supplied.
 - **+** adds a song; **Queue** adds the loaded playable selection without
   interrupting music. **Listen** starts the loaded songs.
 - Unavailable recordings remain visible with disabled playback/queue controls.
-- **Load more** uses the source's next page, up to 200 loaded entries. Spotify
-  exposes up to its first 100 cached album tracks, not a complete catalogue.
+- **Load more** follows the source's next page for release tracks and other
+  categories. Artist lists no longer stop at 200 entries. Spotify still exposes
+  up to its first 100 cached album tracks.
 - **‹ Artist** restores the artist category; **‹ Back** returns to the preceding
   room page. **Alt+Left** also goes back; **Esc / F11** restores the desktop widget.
 
@@ -65,12 +88,13 @@ do not establish live catalogue coverage for every Spotify/Yandex artist.
 Requests reuse the selected source's connection, sending the selected artist or
 recording ID, or the name when resolving it, to that source. No additional
 account or third-party biography service is introduced. Artwork uses the normal
-local thumbnail cache; catalogue results and browsing state use bounded memory
-caches. Passwords, cookies and tokens are not copied into this page.
+local thumbnail cache; the current full discography stays in memory while other browsing results use
+bounded caches. Passwords, cookies and tokens are not copied into this page.
 
 Apple independently fetches missing overview views by the exact artist ID,
 with a 2.2-second optional phase and a 6.5-second artist-command deadline. A
 failed section preserves successful music sections and offers a refresh.
+The full list uses the documented [artist albums relationship](https://developer.apple.com/documentation/applemusicapi/fetch-a-relationship-on-this-resource-by-name-5akdm).
 Apple uses documented [artist views](https://developer.apple.com/documentation/applemusicapi/artists/views-data.dictionary)
 and [artist attributes](https://developer.apple.com/documentation/applemusicapi/artists/attributes-data.dictionary).
 Editorial markup becomes plain text, not executable content or GTK markup.

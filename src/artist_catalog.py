@@ -3,7 +3,7 @@ from html.parser import HTMLParser
 import re
 from source_picker import text
 
-SECTIONS=('overview','albums','singles','compilations','appears','about')
+SECTIONS=('overview','discography','albums','singles','compilations','appears','about')
 APPLE_VIEWS={'albums':'full-albums','singles':'singles',
              'compilations':'compilation-albums','appears':'appears-on-albums'}
 
@@ -54,10 +54,53 @@ def sanitize(result):
         if isinstance(result.get(key),dict):
             result[key]=dict(result[key]);result[key]['bio']=plain(result[key].get('bio'))
             result[key]['description']=plain(result[key].get('description'))
-    result['items']=list(result.get('items') or [])[:200]
+    # This is a per-response guard, never a limit on an accumulated catalogue.
+    # Refuse oversized pages rather than silently losing their continuation.
+    result['items']=list(result.get('items') or [])
+    if len(result['items'])>200:raise ValueError('Artist page is too large; retry with smaller pages')
     result['choices']=list(result.get('choices') or [])[:20]
     for section in result.get('sections') or []:section['items']=list(section.get('items') or [])[:30]
     return result
+
+
+class ReleaseCatalog:
+    """One artist/storefront scan, resumable between individually bounded calls."""
+    def __init__(self):
+        self.items=[];self.seen=set();self.offset=0;self.complete=False
+        self.storefront='';self.error='';self.pages=0
+        self.stalled_pages=0;self.single_ids=set()
+
+    def accept(self,result,offset):
+        if offset!=self.offset or self.complete:raise ValueError('Unexpected catalogue page')
+        sf=result.get('storefront')
+        if not result.get('catalog') or not isinstance(sf,str) or not re.fullmatch('[a-z]{2}',sf):
+            raise ValueError('Invalid catalogue page')
+        if self.storefront and sf!=self.storefront:raise ValueError('Catalogue region changed; refresh the artist')
+        next_offset=result.get('next')
+        if next_offset is not None and (type(next_offset) is not int or next_offset<=offset):
+            raise ValueError('Catalogue did not advance; retry the page')
+        values=result.get('items') or []
+        progress=any((v.get('uri') or v.get('id')) not in self.seen for v in values)
+        stalled=0 if progress else self.stalled_pages+1
+        if next_offset is not None and stalled>=3:raise ValueError('Catalogue returned repeated empty or duplicate pages; retry')
+        self.storefront=sf
+        self.stalled_pages=stalled
+        for value in values:
+            key=value.get('uri') or value.get('id')
+            if key and key not in self.seen:self.seen.add(key);self.items.append(value)
+        self.pages+=1;self.complete=next_offset is None;self.error=''
+        if next_offset is not None:self.offset=next_offset
+
+    def selection(self,section,single_ids=()):
+        single_ids=self.single_ids|set(single_ids)
+        def single(value):
+            # Apple labels EPs in release titles; its isSingle flag only means
+            # one song. Included singles-view IDs are also source evidence.
+            return value.get('isSingle') or value.get('id') in single_ids or bool(re.search(r'\s[-–—]\sEP$',value.get('title',''),re.I))
+        if section=='discography':return self.items
+        if section=='compilations':return [v for v in self.items if v.get('isCompilation')]
+        if section=='singles':return [v for v in self.items if not v.get('isCompilation') and single(v)]
+        return [v for v in self.items if not v.get('isCompilation') and not single(v)]
 
 
 class ArtistRepository:
@@ -80,6 +123,6 @@ class ArtistRepository:
                     'items':[],'sections':[], 'searchOnly':True,
                     'note':text('This YouTube connection exposes videos, not a verified artist discography. Search this name to keep listening.',
                                 'Это подключение YouTube показывает видео, а не подтверждённую дискографию артиста. Найди это имя, чтобы продолжить слушать.')}
-        params={key:ref[key] for key in ('id','name','songId','songKind','songUri','section') if key in ref}
+        params={key:ref[key] for key in ('id','name','songId','songKind','songUri','section','storefront') if key in ref}
         params['offset']=offset
         return sanitize(player.request(method,**params))

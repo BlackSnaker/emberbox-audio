@@ -1,12 +1,12 @@
 """An in-room artist journal: portrait, discography, release notes and tracks."""
 import time
-from gi.repository import Gtk,Pango,GdkPixbuf
+from gi.repository import Gtk,Pango,GdkPixbuf,GLib
 from source_picker import text
 from listening_library import label,button,scroll,duration
 from listening_queue import track
 from discovery_panel import clear
 from music_library import NAMES
-from artist_catalog import artist_ref,plain,SECTIONS
+from artist_catalog import artist_ref,plain,SECTIONS,ReleaseCatalog
 from artist_header import ArtistBanner,BannerCache
 
 CSS=b'''
@@ -52,7 +52,7 @@ CSS=b'''
 '''
 
 NAMES_SECTION={
-    'overview':('Overview','Обзор'),'albums':('Albums','Альбомы'),
+    'overview':('Overview','Обзор'),'discography':('All releases','Все релизы'),'albums':('Albums','Альбомы'),
     'singles':('Singles & EPs','Синглы и EP'),'compilations':('Compilations','Сборники'),
     'appears':('Appears on','Участия'),'about':('About','Об артисте'),
     'latest-release':('Releases in the spotlight','В центре внимания'),
@@ -77,6 +77,7 @@ class ArtistView(Gtk.Box):
         self.cache={};self.card_size=164;self.portrait_size=184;self.busy=False;self.syncing=False
         self.banner_cache=BannerCache(artwork.pool)
         self.saved_section='overview';self.note='';self.size=None
+        self.catalog=ReleaseCatalog();self.card_page=0;self.card_page_size=48
         self.wide=True;self.height=1080;self.overview_panels={};self.shelf_widgets=[]
         self.song_buttons=[];self.album_buttons=[];self.choice_buttons=[];self.filters={}
         toolbar=Gtk.Box(spacing=12)
@@ -106,12 +107,15 @@ class ArtistView(Gtk.Box):
         self.request+=1;self.reference=dict(ref);self.source=self.service.host.source
         self.profile=self.release=self.release_ref=None;self.items=[];self.sections=[];self.choices=[]
         self.section='overview';self.next_offset=None;self.note=''
+        self.catalog=ReleaseCatalog();self.card_page=0;self.search_only=False
 
     def activate(self):
         self.active=True
         if self.source!=self.service.host.source:self.set_reference(artist_ref(self.service.host))
         if not self.reference:self.reference=artist_ref(self.service.host)
-        if self.profile:self.render()
+        if self.profile:
+            self.render()
+            if self.catalog_mode():self.load_catalog()
         else:self.load('artist',self.reference)
 
     def deactivate(self):
@@ -125,6 +129,8 @@ class ArtistView(Gtk.Box):
 
     def refresh(self):
         if self.release_ref:self.load('release',self.release_ref,refresh=True)
+        elif self.source=='apple-music' and self.section!='appears':
+            self.catalog=ReleaseCatalog();self.card_page=0;self.load('artist',self.reference,refresh=True)
         elif self.section in ('overview','about'):self.load('artist',self.reference,refresh=True)
         else:self.load('artist-section',dict(self.reference,section=self.section),refresh=True)
 
@@ -134,7 +140,10 @@ class ArtistView(Gtk.Box):
             self.syncing=True
             for key,b in self.filters.items():b.set_active(key==section)
             self.syncing=False;return
-        self.section=section;self.release=self.release_ref=None;self.items=[];self.next_offset=None
+        self.section=section;self.release=self.release_ref=None;self.items=[];self.next_offset=None;self.card_page=0
+        if self.catalog_mode():
+            self.request+=1;self.service.cancel_browse();self.busy=False;self.spinner.stop()
+            self.items=self.catalog_selection();self.render();self.catalog_notice();self.load_catalog();return
         if section in ('overview','about'):
             self.request+=1;self.service.cancel_browse();self.busy=False;self.spinner.stop();self.render()
         else:self.load('artist-section',dict(self.reference,section=section))
@@ -144,7 +153,60 @@ class ArtistView(Gtk.Box):
 
     def open_release(self,value):
         self.saved_section=self.section;self.release_ref=dict(value);self.release=dict(value)
-        self.items=[];self.next_offset=None;self.load('release',self.release_ref)
+        self.items=[];self.next_offset=None;self.card_page=0;self.load('release',self.release_ref)
+
+    def catalog_mode(self):
+        return self.source=='apple-music' and not self.release_ref and self.section in ('overview','discography','albums','singles','compilations')
+
+    def catalog_selection(self):
+        singles={v.get('id') for v in self.section_items('singles')}
+        return self.catalog.selection(self.section,singles)
+
+    def catalog_notice(self):
+        count=len(self.catalog.items)
+        if self.catalog.error:
+            value=text(f'{count} releases loaded · Loading interrupted. Retry to continue.',
+                f'Загружено релизов: {count} · Загрузка прервалась. Можно продолжить.')
+        elif self.catalog.complete:
+            value=text(f'All {count} releases supplied by Apple Music · {self.catalog.storefront.upper()}',
+                f'Все релизы каталога Apple Music: {count} · {self.catalog.storefront.upper()}')
+        else:
+            value=text(f'Loading the complete discography… {count} releases',f'Загружаю полную дискографию… Релизов: {count}')
+        self.notice.set_text(value)
+
+    def load_catalog(self):
+        """One page per worker job: transport and GTK can run between pages."""
+        if self.closed or not self.active or self.busy or not self.catalog_mode() or self.catalog.complete or not (self.profile or {}).get('id'):return False
+        self.request+=1;generation=self.request;source=self.source;offset=self.catalog.offset
+        catalog=self.catalog;catalog.error='';self.busy=True;self.spinner.start();self.catalog_notice()
+        ref=dict(self.reference,section='discography')
+        if catalog.storefront:ref['storefront']=catalog.storefront
+        def done(result,error):
+            if self.closed or not self.active or generation!=self.request or source!=self.service.host.source:return
+            self.busy=False;self.spinner.stop()
+            if not error:
+                try:catalog.accept(result or {},offset)
+                except (ValueError,TypeError) as exc:error=exc
+            if error:catalog.error=str(error)[:350]
+            # Refresh only the small overview shelves, preserving top songs and
+            # appearances. The complete list is retained independently of GTK.
+            if not error:
+                single_ids={v.get('id') for v in self.section_items('singles')}
+                for name in ('albums','singles','compilations'):
+                    values=catalog.selection(name,single_ids)
+                    existing=next((s for s in self.sections if s.get('id')==name),None)
+                    if existing is None:self.sections.append({'id':name,'items':values[:6]})
+                    elif values or catalog.complete:existing.update(items=values[:6],unavailable=False)
+                if self.section!='overview':self.items=self.catalog_selection()
+            position=self.scroll.get_vadjustment().get_value();self.render();self.catalog_notice()
+            def continue_scan():
+                if generation!=self.request or not self.active or self.closed:return False
+                self.scroll.get_vadjustment().set_value(position)
+                if not error and not catalog.complete:self.load_catalog()
+                return False
+            GLib.timeout_add(100,continue_scan)
+        self.service.load('artist-section',done,collection=ref,offset=offset)
+        return False
 
     def load(self,category,ref,append=False,refresh=False):
         if self.closed or not self.active:return
@@ -168,6 +230,7 @@ class ArtistView(Gtk.Box):
                     'Часть каталога не ответила. Доступную музыку уже можно слушать; обнови для повтора.')
             if category=='artist':
                 self.profile=result.get('artist');self.sections=result.get('sections') or []
+                self.catalog.single_ids.update(v.get('id') for v in self.section_items('singles') if v.get('id'))
                 if self.profile and self.profile.get('id'):
                     self.reference={'id':str(self.profile['id']),'name':self.profile.get('name','')}
                 self.search_only=bool(result.get('searchOnly'))
@@ -175,12 +238,14 @@ class ArtistView(Gtk.Box):
             values=result.get('items') or []
             if append:
                 seen={v.get('uri') or v.get('id') for v in self.items}
-                self.items.extend(v for v in values if (v.get('uri') or v.get('id')) not in seen)
+                for value in values:
+                    ident=value.get('uri') or value.get('id')
+                    if ident and ident not in seen:seen.add(ident);self.items.append(value)
             else:self.items=list(values)
-            self.items=self.items[:200]
-            self.next_offset=result.get('next') if len(self.items)<200 else None
+            self.next_offset=result.get('next')
             self.render();self.notice.set_text(self.note)
             if not append:self.scroll.get_vadjustment().set_value(0)
+            if category=='artist' and self.catalog_mode():self.load_catalog()
         cached=self.cache.get(key)
         if not refresh and cached and time.monotonic()-cached[0]<900:
             done(cached[1],None);return
@@ -220,8 +285,10 @@ class ArtistView(Gtk.Box):
         else:
             chips=Gtk.Box(spacing=7)
             for genre in (value.get('genres') or [])[:3]:chips.pack_start(label(genre,'stage-artist-chip',24),False,False,0)
-            count=len(self.release_catalog())
-            if count:chips.pack_start(label(text(f'{count} '+('release' if count==1 else 'releases')+' in this overview',f'Релизов в обзоре: {count}'),'stage-artist-chip'),False,False,0)
+            count=len(self.catalog.items) if self.catalog.pages else len(self.release_catalog())
+            if count:
+                caption=text(f'{count} releases',f'Релизов: {count}') if self.catalog.pages else text(f'{count} in this overview',f'Релизов в обзоре: {count}')
+                chips.pack_start(label(caption,'stage-artist-chip'),False,False,0)
             names.pack_start(chips,False,False,0)
         controls=Gtk.Box(spacing=9);songs=self.songs()
         self.play_all_button=button('▶ '+text('Listen','Слушать'),lambda:self.service.play_all(self.songs()),'stage-accent')
@@ -359,6 +426,7 @@ class ArtistView(Gtk.Box):
             else:
                 tabs=self.filter_bar
                 for section in SECTIONS:
+                    if section=='discography' and self.source!='apple-music':continue
                     b=Gtk.ToggleButton(label=text(*NAMES_SECTION[section]));b.get_style_context().add_class('stage-tab');b.get_style_context().add_class('stage-artist-filter')
                     b.set_has_tooltip(False);b.set_active(section==self.section);b.connect('clicked',lambda _b,s=section:self.select(s))
                     tabs.pack_start(b,False,False,0);self.filters[section]=b
@@ -373,7 +441,7 @@ class ArtistView(Gtk.Box):
                     self.content.pack_start(reading,False,False,0)
                 elif self.section=='overview':
                     self.overview()
-                elif self.items:self.cards(self.items)
+                elif self.items:self.paged_cards(self.items)
                 elif not self.busy:self.empty()
         elif self.choices:
             self.content.pack_start(label(text('Whose world shall we open?','Чей мир откроем?'),'stage-library-title'),False,False,0)
@@ -389,7 +457,28 @@ class ArtistView(Gtk.Box):
             ref=self.release_ref or dict(self.reference,section=self.section)
             more=button(text('Load more','Загрузить ещё'),lambda:self.load(category,ref,append=True))
             more.set_sensitive(not self.busy);self.content.pack_start(more,False,False,0)
+        if self.catalog_mode() and self.catalog.error:
+            retry=button(text('Continue loading the discography','Продолжить загрузку дискографии'),self.load_catalog)
+            retry.set_sensitive(not self.busy);self.content.pack_start(retry,False,False,0)
         self.content.show_all()
+
+    def paged_cards(self,values):
+        # A large discography must not create hundreds of images/widgets on
+        # every page arrival. All metadata is available; show 48 covers at once.
+        pages=max(1,(len(values)+self.card_page_size-1)//self.card_page_size)
+        self.card_page=min(self.card_page,pages-1)
+        start=self.card_page*self.card_page_size;end=min(len(values),start+self.card_page_size)
+        bar=Gtk.Box(spacing=12)
+        bar.pack_start(label(text(f'Releases {start+1}–{end} of {len(values)}',f'Релизы {start+1}–{end} из {len(values)}'),'stage-artist-summary'),True,True,0)
+        if pages>1:
+            def turn(delta):
+                self.card_page+=delta;self.render();self.scroll.get_vadjustment().set_value(0)
+            prev=button('‹',lambda:turn(-1),accessible=text('Previous releases','Предыдущие релизы'))
+            after=button('›',lambda:turn(1),accessible=text('Next releases','Следующие релизы'))
+            prev.set_sensitive(self.card_page>0);after.set_sensitive(self.card_page<pages-1)
+            bar.pack_start(prev,False,False,0);bar.pack_start(label(f'{self.card_page+1} / {pages}','stage-artist-summary'),False,False,0);bar.pack_start(after,False,False,0)
+            self.catalog_next_button=after;self.catalog_prev_button=prev
+        self.content.pack_start(bar,False,False,0);self.cards(values[start:end])
 
     def empty(self):
         self.content.pack_start(paragraph(text('No releases supplied in this section. Explore another chapter.',

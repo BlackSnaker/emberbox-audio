@@ -89,7 +89,7 @@ async function emberboxAppleCommand(request) {
       isCompilation:a.isCompilation===true,isSingle:a.isSingle===true};
   }
   async function api(path, query = {}) {
-    const catalog=/^\/v1\/catalog\/[a-z]{2}\/(search|songs\/\d{1,20}(\/artists)?|albums\/\d{1,20}(\/tracks)?|artists\/\d{1,20}(\/view\/(top-songs|latest-release|full-albums|singles|featured-albums|compilation-albums|appears-on-albums))?)$/;
+    const catalog=/^\/v1\/catalog\/[a-z]{2}\/(search|songs\/\d{1,20}(\/artists)?|albums\/\d{1,20}(\/tracks)?|artists\/\d{1,20}(\/albums|\/view\/(top-songs|latest-release|full-albums|singles|featured-albums|compilation-albums|appears-on-albums))?)$/;
     if (!path.startsWith('/v1/me/library/') && !catalog.test(path)) throw Error('Unsupported library request');
     if (typeof music.api.music === 'function') {
       const response = await music.api.music(path, query);
@@ -200,6 +200,27 @@ async function emberboxAppleCommand(request) {
     return {artist:artistItem(resource),sections};
   }
   if(request.method==='artistSection') {
+    if(params.section==='discography') {
+      // Curated views are previews, not the artist's complete release list.
+      // Read the albums relationship directly and follow its actual next page.
+      const sf=String(params.storefront||storefront()),start=Number(params.offset||0);
+      if(!/^\d{1,20}$/.test(id)||!/^[a-z]{2}$/.test(sf)||!Number.isSafeInteger(start)||start<0)throw Error('Invalid artist section');
+      const path=`/v1/catalog/${sf}/artists/${id}/albums`;
+      const result=await artistApi(path,{limit:100,offset:start},Date.now()+4500);
+      if(!Array.isArray(result?.data)||result.errors?.length)throw Error('Invalid artist catalogue');
+      let next=null;
+      if(result.next) {
+        const url=new URL(result.next,'https://api.music.apple.com');
+        const cursor=url.searchParams.get('offset');
+        if(url.origin!=='https://api.music.apple.com'||url.pathname!==path||!/^\d+$/.test(cursor||''))throw Error('Invalid catalogue continuation');
+        next=Number(cursor);
+        if(!Number.isSafeInteger(next)||next<=start)throw Error('Invalid catalogue continuation');
+      }
+      // Retain distinct IDs, including deluxe/clean editions and unplayable
+      // releases. Filtering a preview or deduplicating titles loses music.
+      if(result.data.some(r=>r.type!=='albums'||!/^\d{1,20}$/.test(String(r.id))||!r.attributes?.name))throw Error('Incomplete artist catalogue response');
+      return {id:'discography',catalog:true,storefront:sf,items:result.data.map(item),next};
+    }
     const spec=artistViews.find(s=>s.id===params.section);
     if(!/^\d{1,20}$/.test(id)||!spec)throw Error('Invalid artist section');
     const result=await artistApi(`/v1/catalog/${storefront()}/artists/${id}/view/${spec.view}`,

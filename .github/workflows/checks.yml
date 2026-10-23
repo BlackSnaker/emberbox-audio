@@ -96,6 +96,10 @@ jobs:
         run: |
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/artist_smoke.py
           EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/artist_smoke.py
+      - name: Complete discography and interrupted scans
+        run: |
+          GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/discography_smoke.py
+          EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/discography_smoke.py
       - name: Audio quality badge
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/quality_smoke.py
       - name: Silent motion artwork
