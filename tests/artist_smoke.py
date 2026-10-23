@@ -9,6 +9,7 @@ from unittest.mock import patch
 import fullscreen_smoke as f
 import fullscreen
 from source_picker import text
+from artist_header import portrait_rect
 from gi.repository import Gdk,Gtk
 
 tracks=[{'id':str(i),'uri':'spotify:track:'+str(i),'title':name,'artist':'Emberbox Sessions',
@@ -37,7 +38,8 @@ def load(source,category,term='',collection=None,offset=0):
         if ref.get('id')!='SPARSE':
             sections.extend(({'id':'top-songs','items':tracks[:4]}, {'id':'albums','items':albums},
                              {'id':'singles','items':singles}, {'id':'compilations','items':compilations}))
-        return {'artist':dict(profile,id=ref.get('id','A')),'sections':copy.deepcopy(sections)}
+        return {'artist':dict(profile,id=ref.get('id','A'),name='Solstice' if ref.get('id')=='SHORT' else profile['name']),
+                'sections':copy.deepcopy(sections)}
     if category=='artist-section':return {'items':copy.deepcopy(albums[:2] if offset else albums),'next':None if offset else 24}
     if category=='release':return {'release':dict(albums[0],id=ref['id'],artist='Emberbox Sessions',
                 description='Original demonstration liner notes.\n\nA small collection about warmth, memory and evenings that last a little longer.',
@@ -82,8 +84,11 @@ def overview_first_screen(view,stage):
     assert len([value for _,value in view.album_buttons if value['id']=='latest-1'])==1
     assert any(visible_in_scroll(play,view,stage) for play,_,_ in view.song_buttons),'Popular songs must appear immediately'
     assert len({value['id'] for _,value in view.album_buttons})>=7,'Overview must expose the catalogue beyond one latest release'
-    assert any(visible_in_scroll(b,view,stage) for b,value in view.album_buttons if value['id'] in {a['id'] for a in albums}),\
-        'A discography shelf must be discoverable on the first screen'
+    assert view.shelf_widgets,'The overview must retain its real discography shelves'
+    heading=view.shelf_widgets[0].get_children()[0]
+    _,hy,_,hh=rectangle(heading,stage.window);_,scroll_y,_,scroll_h=rectangle(view.scroll,stage.window)
+    assert heading.get_mapped() and hy>=max(fy+fh,sy+sh) and hy>=scroll_y and hy+hh<=scroll_y+scroll_h+1,\
+        'The first discography heading must fit fully below the useful music panels, without being clipped at the viewport edge'
 
 
 host=f.FixtureHost()
@@ -110,6 +115,19 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         for b,_ in view.album_buttons:
             assert b.get_accessible().get_name(),'Every release must have an accessible name'
         shot(stage,'artist')
+        # An eight-letter artist uses the largest poster typography in one line.
+        view.set_reference({'id':'SHORT','name':'Solstice'});view.load('artist',view.reference)
+        wait(lambda:view.profile is not None and view.profile['id']=='SHORT')
+        banner=view.hero_banner
+        title=next(child for box in banner.content.get_children() for child in box.get_children()
+                   if isinstance(child,Gtk.Label) and child.get_text()=='Solstice')
+        assert title.get_style_context().has_class('stage-artist-display')
+        assert title.get_layout().get_line_count()==1,'The largest display name must fit without accidental wrapping'
+        bx,by,bw,bh=rectangle(banner,stage.window);tx,ty,tw,th=rectangle(title,stage.window)
+        assert tx>=bx and ty>=by and tx+tw<=bx+bw-banner.photo_area_width+2 and ty+th<=by+bh+1,\
+            'The large display name must fit inside the reading area, clear of the complete photograph'
+        overview_first_screen(view,stage)
+        shot(stage,'artist-display')
         # A source may really have only one release. Show its story, never cloned cards.
         view.set_reference({'id':'SPARSE','name':profile['name']});view.load('artist',view.reference)
         wait(lambda:view.profile is not None and view.profile['id']=='SPARSE')
@@ -155,6 +173,10 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
             assert banner.photo_area_width>0,'Reserve the full portrait before painting the heading'
             assert cx+cw<=bx+bw-banner.photo_area_width+2,('Artist text must not overlap the complete photo',(width,height),(bx,by,bw,bh),(cx,cy,cw,ch),banner.photo_area_width)
             assert cy>=by and cy+ch<=by+bh+2,('The heading and controls must stay inside the masthead',(width,height),(bx,by,bw,bh),(cx,cy,cw,ch))
+            wait(lambda:banner.pixels is not None)
+            px,py,pw,ph=portrait_rect(banner.pixels[1],bw,bh)
+            assert ph>=(320 if width==1920 else 160),('The full artist photograph must be substantial',(width,height),(bw,bh),(px,py,pw,ph))
+            assert cx+cw<=bx+px and py>=0 and py+ph<=bh,('Artist text and actions must not cover the large photograph',(width,height),(cx,cy,cw,ch),(bx+px,by+py,pw,ph))
             adjustment=view.scroll.get_vadjustment()
             assert adjustment.get_upper()>adjustment.get_page_size(),'The complete artist catalogue must remain scrollable'
             adjustment.set_value(adjustment.get_upper()-adjustment.get_page_size());f.settle(.1)

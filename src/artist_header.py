@@ -7,7 +7,15 @@ from gi.repository import Gtk,GdkPixbuf,GLib
 
 def portrait_slot(width,height):
     """Leave a stable reading area; the photograph fits entirely to its right."""
-    return max(48,min(round(width*.28),round(height*1.5)))
+    return max(48,round(width*(.46 if width>=1200 else .40)))
+
+
+def portrait_rect(source_size,width,height):
+    """Contain the whole photograph in a generous gallery area, not an avatar."""
+    slot=portrait_slot(width,height);inset=20
+    scale=min(max(1,slot-2*inset)/source_size[0],max(1,height-2*inset)/source_size[1])
+    pw,ph=max(1,round(source_size[0]*scale)),max(1,round(source_size[1]*scale))
+    return width-slot+(slot-pw)//2,(height-ph)//2,pw,ph
 
 
 def compose(pixels,width,height):
@@ -15,31 +23,28 @@ def compose(pixels,width,height):
     photo=Image.frombytes('RGBA' if alpha else 'RGB',size,raw,'raw','RGBA' if alpha else 'RGB',stride).convert('RGBA')
     backdrop=Image.new('RGBA',photo.size,(35,41,31,255));backdrop.alpha_composite(photo)
     backdrop=backdrop.convert('RGB')
-    base=ImageOps.fit(backdrop,(width,height),Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(24))
+    base=ImageOps.fit(backdrop,(width,height),Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(max(18,min(48,height*.085))))
     base=ImageEnhance.Color(base).enhance(.4).convert('RGBA')
-    shade=ImageOps.mirror(Image.linear_gradient('L').rotate(90)).resize((width,height)).point(lambda v:55+int(v*.71))
+    shade=ImageOps.mirror(Image.linear_gradient('L').rotate(90)).resize((width,height)).point(lambda v:120+int(v*.45))
     base=Image.composite(Image.new('RGBA',(width,height),(26,30,22,255)),base,shade)
-    warmth=Image.new('RGBA',(width,height),(178,118,34,14));base=Image.alpha_composite(base,warmth)
+    warmth=Image.new('RGBA',(width,height),(178,118,34,10));base=Image.alpha_composite(base,warmth)
     # The background is atmospheric; the actual photo is contained in full,
     # with no face crop, stretching, edge fade or text painted over it.
-    slot=portrait_slot(width,height)
-    portrait=ImageOps.contain(photo,(max(1,slot-32),max(1,height-32)),Image.Resampling.LANCZOS)
-    x=width-slot+(slot-portrait.width)//2;y=(height-portrait.height)//2
-    bounds=(x-7,y-7,x+portrait.width+6,y+portrait.height+6)
+    x,y,pw,ph=portrait_rect(photo.size,width,height)
+    portrait=photo.resize((pw,ph),Image.Resampling.LANCZOS)
+    bounds=(x-6,y-6,x+pw+5,y+ph+5)
     shadow=Image.new('RGBA',(width,height));ImageDraw.Draw(shadow).rounded_rectangle(
-        tuple(value+(2 if index%2==0 else 3) for index,value in enumerate(bounds)),18,fill=(5,10,6,95))
-    base=Image.alpha_composite(base,shadow.filter(ImageFilter.GaussianBlur(7)))
-    # Shallow, matte metal: a restrained bevel rather than a bright border.
+        tuple(value+(3 if index%2==0 else 4) for index,value in enumerate(bounds)),14,fill=(5,10,6,100))
+    base=Image.alpha_composite(base,shadow.filter(ImageFilter.GaussianBlur(10)))
+    # A narrow gallery mount and one light edge keep the photograph dominant.
     fw,fh=bounds[2]-bounds[0]+1,bounds[3]-bounds[1]+1
     ramp=Image.blend(Image.linear_gradient('L').resize((fw,fh)),
         ImageOps.mirror(Image.linear_gradient('L').rotate(90)).resize((fw,fh)),.25)
-    metal=ImageOps.colorize(ramp,(65,69,56),(25,30,24)).convert('RGBA')
-    bezel=Image.new('L',(fw,fh));ImageDraw.Draw(bezel).rounded_rectangle((0,0,fw-1,fh-1),18,fill=255);metal.putalpha(bezel)
+    metal=ImageOps.colorize(ramp,(53,57,46),(27,32,26)).convert('RGBA')
+    bezel=Image.new('L',(fw,fh));ImageDraw.Draw(bezel).rounded_rectangle((0,0,fw-1,fh-1),14,fill=255);metal.putalpha(bezel)
     frame=Image.new('RGBA',(width,height));frame.alpha_composite(metal,bounds[:2]);edge=ImageDraw.Draw(frame)
-    edge.rounded_rectangle(bounds,18,outline=(226,215,183,42),width=1)
-    edge.line((bounds[0]+18,bounds[1]+1,bounds[2]-18,bounds[1]+1),fill=(247,231,193,48))
-    edge.rectangle((x-2,y-2,x+portrait.width+1,y+portrait.height+1),outline=(9,14,9,180),width=2)
-    edge.line((x-1,y-1,x+portrait.width,y-1),fill=(243,229,193,25))
+    edge.rounded_rectangle(bounds,14,outline=(226,215,183,42),width=1)
+    edge.line((bounds[0]+14,bounds[1]+1,bounds[2]-14,bounds[1]+1),fill=(247,231,193,35))
     base=Image.alpha_composite(base,frame);base.alpha_composite(portrait,(x,y))
     mask=Image.new('L',(width,height));ImageDraw.Draw(mask).rounded_rectangle((0,0,width-1,height-1),26,fill=255)
     base.putalpha(mask)

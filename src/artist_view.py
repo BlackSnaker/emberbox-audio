@@ -17,6 +17,13 @@ CSS=b'''
 .stage-artist-hero.stage-artist-banner-content { background-image: none; background-color: transparent; border: none; box-shadow: none; }
 .stage-artist-name { color: #fbf1c7; font-size: 60px; font-weight: bold; letter-spacing: -1.8px; }
 .stage-artist-name.stage-artist-long { font-size: 40px; letter-spacing: -1px; }
+.stage-artist-name.stage-artist-display { font-size: 104px; letter-spacing: -3.5px; }
+.stage-artist-name.stage-artist-display-medium { font-size: 88px; letter-spacing: -2.7px; }
+.stage-artist-name.stage-artist-display-long { font-size: 64px; letter-spacing: -1.8px; }
+.stage-artist-hero.stage-artist-banner-content { padding: 36px 40px; }
+.stage-artist-banner-content .stage-artist-chip { font-size: 11px; padding: 5px 11px; }
+.ember-stage .stage-artist-banner-content button.stage-quiet,
+.ember-stage .stage-artist-banner-content button.stage-accent { font-size: 13px; padding: 11px 20px; border-radius: 23px; }
 .stage-artist-kicker { color: #d4b568; font-size: 9px; letter-spacing: 2px; }
 .stage-artist-summary { color: #bdae93; font-size: 12px; }
 .stage-artist-prose { color: #d5c7a7; font-size: 15px; }
@@ -49,6 +56,17 @@ CSS=b'''
 .stage-artist-hero.stage-artist-mini { padding: 12px 16px; }
 .ember-stage .stage-artist-mini .stage-artist-name { font-size: 26px; }
 .ember-stage .stage-artist-mini button.stage-accent, .ember-stage .stage-artist-mini button.stage-quiet { padding: 6px 12px; min-height: 16px; }
+.ember-stage .small-screen .stage-artist-display,
+.ember-stage .small-screen .stage-artist-display-medium,
+.ember-stage .small-screen .stage-artist-display-long { font-size: 40px; letter-spacing: -1px; }
+.ember-stage .small-screen .stage-artist-banner-content { padding: 20px 24px; }
+.ember-stage .small-screen .stage-artist-banner-content button.stage-quiet,
+.ember-stage .small-screen .stage-artist-banner-content button.stage-accent { font-size: 11px; padding: 8px 13px; }
+.ember-stage .stage-artist-mini .stage-artist-display,
+.ember-stage .stage-artist-mini .stage-artist-display-medium,
+.ember-stage .stage-artist-mini .stage-artist-display-long { font-size: 34px; }
+.ember-stage .stage-artist-mini.stage-artist-banner-content { padding: 16px 20px; }
+.ember-stage .stage-artist-mini .stage-artist-chip { font-size: 10px; padding: 4px 8px; }
 '''
 
 NAMES_SECTION={
@@ -65,6 +83,10 @@ def paragraph(value,style='stage-artist-prose'):
     result.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR);result.set_max_width_chars(82)
     result.set_selectable(True);result.set_hexpand(True)
     return result
+
+
+def masthead_height(height):
+    return 360 if height>=900 else 320 if height>=800 else 248 if height>=680 else 212
 
 
 class ArtistView(Gtk.Box):
@@ -274,6 +296,9 @@ class ArtistView(Gtk.Box):
         name=value.get('title') if release else value.get('name') or self.reference.get('name','')
         title=label(name,'stage-artist-name',28)
         if len(str(name))>28 or release:title.get_style_context().add_class('stage-artist-long')
+        if not release:
+            title.get_style_context().add_class('stage-artist-display-long' if len(str(name))>16 else
+                'stage-artist-display-medium' if len(str(name))>8 else 'stage-artist-display')
         title.set_line_wrap(True);title.set_lines(2);names.pack_start(title,False,False,0)
         meta=[]
         if release:
@@ -303,7 +328,7 @@ class ArtistView(Gtk.Box):
             self.artwork.load(image,value.get('image',''),self.portrait_size,24,high_quality=True)
             self.content.pack_start(shell,False,False,0)
         else:
-            height=152 if self.portrait_size<128 else 184 if self.height<800 else 220
+            height=masthead_height(self.height)
             if len(str(name))>28:height+=24
             banner=ArtistBanner(shell,value.get('image',''),self.banner_cache,height)
             self.hero_banner=banner
@@ -526,7 +551,7 @@ class ArtistView(Gtk.Box):
 
     def resize(self,width,height):
         self.wide=width>=1200;self.height=height;self.crumb.set_visible(self.wide)
-        size=(max(116,min(164,(width-160)//7-26)),88 if height<680 else 128 if height<800 else 164,self.wide)
+        size=(max(116,min(164,(width-160)//7-26)),88 if height<680 else 128 if height<800 else 164,self.wide,masthead_height(height))
         if self.size==size:return
         self.size=size;self.card_size,self.portrait_size=size[:2]
         if self.active:self.render()

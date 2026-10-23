@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.12.5 — 2026-10-23
+
+- Recompose the artist masthead as a large photographic gallery: a 320px square portrait in a 360px desktop hero, a generous right photo bay and a poster-scale artist name. Adapt the hero to shorter displays.
+- Simplify the photo mount to a narrow matte edge and one hairline, with a softer shadow; retain the complete image and its blurred backdrop. Keep the heading and playback actions in their own half.
+- Verify actual portrait size, full source edges, wide photos, short/long artist names, visible first-screen music, three GTK sizes and both languages; refresh the previews.
+
 ## 0.12.4 — 2026-10-23
 
 - Show the complete artist photograph at its original aspect ratio inside a shallow matte metal frame, over a softly blurred, tinted copy of the same photo.

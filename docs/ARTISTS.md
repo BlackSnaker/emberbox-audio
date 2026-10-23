@@ -11,17 +11,23 @@ not start a track.
 
 ## A warmer portrait
 
-The artist's complete photograph sits inside a restrained matte metal frame on
-the right: a shallow bevel, a fine warm highlight and a soft shadow. Portrait,
-landscape and square photos keep their original proportions and all source
-edges. A larger, softly blurred copy of the same photo supplies the warm
-background; the clear photograph is never stretched or faded away.
+A large, complete photograph anchors the right half of an editorial masthead.
+On a 1920×1080 display the hero is 360px tall and a square photograph is 320px,
+with a generous surrounding photo bay; wide photos can use its full width.
+Short artist names take a poster-scale headline, while longer names adapt.
+The hero becomes shorter on smaller displays.
+
+The photo mount uses a narrow matte edge, one warm hairline and a soft shadow.
+Portrait, landscape and square photos keep all source edges and proportions.
+A larger, softly blurred copy of the same photo supplies a restrained backdrop.
+The clear photograph is never stretched or faded away.
 
 The cream name, genre badges and amber controls have their own reading area,
-so they do not cover the photograph. The masthead grows when the heading needs
-more room. Missing photos retain a quiet gradient fallback. Photo loading and
-composition run away from GTK; original-aspect photos use a separate thumbnail
-cache entry and completed banners use a small bounded memory cache.
+so they do not cover the photograph. Featured music and popular songs follow
+the masthead; the discography stays available below. Missing photos retain a
+quiet gradient fallback. Photo loading and composition run away from GTK;
+original-aspect photos use a separate thumbnail cache entry and completed
+banners use a small bounded memory cache.
 
 **Overview**, **All releases** (Apple Music), **Albums**, **Singles & EPs**, **Compilations**, **Appears on** and
 **About** share the compact toolbar above the scroll area. Overview pairs a
