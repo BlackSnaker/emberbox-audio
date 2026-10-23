@@ -77,6 +77,8 @@ jobs:
           node tests/apple_browser_test.js
           node tests/yandex_web_test.js
           node tests/web_host_test.js
+          node tests/artist_web_test.js
+          node tests/yandex_artist_test.js
           node tests/media_quality_test.js
       - name: GTK layout and controls
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/gui_smoke.py
@@ -90,6 +92,10 @@ jobs:
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1280x720x24' /usr/bin/python3 tests/reveal_smoke.py
       - name: Fullscreen collection and listening queue
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/library_smoke.py
+      - name: Artist room, releases and source changes
+        run: |
+          GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/artist_smoke.py
+          EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/artist_smoke.py
       - name: Audio quality badge
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/quality_smoke.py
       - name: Silent motion artwork

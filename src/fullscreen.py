@@ -19,6 +19,8 @@ from music_library import MusicService
 from listening_library import LibraryView,QueueView,CSS as LIBRARY_CSS
 from quality_badge import QualityBadge,CSS as QUALITY_CSS
 from karaoke import KaraokeView,CSS as KARAOKE_CSS
+from artist_catalog import artist_ref
+from artist_view import ArtistView,CSS as ARTIST_CSS
 
 
 CSS = b'''
@@ -141,6 +143,7 @@ class FullscreenPlayer:
         self.owns_music=not hasattr(host,'music')
         self.music=getattr(host,'music',None) or MusicService(host)
         self.page='playing';self.nav_sync=False
+        self.artist_return='playing'
         self.visible=False;self.closed=False;self.timer=0;self.tick=0
         self.lyrics_visible=False
         self.dismiss_pending=False
@@ -161,7 +164,7 @@ class FullscreenPlayer:
         self.window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self.window.connect('delete-event',lambda *_args:(self.dismiss(),True)[1])
         self.window.connect('key-press-event',self.on_key)
-        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS+KARAOKE_CSS)
+        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS+KARAOKE_CSS+ARTIST_CSS)
         Gtk.StyleContext.add_provider_for_screen(self.window.get_screen(),provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+5)
         self.provider=provider
         overlay=Gtk.Overlay();overlay.add(Gtk.Box());self.window.add(overlay)
@@ -210,7 +213,11 @@ class FullscreenPlayer:
         self.title=label('','stage-track-title',True);self.title.set_lines(2);self.title.set_ellipsize(Pango.EllipsizeMode.END)
         self.left.pack_start(self.title,False,False,0)
         self.artist=label('','stage-artist');self.artist.set_ellipsize(Pango.EllipsizeMode.END)
-        self.left.pack_start(self.artist,False,False,0)
+        self.artist_button=self.button('',self.open_artist,'stage-artist-link')
+        artist_line=Gtk.Box(spacing=7);artist_line.pack_start(self.artist,True,True,0)
+        artist_line.pack_end(label('›','stage-album'),False,False,0)
+        self.artist_button.remove(self.artist_button.get_child());self.artist_button.add(artist_line)
+        self.left.pack_start(self.artist_button,False,False,0)
         self.album=label('','stage-album');self.album.set_ellipsize(Pango.EllipsizeMode.END)
         self.left.pack_start(self.album,False,False,0)
         self.quality=QualityBadge();self.left.pack_start(self.quality,False,False,0)
@@ -251,9 +258,11 @@ class FullscreenPlayer:
         self.pages=Gtk.Stack();self.pages.set_hhomogeneous(False);self.pages.set_vhomogeneous(False)
         self.pages.set_transition_type(Gtk.StackTransitionType.CROSSFADE);self.pages.set_transition_duration(160)
         self.pages.add_named(self.body,'playing')
-        self.library_view=LibraryView(self.music,self.artwork,self.open_accounts)
-        self.queue_view=QueueView(self.music,self.artwork)
+        self.library_view=LibraryView(self.music,self.artwork,self.open_accounts,self.open_artist)
+        self.queue_view=QueueView(self.music,self.artwork,self.open_artist)
         self.pages.add_named(self.library_view,'library');self.pages.add_named(self.queue_view,'queue')
+        self.artist_view=ArtistView(self.music,self.artwork,lambda:self.show_page(self.artist_return),self.open_accounts,self.search_artist)
+        self.pages.add_named(self.artist_view,'artist')
         self.karaoke=KaraokeView(self);self.pages.add_named(self.karaoke,'karaoke')
         self.pages.set_visible_child_name('playing');self.layout.pack_start(self.pages,True,True,0)
         footer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10)
@@ -319,13 +328,14 @@ class FullscreenPlayer:
     def show_page(self,page,force=False):
         if not force and (self.reveal.active or page==self.page):
             self.music_changed();return
-        self.library_view.deactivate();self.queue_view.deactivate()
+        self.library_view.deactivate();self.queue_view.deactivate();self.artist_view.deactivate()
         if self.page=='karaoke':self.karaoke.deactivate()
         self.page=page;self.pages.set_visible_child_name(page)
         self.lyrics_button.set_no_show_all(page!='playing');self.lyrics_button.set_visible(page=='playing')
         self.playing_caption.set_visible(page!='playing')
         if page=='library':self.library_view.activate()
         elif page=='queue':self.queue_view.activate()
+        elif page=='artist':self.artist_view.activate()
         elif page=='karaoke':self.track=None;self.karaoke.activate()
         else:self.track=None
         if page not in ('playing','karaoke'):
@@ -333,6 +343,15 @@ class FullscreenPlayer:
         if page=='karaoke':self.motion.set_playing(False)
         self.music_changed()
         if self.visible:self.update()
+
+    def open_artist(self,item=None):
+        if self.reveal.active:return
+        if self.page!='artist':self.artist_return=self.page if self.page in ('playing','library','queue') else 'playing'
+        self.artist_view.set_reference(artist_ref(self.host,item))
+        self.show_page('artist',force=True)
+
+    def search_artist(self,name):
+        self.show_page('library');self.library_view.entry.set_text(name[:200]);self.library_view.search()
 
     def open(self):
         if self.closed:return
@@ -375,7 +394,7 @@ class FullscreenPlayer:
         self.reveal.finish()
         self.dismiss_pending=False
         self.visible=False
-        self.library_view.deactivate();self.queue_view.deactivate()
+        self.library_view.deactivate();self.queue_view.deactivate();self.artist_view.deactivate()
         self.karaoke.deactivate()
         self.track=None
         self.lyrics.set_track('','')
@@ -430,6 +449,7 @@ class FullscreenPlayer:
         self.body.set_halign(Gtk.Align.FILL if visible else Gtk.Align.CENTER)
         self.left.set_halign(Gtk.Align.START if visible else Gtk.Align.CENTER)
         for item in (self.title,self.artist,self.album):item.set_xalign(0. if visible else .5)
+        self.artist_button.set_halign(Gtk.Align.START if visible else Gtk.Align.CENTER)
         self.quality.set_halign(Gtk.Align.START if visible else Gtk.Align.CENTER)
         self.lyrics_button.set_label(text('Artwork','Обложка') if visible else text('Lyrics','Текст песни'))
         self.lyrics_button.get_accessible().set_name(text('Show artwork','Показать обложку') if visible else text('Show lyrics','Показать текст песни'))
@@ -461,7 +481,7 @@ class FullscreenPlayer:
     def close(self):
         if self.closed:return
         self.hide();self.closed=True
-        self.library_view.close();self.queue_view.close();self.music_unsubscribe()
+        self.library_view.close();self.queue_view.close();self.artist_view.close();self.music_unsubscribe()
         self.karaoke.close()
         if self.owns_music:self.music.close()
         self.lyrics.close()
@@ -475,6 +495,7 @@ class FullscreenPlayer:
         if width<100 or height<100 or self.layout_size==(width,height):return
         self.layout_size=(width,height)
         self.library_view.card_size=max(128,min(240,(width-230)//6-26))
+        self.artist_view.resize(width,height)
         small=height<850 or width<1200
         self.karaoke.resize(height<800)
         self.equalizer.set_compact(small)
@@ -576,6 +597,7 @@ class FullscreenPlayer:
     def on_key(self,_window,event):
         key=Gdk.keyval_name(event.keyval)
         if key in ('Escape','F11'):self.dismiss();return True
+        if key=='Left' and event.state&Gdk.ModifierType.MOD1_MASK and self.page=='artist':self.artist_view.back();return True
         if event.state&Gdk.ModifierType.CONTROL_MASK and key.lower()=='f':
             self.show_page('library');self.library_view.select('search');self.library_view.entry.grab_focus();return True
         if isinstance(self.window.get_focus(),(Gtk.Entry,Gtk.TextView)):return False
@@ -599,6 +621,10 @@ class FullscreenPlayer:
         title,artist,album=h.title.get_text(),h.artist.get_text(),h.album.get_text()
         for item,value in ((self.title,title),(self.artist,artist),(self.album,album)):
             if item.get_text()!=value:item.set_text(value)
+        self.artist_button.set_sensitive(bool(artist and h.length>0))
+        accessible_name=text('Open artist: ','Открыть артиста: ')+artist
+        if self.artist_button.get_accessible().get_name()!=accessible_name:
+            self.artist_button.get_accessible().set_name(accessible_name)
         self.quality.update(h)
         names={'spotify':'Spotify','apple-music':'Apple Music','youtube':'YouTube','yandex-music':text('Yandex Music','Яндекс Музыка')}
         for button,value in ((self.source_button,'●  '+names.get(h.source,h.source)+'  ⌄'),(self.play_button,'Ⅱ' if h.playing else '▶')):
@@ -616,6 +642,7 @@ class FullscreenPlayer:
             value=text('Now playing: ','Сейчас: ')+title+'  ·  '+artist
             if self.playing_caption.get_text()!=value:self.playing_caption.set_text(value)
         if self.page=='library' and self.library_view.source!=h.source:self.library_view.activate()
+        if self.page=='artist' and self.artist_view.source!=h.source:self.artist_view.activate()
         if self.page=='queue':self.queue_view.render()
         seconds=max(0,h.position/1e6)
         if self.last_position!=h.position or not h.playing:

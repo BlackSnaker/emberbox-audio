@@ -61,7 +61,7 @@ async function emberboxAppleCommand(request) {
   if (!music?.api) throw Error('MusicKit is not ready. Reload the Apple Music tab and sign in.');
   if (!music.isAuthorized) throw Error('Sign in to Apple Music in this browser first.');
   const params = request.params || {};
-  const kinds = ['library-playlists', 'library-albums', 'library-songs', 'songs'];
+  const kinds = ['library-playlists', 'library-albums', 'library-songs', 'songs','albums'];
   const id = String(params.id || '');
   const kind = String(params.kind || '');
   const category = String(params.category || 'playlists');
@@ -82,10 +82,15 @@ async function emberboxAppleCommand(request) {
     return {id: String(resource.id), kind: String(resource.type), title: String(a.name || 'Untitled'),
       subtitle: String(a.artistName || a.curatorName || ''), image: image(a.artwork),
       artist: String(a.artistName || ''), duration_ms: Number(a.durationInMillis || 0),
-      uri: `apple:${resource.type}:${resource.id}`, playable: !!a.playParams};
+      uri: `apple:${resource.type}:${resource.id}`, playable: !!a.playParams,
+      releaseDate:String(a.releaseDate||''),trackCount:Number(a.trackCount||0),
+      description:String(a.editorialNotes?.standard||a.editorialNotes?.short||'').slice(0,14000),
+      copyright:String(a.copyright||''),recordLabel:String(a.recordLabel||''),
+      isCompilation:a.isCompilation===true,isSingle:a.isSingle===true};
   }
   async function api(path, query = {}) {
-    if (!path.startsWith('/v1/me/library/') && !/^\/v1\/catalog\/[a-z]{2}\/search$/.test(path)) throw Error('Unsupported library request');
+    const catalog=/^\/v1\/catalog\/[a-z]{2}\/(search|songs\/\d{1,20}(\/artists)?|albums\/\d{1,20}(\/tracks)?|artists\/\d{1,20}(\/view\/(top-songs|latest-release|full-albums|singles|compilation-albums|appears-on-albums))?)$/;
+    if (!path.startsWith('/v1/me/library/') && !catalog.test(path)) throw Error('Unsupported library request');
     if (typeof music.api.music === 'function') {
       const response = await music.api.music(path, query);
       return response?.data || response || {};
@@ -99,6 +104,68 @@ async function emberboxAppleCommand(request) {
     throw Error('This MusicKit version does not support this operation');
   }
   const player = music.player || music;
+  // Documented catalogue relationships keep artist identity tied to a song.
+  // No name-based match is silently selected when that relationship is absent.
+  function storefront() {
+    music.storefrontId=undefined;
+    const value=String(music.storefrontId||'us');
+    if(!/^[a-z]{2}$/.test(value))throw Error('Invalid request');
+    return value;
+  }
+  function artistItem(resource) {
+    const a=resource.attributes||{};
+    return {id:String(resource.id),name:String(a.name||'').slice(0,300),
+      image:image(a.artwork).replace(/180x180/,'800x800'),genres:(a.genreNames||[]).filter(v=>typeof v==='string').slice(0,8),
+      bio:String(a.editorialNotes?.standard||a.editorialNotes?.short||'').slice(0,14000),url:publicUrl(a.url)};
+  }
+  function page(result) {
+    const data=Array.isArray(result)?result:result.data||[];
+    let next=null;
+    if(result.next) {try {const value=Number(new URL(result.next,'https://api.music.apple.com').searchParams.get('offset'));
+      if(Number.isSafeInteger(value)&&value>offset&&value<=100000)next=value;
+    }catch{}}
+    return {items:data.filter(r=>['albums','songs'].includes(r.type)).map(item),next};
+  }
+  if(request.method==='artist') {
+    const sf=storefront();let artistId=id;
+    if(artistId&&!/^\d{1,20}$/.test(artistId))throw Error('Invalid artist');
+    if(!artistId) {
+      const songId=String(params.songId||'');let song;
+      const resourceType=['albums','library-albums','album'].includes(String(params.songKind||''))?'albums':'songs';
+      if(/^\d{1,20}$/.test(songId)) {
+        song=(await api(`/v1/catalog/${sf}/${resourceType}/${songId}`,{include:'artists'})).data?.[0];
+      } else if(safeId.test(songId)) {
+        try {song=(await api(`/v1/me/library/${resourceType}/${encodeURIComponent(songId)}/catalog`,{include:'artists'})).data?.[0];}catch{}
+      }
+      const choices=(song?.relationships?.artists?.data||[]).filter(a=>/^\d{1,20}$/.test(String(a.id))).map(artistItem);
+      if(choices.length===1)artistId=choices[0].id;
+      else if(choices.length)return {choices};
+      else {
+        const name=String(params.name||'').trim().slice(0,200);
+        if(!name)return {choices:[]};
+        const result=await api(`/v1/catalog/${sf}/search`,{term:name,types:'artists',limit:12});
+        return {choices:(result.results?.artists?.data||[]).map(artistItem)};
+      }
+    }
+    const resource=(await api(`/v1/catalog/${sf}/artists/${artistId}`,{views:'top-songs,latest-release',extend:'editorialNotes'})).data?.[0];
+    if(!resource)throw Error('NOT_FOUND');
+    const sections=['latest-release','top-songs'].map(key=>({id:key,...page(resource.views?.[key]||{})}));
+    return {artist:artistItem(resource),sections};
+  }
+  if(request.method==='artistSection') {
+    const views={albums:'full-albums',singles:'singles',compilations:'compilation-albums',appears:'appears-on-albums'};
+    const view=views[params.section];
+    if(!/^\d{1,20}$/.test(id)||!view)throw Error('Invalid artist section');
+    return page(await api(`/v1/catalog/${storefront()}/artists/${id}/view/${view}`,{limit:24,offset}));
+  }
+  if(request.method==='release') {
+    if(!/^\d{1,20}$/.test(id))throw Error('Invalid album');
+    const sf=storefront();
+    const resource=(await api(`/v1/catalog/${sf}/albums/${id}`,{extend:'editorialNotes'})).data?.[0];
+    if(!resource)throw Error('NOT_FOUND');
+    const tracks=offset?await api(`/v1/catalog/${sf}/albums/${id}/tracks`,{limit:100,offset}):resource.relationships?.tracks||{};
+    return {release:item(resource),...page(tracks)};
+  }
   if (request.method === 'search') {
     const term = String(params.term || '').trim().slice(0,200);
     if (!term) return {items:[], next:null};
@@ -149,7 +216,7 @@ async function emberboxAppleCommand(request) {
     if (!kinds.includes(kind) || !safeId.test(id)) throw Error('Invalid library item');
     // MusicKit detects library IDs itself. Its legacy "librarySong" option
     // produces a duplicated /me/library/library-songs path in current builds.
-    const queueKind = {'library-songs':'song','songs':'song','library-albums':'album','library-playlists':'playlist'}[kind];
+    const queueKind = {'library-songs':'song','songs':'song','albums':'album','library-albums':'album','library-playlists':'playlist'}[kind];
     // An initial public page route can override the account's storefront.
     // Reset only MusicKit's request override, so its documented setter falls
     // back to the signed-in account. The account's country is not changed.

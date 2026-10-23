@@ -100,7 +100,7 @@ class YandexWeb(AppleWeb):
         if not self.closed:
             try:
                 self.state=future.result()
-                if self.state.get('integrationVersion') in (1,2,3) and not self.upgrade_attempted:
+                if self.state.get('integrationVersion') in (1,2,3,4) and not self.upgrade_attempted:
                     self.upgrade_attempted=self.upgrading=True
                     self.pool.submit(self._upgrade_adapter,dict(self.state)).add_done_callback(lambda item:GLib.idle_add(self._adapter_upgraded,item))
             except Exception:self.state={}
@@ -119,7 +119,7 @@ class YandexWeb(AppleWeb):
             if self.connected:
                 try:
                     status=self.bridge.request('status')
-                    if status.get('integrationVersion',0)>=4 and (status.get('ready') or not previous.get('playing')):
+                    if status.get('integrationVersion',0)>=5 and (status.get('ready') or not previous.get('playing')):
                         self.bridge.request('enable',enabled=self.enabled)
                         if self.enabled and previous.get('playing') and status.get('authorized'):
                             if previous.get('wave'):self.bridge.request('wave')

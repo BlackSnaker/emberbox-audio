@@ -12,7 +12,7 @@ const service = yandex ? {title:'Yandex Music',origin:'https://music.yandex.ru/'
   url:'https://music.yandex.ru/',command:'emberboxYandexCommand',page:'yandex.js',error:'YANDEX_REQUEST_FAILED'} :
   {title:'Apple Music',origin:'https://music.apple.com/',url:'https://music.apple.com/us/new',
    command:'emberboxAppleCommand',page:'page.js',error:'APPLE_REQUEST_FAILED'};
-const methods = ['status','browse','tracks','search','play','transport','seek',...(yandex?['wave','feedback']:[])];
+const methods = ['status','browse','tracks','search','play','transport','seek','artist','artistSection','release',...(yandex?['wave','feedback']:[])];
 const pageCommand = fs.readFileSync(path.join(__dirname,service.page),'utf8');
 let enabled = false;
 const profile = process.env.EMBERBOX_APPLE_PROFILE;
@@ -124,7 +124,7 @@ async function command(win, request, navigations=0) {
   if(!methods.includes(request.method)) throw Error('UNSUPPORTED');
   if(!win.webContents.getURL().startsWith(service.origin)) {
     if(yandex&&request.method!=='status')throw Error('SIGN_IN_REQUIRED');
-    return {ready:false,authorized:false,integrationVersion:yandex?4:3};
+    return {ready:false,authorized:false,integrationVersion:yandex?5:4};
   }
   const reasons=['CONTENT_EQUIVALENT','CONTENT_UNAVAILABLE','CONTENT_UNSUPPORTED','DEVICE_LIMIT','GEO_BLOCK',
     'INVALID_ARGUMENTS','MEDIA_LICENSE','MEDIA_KEY','MEDIA_PLAYBACK','NETWORK_ERROR','SUBSCRIPTION_ERROR','TypeError','ReferenceError','Error',
@@ -152,7 +152,7 @@ async function command(win, request, navigations=0) {
     playing:!!result.playing,position:Number(result.position)||0,duration:Number(result.duration)||0,
     hasTrack:!!result.title,windowVisible:win.isVisible()});
   if(request.method==='status') {
-    result.integrationVersion=yandex?4:3;
+    result.integrationVersion=yandex?5:4;
     result.audioQuality=win.emberboxQuality?.snapshot(String(result.id||result.title||''))||{};
     record({audioQuality:result.audioQuality,maximumQualityRequested:result.qualityPreference?.applied===true});
     if(yandex)record({capabilities:Object.fromEntries(['player','wave','navigation','metadata','store','legacy'].map(key=>[key,result.capabilities?.[key]===true]))});

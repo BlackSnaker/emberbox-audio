@@ -85,9 +85,10 @@ def queue_greeting():
 
 
 class LibraryView(Gtk.Box):
-    def __init__(self,service,artwork,accounts):
+    def __init__(self,service,artwork,accounts,open_artist=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL,spacing=13)
         self.service,self.artwork,self.accounts=service,artwork,accounts
+        self.open_artist=open_artist
         self.source=service.host.source;self.category='home';self.selected=None;self.items=[]
         self.cache={};self.next_offset=None;self.busy=False;self.active=False;self.updating=False
         self.card_size=160;self.request=0;self.song_buttons=[];self.album_buttons=[]
@@ -117,6 +118,9 @@ class LibraryView(Gtk.Box):
         self.play_all_button.get_style_context().add_class('stage-accent')
         self.add_all_button=button('+ '+text('Add tracks','Добавить треки'),lambda:self.add(self.songs()))
         self.context.pack_start(self.back_button,False,False,0)
+        if open_artist:
+            self.artist_button=button(text('Artist','Артист')+'  ›',lambda:open_artist(self.selected))
+            self.context.pack_start(self.artist_button,False,False,0)
         self.context.pack_end(self.add_all_button,False,False,0);self.context.pack_end(self.play_all_button,False,False,0)
         for child in self.context.get_children():child.show_all()
         self.pack_start(self.context,False,False,0)
@@ -251,6 +255,9 @@ class LibraryView(Gtk.Box):
             names.pack_start(label(item.get('artist') or item.get('subtitle',''),'stage-card-subtitle',55),False,False,0)
             box.pack_start(names,True,True,0);play.remove(play.get_child());play.add(box)
             row.pack_start(play,True,True,0);row.pack_start(label(duration(item),'stage-card-subtitle'),False,False,0)
+            if self.open_artist:
+                artist=button(text('Artist','Артист')+' ›',lambda value=item:self.open_artist(value),'stage-artist-link',text('Open artist: ','Открыть артиста: ')+item.get('artist',''))
+                artist.set_sensitive(bool(item.get('artist')));row.pack_start(artist,False,False,2)
             add=button('+',lambda value=item:self.add([value]),'stage-add',text('Add to queue: ','Добавить в очередь: ')+item.get('title',''))
             valid=bool(track(item,self.source));play.set_sensitive(valid);add.set_sensitive(valid)
             row.pack_end(add,False,False,0);self.content.pack_start(row,False,False,0)
@@ -273,9 +280,10 @@ class LibraryView(Gtk.Box):
 
 
 class QueueView(Gtk.Box):
-    def __init__(self,service,artwork):
+    def __init__(self,service,artwork,open_artist=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL,spacing=14)
         self.service,self.artwork=service,artwork;self.active=False;self.rows=[];self.key=None
+        self.open_artist=open_artist
         hero=Gtk.Box(spacing=15);names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5)
         self.title=label(queue_greeting(),'stage-library-title',40)
         names.pack_start(self.title,False,False,0)
@@ -291,7 +299,12 @@ class QueueView(Gtk.Box):
         current_names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5)
         self.current_status=label('','stage-library-source');self.current_title=label('','stage-card-title',75)
         self.current_artist=label('','stage-card-subtitle',85)
-        for v in (self.current_status,self.current_title,self.current_artist):current_names.pack_start(v,False,False,0)
+        for v in (self.current_status,self.current_title):current_names.pack_start(v,False,False,0)
+        if open_artist:
+            self.artist_button=button('',lambda:open_artist(),'stage-artist-link',text('Open current artist','Открыть текущего артиста'))
+            self.artist_button.set_halign(Gtk.Align.START);self.artist_button.remove(self.artist_button.get_child());self.artist_button.add(self.current_artist)
+            current_names.pack_start(self.artist_button,False,False,0)
+        else:current_names.pack_start(self.current_artist,False,False,0)
         self.current.pack_start(current_names,True,True,0);self.pack_start(self.current,False,False,0)
         self.content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8)
         self.scroll=scroll(self.content);self.pack_start(self.scroll,True,True,0)

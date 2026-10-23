@@ -2,6 +2,15 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.12.0 — 2026-10-23
+
+- Open the artist from the fullscreen song, collection or queue, with a photographic Grunesphism masthead, portrait, genre details and persistent category navigation.
+- Browse albums, singles/EPs, compilations and appearances; open a release for its tracks and supplied liner notes, play its continuation or add songs to the existing queue.
+- Use Apple Music catalogue relationships and paged views through the signed-in engine. Offer explicit collaborator/namesake choices; retain source-provided biographies and recording availability.
+- Add version-dependent Spotify/Yandex artist readers and an explicit YouTube in-player search fallback. Keep missing categories honest and avoid playback-stopping page reloads while browsing.
+- Prepare/cache masthead images off GTK, reject stale page/source replies and synchronize source changes before creating a new browse request. Update the independent engine adapters while retaining profiles.
+- Check actual GTK navigation, loading responsiveness, queue continuation, three display sizes and both languages; add offline source contracts, bilingual guides and original-media previews.
+
 ## 0.11.3 — 2026-10-22
 
 - Welcome AI karaoke with warm breathing embers, an indeterminate amber light bar and clear preparation/buffering captions. Crossfade back to timed lyrics when the processed-audio helper actually reports readiness.

@@ -9,6 +9,7 @@ from listening_queue import QueueBook,EndWatch,track,LIMIT
 from paths import CONFIG_DIR
 from source_picker import text
 from youtube_search import Search,video_url
+from artist_catalog import ArtistRepository
 
 NAMES={'spotify':'Spotify','apple-music':'Apple Music','youtube':'YouTube','yandex-music':'Яндекс Музыка'}
 
@@ -24,6 +25,8 @@ class MusicRepository:
     def load(self,source,category,term='',collection=None,offset=0):
         h=self.host
         with self.locks[source]:
+            if category in ('artist','artist-section','release'):
+                return ArtistRepository(h).load(source,category,collection,offset)
             if source=='spotify':
                 with LocalSpotify() as client:
                     if collection:return client.tracks(collection)
@@ -119,6 +122,7 @@ class MusicService:
         for callback in tuple(self.listeners):callback()
 
     def load(self,category,done,term='',collection=None,offset=0):
+        if self.source!=self.host.source:self.source_changed()
         if self.browse_future:self.browse_future.cancel()
         self.browse_generation+=1;generation=self.browse_generation;source=self.host.source
         self.youtube.cancel();self.youtube_done=None

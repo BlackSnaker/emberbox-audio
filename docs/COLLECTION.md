@@ -10,6 +10,9 @@ The fullscreen header has three pages: **Listening**, **Collection**, and **Queu
 
 Open **Collection**, then choose **For you**, **Albums**, or **Search**. Open a cover to see its tracks. Type a song, artist or album name into the search field and press **Enter**; **Ctrl+F** opens and focuses search. Space and arrow keys inside the field edit text instead of controlling playback.
 
+**Artist ›** opens the [artist room](ARTISTS.md) inside fullscreen, with a
+photographic header, available releases, editorial information and album tracks.
+
 Click a track to play it now. **+** adds it to the selected source's queue without interrupting music. A collection's **Play N** starts the loaded tracks in order; **Queue N** appends them. **Load more** appears when the source exposes another page. Some Spotify collections expose only their first 100 loaded tracks; the displayed count makes that limit explicit.
 
 | Source | Collection | Search | Albums |

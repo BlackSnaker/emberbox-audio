@@ -4,7 +4,7 @@
  */
 async function emberboxYandexCommand(request) {
   if (location.origin !== 'https://music.yandex.ru') throw Error('NOT_READY');
-  const allowed=['status','wave','browse','tracks','search','play','transport','seek','feedback'];
+  const allowed=['status','wave','browse','tracks','search','play','transport','seek','feedback','artist','artistSection','release'];
   if(!allowed.includes(request.method)) throw Error('UNSUPPORTED');
   const p=request.params||{};
   const state=window.__emberboxYandex||(window.__emberboxYandex={items:new Map()});
@@ -111,6 +111,9 @@ async function emberboxYandexCommand(request) {
     canPrevious:!!view?.canMoveBackward||!!button('PREVIOUS_TRACK_BUTTON')||!!external?.prev,
     wave:!!state.store?.sonataState?.isVibeContext||!!button('MY_VIBE_PAUSE_BUTTON'),
     qualityPreference:{mode:'maximum',applied:maximumApplied,reason:subscribed===false?'subscription':maximumApplied?'':'adapter'}};
+  status.artists=(Array.isArray(track?.artists)?track.artists:Array.isArray(extTrack?.artists)?extTrack.artists:[])
+    .filter(a=>/^\d{1,20}$/.test(String(a.id||''))).slice(0,12)
+    .map(a=>({id:String(a.id),name:String(a.name||a.title||'').slice(0,300)}));
   if(request.method==='status')return status;
   if(region)throw Error('REGION_UNAVAILABLE');
   if(!authorized)throw Error('SIGN_IN_REQUIRED');
@@ -123,13 +126,14 @@ async function emberboxYandexCommand(request) {
         /^\/users\/[\w.@-]{1,100}\/playlists\/\d{1,20}$/.test(url.pathname)?url.pathname:'';
     }catch{return '';}
   };
-  async function navigate(route) {
+  async function navigate(route,preserve=false) {
     if(location.pathname+location.search===route)return;
     context();
     if(state.router){state.router.push(route);await wait(()=>location.pathname+location.search===route);return;}
     const link=Array.from(document.querySelectorAll('a[href]')).find(a=>a.getAttribute('href')===route);
     if(link){link.click();await wait(()=>location.pathname+location.search===route);return;}
     // The host reloads the same official site, then reinjects this adapter.
+    if(preserve)throw Error('ADAPTER_UNAVAILABLE');
     const error=Error('NAVIGATION_REQUIRED');error.emberboxRoute=route;throw error;
   }
   const playbackAllowed=()=>window.__emberboxPlaybackAllowed===true;
@@ -240,6 +244,66 @@ async function emberboxYandexCommand(request) {
   }
   const trackSelector='a[href*="/track/"], [data-test-id$="TRACK_TITLE"]';
   const emptyTracks=()=>document.querySelector('[class*="SearchEmpty"], [class*="CollectionEmpty"], [data-test-id$="EMPTY_TITLE"], [data-test-id$="EMPTY_ROOT"]')||test('SEARCH_EMPTY_CONTAINER')||test('COLLECTION_PLAYLIST_WITH_LIKES_EMPTY_BLOCK');
+  function artistLinks(root=listRoot()) {
+    const seen=new Set();return Array.from(root.querySelectorAll('a[href*="/artist/"]')).map(a=>({
+      id:a.getAttribute('href')?.match(/^\/artist\/(\d{1,20})$/)?.[1],name:text(a),
+      image:cover(a.closest('[class*="ArtistCard"], [class*="HorizontalCard"]')?.querySelector('img')?.src)
+    })).filter(a=>a.id&&a.name&&!seen.has(a.id)&&seen.add(a.id)).slice(0,20);
+  }
+  function albums() {
+    const result=[],seen=new Set();
+    for(const link of listRoot().querySelectorAll('a[href*="/album/"]')) {
+      const id=link.getAttribute('href')?.match(/^\/album\/(\d{1,20})$/)?.[1];
+      if(!id||seen.has(id))continue;
+      const card=link.closest('[class*="AlbumCard"], [class*="HorizontalCard"], [data-test-id$="ALBUM_ITEM"]');
+      if(!card)continue;
+      const name=text(card.querySelector('[data-test-id$="ALBUM_TITLE"]')||link);
+      if(!name)continue;seen.add(id);
+      result.push({id,kind:'album',uri:'yandex:album:'+id,title:name,image:cover(card.querySelector('img')?.src),
+        subtitle:text(card.querySelector('[class*="metadata"], [class*="description"]'))});
+      if(result.length>=100)break;
+    }
+    return result;
+  }
+  if(request.method==='artist') {
+    let id=String(p.id||'');
+    if(!id) {
+      const own=String(p.songId||'')===status.id?status.artists:[];
+      const choices=own.length?own:(!p.songId||String(p.songId)===status.id?artistLinks(bar||listRoot()):[]);
+      if(choices.length===1&&own.length)id=choices[0].id;
+      else if(choices.length)return {choices};
+      else {
+        const name=String(p.name||'').trim().slice(0,200);if(!name)return {choices:[]};
+        await navigate('/search?text='+encodeURIComponent(name),true);
+        await wait(()=>listRoot().querySelector('a[href*="/artist/"]')||emptyTracks());
+        return {choices:artistLinks()};
+      }
+    }
+    if(!/^\d{1,20}$/.test(id))throw Error('INVALID_ARGUMENTS');
+    await navigate('/artist/'+id,true);await wait(()=>listRoot().querySelector('h1'));
+    const root=listRoot(),hero=root.querySelector('[class*="ArtistPage"]')||root;
+    const artist={id,name:text(root.querySelector('h1')),image:cover(hero.querySelector('[class*="ArtistPage"] img, [class*="ArtistHeader"] img, [class*="PageHeader"] img')?.src),
+      bio:String(root.querySelector('[class*="ArtistAbout"] [class*="description"], [class*="ArtistDescription"], [data-test-id$="ARTIST_DESCRIPTION"]')?.textContent||'').trim().slice(0,14000),genres:[]};
+    return {artist,sections:[{id:'top-songs',items:items()},{id:'latest-release',items:albums()}],
+      note:'Показаны данные, загруженные официальным сайтом Яндекс Музыки.'};
+  }
+  if(request.method==='artistSection') {
+    const id=String(p.id||'');if(!/^\d{1,20}$/.test(id)||!['albums','singles','compilations','appears'].includes(p.section))throw Error('INVALID_ARGUMENTS');
+    await navigate('/artist/'+id,true);await wait(()=>listRoot().querySelector('h1'));
+    const suffix={albums:'albums',singles:'singles',compilations:'compilations',appears:'appears-on'}[p.section];
+    const link=Array.from(listRoot().querySelectorAll('a[href]')).find(a=>a.getAttribute('href')==='/artist/'+id+'/'+suffix);
+    if(link){await navigate(link.getAttribute('href'),true);await wait(()=>listRoot().querySelector('a[href*="/album/"]')||emptyTracks());}
+    else if(p.section!=='albums')return {items:[],note:'Этот раздел не передан сайтом для данного артиста.'};
+    return {items:albums(),next:null,note:'Показаны загруженные сайтом релизы; отдельные категории доступны только когда сайт их предоставляет.'};
+  }
+  if(request.method==='release') {
+    const id=String(p.id||'');if(!/^\d{1,20}$/.test(id))throw Error('INVALID_ARGUMENTS');
+    await navigate('/album/'+id,true);await wait(()=>listRoot().querySelector(trackSelector)||emptyTracks());
+    const root=listRoot();
+    return {release:{id,kind:'album',uri:'yandex:album:'+id,title:text(root.querySelector('h1')),
+      artist:artistLinks().map(a=>a.name).join(', '),image:cover(root.querySelector('[class*="AlbumPage"] img, [class*="PageHeader"] img')?.src),
+      description:String(root.querySelector('[class*="AlbumDescription"]')?.textContent||'').trim().slice(0,14000)},items:items(),next:null};
+  }
   if(request.method==='tracks') {
     const route=playlistRoute(p.id);if(!route)throw Error('INVALID_ARGUMENTS');
     await navigate(route);

@@ -28,12 +28,12 @@ function host(yandex){
   responses.push({__emberboxNavigate:'/collection/playlists'},{__emberboxNavigate:'/collection/playlists'});
   await assert.rejects(yandex.command(win,{method:'browse'}),/ADAPTER_UNAVAILABLE/);
   responses.push({ready:true,authorized:true,capabilities:{store:true}});
-  assert.equal((await yandex.command(win,{method:'status'})).integrationVersion,4);
+  assert.equal((await yandex.command(win,{method:'status'})).integrationVersion,5);
   win.webContents.getURL=()=> 'https://passport.yandex.ru/';
-  assert.equal((await yandex.command(win,{method:'status'})).integrationVersion,4);
+  assert.equal((await yandex.command(win,{method:'status'})).integrationVersion,5);
   const apple=host(false);win.webContents.getURL=()=> 'https://music.apple.com/us/new';
   responses.push({ready:true,authorized:true});
-  assert.equal((await apple.command(win,{method:'status'})).integrationVersion,3);
+  assert.equal((await apple.command(win,{method:'status'})).integrationVersion,4);
   responses.push({ready:true,id:'123'});win.emberboxQuality={snapshot:id=>({codec:'aac',track:id,evidence:'decoder'})};
   assert.equal((await apple.command(win,{method:'status'})).audioQuality.track,'123');
   console.log('PASS bounded official-site navigation, adapter update version and decoder quality');
