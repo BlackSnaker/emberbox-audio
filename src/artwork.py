@@ -31,10 +31,11 @@ class Artwork:
                 return path.as_uri()
         return ''
 
-    def load(self, widget, url, size, radius=8, preserve=False, on_loaded=None, high_quality=False):
+    def load(self, widget, url, size, radius=8, preserve=False, on_loaded=None, high_quality=False, keep_aspect=False):
         existing = widget.get_pixbuf() if preserve else None
         widget.set_size_request(size, size)
         token = (url, size, radius) + (('original-v1',) if high_quality else ())
+        if keep_aspect:token+=('aspect-v1',)
         widget._art_token = token
         if not getattr(widget, '_art_destroy_connected', False):
             widget.connect('destroy', lambda target: setattr(target, '_art_token', None))
@@ -62,7 +63,7 @@ class Artwork:
             if not path.exists() or time.time() - path.stat().st_mtime > 86400:
                 if url.startswith('https://'):
                     source = None
-                    candidates = still_candidates(url, max(1200, size*2)) if len(token)>3 else [url]
+                    candidates = still_candidates(url, max(1200, size*2)) if 'original-v1' in token else [url]
                     for candidate in candidates:
                         if getattr(widget, '_art_token', None) != token:
                             return
@@ -93,11 +94,16 @@ class Artwork:
                 else:
                     source = Image.open(self.placeholder)
                 source = ImageOps.exif_transpose(source).convert('RGBA')
-                image = (ImageOps.pad if len(token)>3 else ImageOps.fit)(source, (size, size), Image.Resampling.LANCZOS)
-                mask = Image.new('L', (size*3, size*3))
-                ImageDraw.Draw(mask).rounded_rectangle((0, 0, size*3 - 1, size*3 - 1), radius*3, fill=255)
-                mask = mask.resize((size,size),Image.Resampling.LANCZOS)
-                image.putalpha(mask)
+                if 'aspect-v1' in token:
+                    # Artist portraits keep their real proportions, without
+                    # square padding or a thumbnail crop before composition.
+                    image=ImageOps.contain(source,(size,size),Image.Resampling.LANCZOS)
+                else:
+                    image = (ImageOps.pad if 'original-v1' in token else ImageOps.fit)(source, (size, size), Image.Resampling.LANCZOS)
+                    mask = Image.new('L', (size*3, size*3))
+                    ImageDraw.Draw(mask).rounded_rectangle((0, 0, size*3 - 1, size*3 - 1), radius*3, fill=255)
+                    mask = mask.resize((size,size),Image.Resampling.LANCZOS)
+                    image.putalpha(mask)
                 temp = path.with_suffix(f'.{threading.get_ident()}.next.png')
                 image.save(temp)
                 temp.replace(path)

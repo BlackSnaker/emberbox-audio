@@ -309,7 +309,8 @@ class ArtistView(Gtk.Box):
             self.hero_banner=banner
             def photo(pixels):
                 if not banner.closed and pixels:banner.set_photo(pixels)
-            self.artwork.load(banner.source_image,value.get('image',''),1000,0,high_quality=True,on_loaded=photo)
+            if value.get('image'):
+                self.artwork.load(banner.source_image,value['image'],1000,0,high_quality=True,keep_aspect=True,on_loaded=photo)
             self.content.pack_start(banner,False,False,0)
 
     def section_items(self,key):

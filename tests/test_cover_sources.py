@@ -125,6 +125,25 @@ https://unrelated.invalid/injected.m3u8
                 self.assertEqual(changes[-1],'')
         finally:client.close()
 
+    def test_artist_photo_cache_keeps_aspect_and_source_edges(self):
+        loader=Artwork()
+        try:
+            with tempfile.TemporaryDirectory() as folder:
+                loader.folder=Path(folder)/'cache';loader.folder.mkdir()
+                photo=Image.new('RGB',(200,400),'green')
+                for y in range(20):
+                    for x in range(200):photo.putpixel((x,y),(255,0,0));photo.putpixel((x,399-y),(0,0,255))
+                path=Path(folder)/'portrait.png';photo.save(path)
+                token=(path.as_uri(),400,0,'original-v1','aspect-v1')
+                widget=SimpleNamespace(_art_token=token)
+                with patch('artwork.GLib.idle_add'):loader._fetch(widget,token,None)
+                saved=next(loader.folder.glob('*.png'))
+                with Image.open(saved) as output:
+                    self.assertEqual(output.size,(200,400))
+                    self.assertEqual(output.getpixel((100,0)),(255,0,0,255))
+                    self.assertEqual(output.getpixel((100,399)),(0,0,255,255))
+        finally:loader.pool.shutdown(wait=False,cancel_futures=True)
+
     def test_high_quality_fetch_uses_original_and_falls_back_to_larger_response(self):
         def png(size,color):
             buffer=io.BytesIO();Image.new('RGB',size,color).save(buffer,format='PNG');return buffer.getvalue()

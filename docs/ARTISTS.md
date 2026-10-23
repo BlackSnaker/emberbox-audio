@@ -11,11 +11,17 @@ not start a track.
 
 ## A warmer portrait
 
-A panoramic portrait fades into olive charcoal: a large cream name, available
-genre badges and amber playback controls. The artist's image supplies the
-restrained background and clearer right edge. Missing photos
-retain a quiet fallback. Image preparation runs away from GTK and completed
-banners use a small bounded cache.
+The artist's complete photograph sits inside a restrained matte metal frame on
+the right: a shallow bevel, a fine warm highlight and a soft shadow. Portrait,
+landscape and square photos keep their original proportions and all source
+edges. A larger, softly blurred copy of the same photo supplies the warm
+background; the clear photograph is never stretched or faded away.
+
+The cream name, genre badges and amber controls have their own reading area,
+so they do not cover the photograph. The masthead grows when the heading needs
+more room. Missing photos retain a quiet gradient fallback. Photo loading and
+composition run away from GTK; original-aspect photos use a separate thumbnail
+cache entry and completed banners use a small bounded memory cache.
 
 **Overview**, **All releases** (Apple Music), **Albums**, **Singles & EPs**, **Compilations**, **Appears on** and
 **About** share the compact toolbar above the scroll area. Overview pairs a

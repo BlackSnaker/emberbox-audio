@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.12.4 — 2026-10-23
+
+- Show the complete artist photograph at its original aspect ratio inside a shallow matte metal frame, over a softly blurred, tinted copy of the same photo.
+- Reserve a separate portrait area before allocating the heading and controls; let the masthead grow for wrapped text. Keep artist photo caches separate from square cover thumbnails and retain all source edges.
+- Check portrait, landscape, square and panoramic photos, edge preservation, original photo proportions and English/Russian GTK layouts at three screen sizes. Refresh the artist previews.
+
 ## 0.12.3 — 2026-10-23
 
 - Keep the fullscreen console and progress bar stationary when a track title wraps to two lines. Reserve title space and size artwork against measured header, metadata and footer heights.

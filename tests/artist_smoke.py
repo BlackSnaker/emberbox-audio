@@ -150,6 +150,11 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
                 x,y=child.translate_coordinates(stage.window,0,0);a=child.get_allocation()
                 assert child.get_mapped() and x>=0 and y>=0 and x+a.width<=width+2 and y+a.height<=height+2,(type(child).__name__,(x,y,a.width,a.height),(width,height))
             assert view.content.get_allocation().width<=view.scroll.get_allocation().width+2,'Artist page overflowed horizontally'
+            banner=view.hero_banner
+            bx,by,bw,bh=rectangle(banner,stage.window);cx,cy,cw,ch=rectangle(banner.content,stage.window)
+            assert banner.photo_area_width>0,'Reserve the full portrait before painting the heading'
+            assert cx+cw<=bx+bw-banner.photo_area_width+2,('Artist text must not overlap the complete photo',(width,height),(bx,by,bw,bh),(cx,cy,cw,ch),banner.photo_area_width)
+            assert cy>=by and cy+ch<=by+bh+2,('The heading and controls must stay inside the masthead',(width,height),(bx,by,bw,bh),(cx,cy,cw,ch))
             adjustment=view.scroll.get_vadjustment()
             assert adjustment.get_upper()>adjustment.get_page_size(),'The complete artist catalogue must remain scrollable'
             adjustment.set_value(adjustment.get_upper()-adjustment.get_page_size());f.settle(.1)
