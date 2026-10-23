@@ -16,6 +16,11 @@ Returning animates the cover back toward the desktop widget. Both normal/Mini tr
 
 ## Controls
 
+The bottom console and progress bar keep their position when a song title wraps.
+Artwork sizing reserves two title lines and measures the actual metadata and
+control heights, keeping the full console inside the window.
+
+
 | Action | Control |
 | --- | --- |
 | Play / pause | Centre button or **Space** |

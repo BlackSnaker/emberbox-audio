@@ -183,6 +183,43 @@ def assert_controls_fit(stage):
             type(child).__name__, x, y, area.width, area.height, width, height)
 
 
+def assert_long_titles_fit(stage,host):
+    """Wrapped metadata must never displace or clip the complete console."""
+    original=[w.get_text() for w in (host.title,host.artist,host.album)]
+    playback_calls=list(host.calls)
+    titles=('Afterglow',
+            'Instant Crush (Drumless Edition) (feat. Julian Casablancas)',
+            'Очень длинное название композиции с участием нескольких исполнителей и расширенной версией альбома',
+            'Original recording · '+('Unabridged anniversary edition / '*30))
+    def rectangle(widget):
+        x,y=widget.translate_coordinates(stage.window,0,0);area=widget.get_allocation()
+        return x,y,area.width,area.height
+    try:
+        for lyrics in (False,True):
+            stage.set_lyrics_visible(lyrics)
+            for width,height in ((1920,1080),(1366,768),(1280,720),(1024,600)):
+                stage.window.unfullscreen();stage.window.resize(width,height);settle(.25)
+                anchor=None
+                for title in titles:
+                    host.title.set_text(title);stage.update();settle(.12)
+                    assert stage.window.get_size()==(width,height)
+                    assert_controls_fit(stage)
+                    for widget in (stage.footer,stage.console,stage.title,stage.artist_button,stage.album,stage.quality):
+                        x,y,w,h=rectangle(widget)
+                        assert y>=0 and y+h<=height,(lyrics,(width,height),title[:40],type(widget).__name__,(x,y,w,h))
+                    console=rectangle(stage.console);progress=rectangle(stage.progress)
+                    if anchor is None:anchor=(console,progress)
+                    assert (console,progress)==anchor,('The console moved when metadata wrapped',lyrics,(width,height),anchor,(console,progress))
+                    lx,ly,lw,lh=rectangle(stage.left);fx,fy,fw,fh=rectangle(stage.footer)
+                    assert ly+lh<=fy,('Artwork/metadata overlapped the fixed console',lyrics,(width,height),ly+lh,fy)
+                    assert stage.title.get_layout().get_line_count()<=2
+                    if title!=titles[0]:assert stage.title.get_layout().get_line_count()==2,'The regression fixture must actually wrap'
+        assert host.calls==playback_calls,'Layout-only metadata changes must not send playback commands'
+    finally:
+        for widget,value in zip((host.title,host.artist,host.album),original):widget.set_text(value)
+        stage.set_lyrics_visible(False);stage.update();settle(.15)
+
+
 def assert_lyrics_under_repaint(stage, host):
     """Metadata delivery must beat continuous GTK work at idle priorities.
 
@@ -370,6 +407,7 @@ def run():
             stage.lyrics_button.clicked();wait_transition(stage)
             assert not stage.lyrics_visible and not stage.right.get_visible()
             assert_controls_fit(stage)
+            assert_long_titles_fit(stage,host)
             key(stage.window, 'Escape')
             wait_transition(stage)
             assert not stage.visible and not stage.window.get_visible()

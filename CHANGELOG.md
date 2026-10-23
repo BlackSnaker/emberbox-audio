@@ -2,6 +2,11 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.12.3 — 2026-10-23
+
+- Keep the fullscreen console and progress bar stationary when a track title wraps to two lines. Reserve title space and size artwork against measured header, metadata and footer heights.
+- Check short, long, Russian and ellipsized titles in artwork/lyrics layouts at four screen sizes. Keep every console control visible without sending playback commands.
+
 ## 0.12.2 — 2026-10-23
 
 - Load the full Apple artist albums relationship automatically through every next page; retain editions by ID and remove the 200-release artist-list ceiling.

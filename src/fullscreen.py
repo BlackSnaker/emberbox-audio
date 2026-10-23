@@ -173,7 +173,7 @@ class FullscreenPlayer:
         self.layout=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18)
         self.layout.set_halign(Gtk.Align.FILL);self.layout.set_valign(Gtk.Align.FILL)
         overlay.add_overlay(self.layout)
-        header=Gtk.Box(spacing=8)
+        header=Gtk.Box(spacing=8);self.header=header
         wordmark=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3)
         wordmark.pack_start(label('EMBER','stage-brand'),False,False,0)
         wordmark.pack_start(label(text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'),'stage-overline'),False,False,0)
@@ -200,7 +200,7 @@ class FullscreenPlayer:
         self.body.set_valign(Gtk.Align.CENTER)
         self.left=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8)
         self.left.set_halign(Gtk.Align.START);self.left.set_valign(Gtk.Align.CENTER)
-        art_shell=Gtk.Box();art_shell.get_style_context().add_class('stage-art-shell')
+        art_shell=Gtk.Box();self.art_shell=art_shell;art_shell.get_style_context().add_class('stage-art-shell')
         art_shell.set_halign(Gtk.Align.START)
         art_layers=Gtk.Overlay();art_shell.pack_start(art_layers,False,False,0)
         self.cover=Gtk.Image();art_layers.add(self.cover)
@@ -265,7 +265,7 @@ class FullscreenPlayer:
         self.pages.add_named(self.artist_view,'artist')
         self.karaoke=KaraokeView(self);self.pages.add_named(self.karaoke,'karaoke')
         self.pages.set_visible_child_name('playing');self.layout.pack_start(self.pages,True,True,0)
-        footer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10)
+        footer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10);self.footer=footer
         self.playing_caption=label('','stage-library-note');self.playing_caption.set_ellipsize(Pango.EllipsizeMode.END)
         self.playing_caption.set_no_show_all(True);footer.pack_start(self.playing_caption,False,False,0)
         progress=Gtk.Box(spacing=14)
@@ -275,7 +275,7 @@ class FullscreenPlayer:
         self.progress.connect('change-value',self.on_seek);progress.pack_start(self.progress,True,True,0)
         self.total=label('0:00','stage-time');progress.pack_end(self.total,False,False,0)
         footer.pack_start(progress,False,False,0)
-        console=Gtk.Box(spacing=28);console.get_style_context().add_class('stage-console')
+        console=Gtk.Box(spacing=28);self.console=console;console.get_style_context().add_class('stage-console')
         spectrum_box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=2)
         spectrum_box.set_hexpand(True);spectrum_box.set_halign(Gtk.Align.START)
         self.equalizer=NixieSpectrum();self.equalizer.set_compact(True)
@@ -433,6 +433,7 @@ class FullscreenPlayer:
                 allocation=monitor.get_geometry().copy();allocation.x=allocation.y=0
                 for target,source in ((self.title,self.host.title),(self.artist,self.host.artist),(self.album,self.host.album)):
                     target.set_text(source.get_text())
+                self.quality.update(self.host)
                 self.window.realize();self.window.resize(allocation.width,allocation.height)
                 self.on_size(self.window,allocation)
                 from room_snapshot import snapshot
@@ -507,6 +508,25 @@ class FullscreenPlayer:
         self.body.set_spacing(max(32,min(100,int(width*.052))) if self.lyrics_visible else 0)
         size=(max(180,min(560,int(width*.34),height-(410 if small else 460))) if self.lyrics_visible else
               max(160,min(720,width-2*margin-40,height-(420 if small else 460))))
+        # Reserve two title lines even for a short song. Measure the actual
+        # styled controls instead of assuming a fixed metadata/footer height;
+        # Gtk.Box otherwise honours the cover's minimum and pushes the console
+        # past the window when a title wraps or font metrics grow.
+        title_layout=self.title.create_pango_layout('AgЙ\nAgЙ')
+        title_height=title_layout.get_pixel_size()[1]
+        self.title.set_size_request(-1,title_height)
+        content_width=max(1,width-2*margin)
+        body_height=(height-self.layout.get_margin_top()-self.layout.get_margin_bottom()
+                     -2*self.layout.get_spacing()
+                     -self.header.get_preferred_height_for_width(content_width)[1]
+                     -self.footer.get_preferred_height_for_width(content_width)[1])
+        metadata=[child for child in self.left.get_children() if child is not self.art_shell and child.get_visible()]
+        metadata_height=sum(child.get_preferred_height_for_width(size+18)[1] for child in metadata)
+        context=self.art_shell.get_style_context();state=context.get_state()
+        padding=context.get_padding(state);border=context.get_border(state)
+        shell_height=padding.top+padding.bottom+border.top+border.bottom
+        cover_budget=body_height-metadata_height-self.left.get_spacing()*len(metadata)-shell_height
+        size=max(64,min(size,cover_budget))
         if size!=self.art_size:
             self.art_size=size
             self.motion_image.resize(size)
@@ -615,17 +635,19 @@ class FullscreenPlayer:
         if not self.visible or self.closed:return False
         h=self.host
         width,height=self.window.get_size()
-        if self.layout_size!=(width,height):
-            from types import SimpleNamespace
-            self.on_size(self.window,SimpleNamespace(width=width,height=height))
+        metadata_changed=False
         title,artist,album=h.title.get_text(),h.artist.get_text(),h.album.get_text()
         for item,value in ((self.title,title),(self.artist,artist),(self.album,album)):
-            if item.get_text()!=value:item.set_text(value)
+            if item.get_text()!=value:item.set_text(value);metadata_changed=True
         self.artist_button.set_sensitive(bool(artist and h.length>0))
         accessible_name=text('Open artist: ','Открыть артиста: ')+artist
         if self.artist_button.get_accessible().get_name()!=accessible_name:
             self.artist_button.get_accessible().set_name(accessible_name)
-        self.quality.update(h)
+        quality_visible=self.quality.get_visible();self.quality.update(h)
+        if metadata_changed or quality_visible!=self.quality.get_visible():self.layout_size=None
+        if self.layout_size!=(width,height):
+            from types import SimpleNamespace
+            self.on_size(self.window,SimpleNamespace(width=width,height=height))
         names={'spotify':'Spotify','apple-music':'Apple Music','youtube':'YouTube','yandex-music':text('Yandex Music','Яндекс Музыка')}
         for button,value in ((self.source_button,'●  '+names.get(h.source,h.source)+'  ⌄'),(self.play_button,'Ⅱ' if h.playing else '▶')):
             if button.get_label()!=value:
