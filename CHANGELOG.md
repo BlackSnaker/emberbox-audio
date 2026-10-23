@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.12.6 — 2026-10-23
+
+- Light the artist masthead with two soft-focus layers of the same photograph, a source-coloured glow behind the portrait, subtle reflected light and static matte grain. Retain the character of monochrome photographs.
+- Adapt the dark reading area to the reserved text width. Verify cream-text contrast against white photos at three sizes, source colour, monochrome depth, deterministic texture and an untouched clear photograph.
+- Prepare and cache the backdrop off GTK; refresh the English/Russian artist previews.
+
 ## 0.12.5 — 2026-10-23
 
 - Recompose the artist masthead as a large photographic gallery: a 320px square portrait in a 360px desktop hero, a generous right photo bay and a poster-scale artist name. Adapt the hero to shorter displays.

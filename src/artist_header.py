@@ -1,6 +1,7 @@
 """A cover-tinted artist masthead, composed off the GTK thread and cached."""
 from collections import OrderedDict
 import threading
+import numpy as np
 from PIL import Image,ImageOps,ImageFilter,ImageEnhance,ImageDraw
 from gi.repository import Gtk,GdkPixbuf,GLib
 
@@ -18,16 +19,48 @@ def portrait_rect(source_size,width,height):
     return width-slot+(slot-pw)//2,(height-ph)//2,pw,ph
 
 
+def atmospheric_backdrop(photo,width,height):
+    """Light a small photo field, then enlarge it once; no work on the frame clock."""
+    backdrop=Image.new('RGBA',photo.size,(35,41,31,255));backdrop.alpha_composite(photo)
+    scale=min(1,960/width);small=(max(1,round(width*scale)),max(1,round(height*scale)))
+    field=ImageOps.fit(backdrop.convert('RGB'),small,Image.Resampling.LANCZOS,centering=(.5,.4))
+    field=ImageEnhance.Color(field).enhance(.72)
+    # Two optical depths keep the photograph's light and colour without a
+    # distracting second face. Broad highlights illuminate the matte surface.
+    near=field.filter(ImageFilter.GaussianBlur(max(12,height*.055)*scale))
+    far=field.filter(ImageFilter.GaussianBlur(max(44,height*.19)*scale))
+    field=Image.blend(near,far,.34)
+    rgb=np.asarray(field,dtype=np.float32)
+    yy,xx=np.mgrid[0:small[1],0:small[0]].astype(np.float32)
+    xx/=max(1,small[0]-1);yy/=max(1,small[1]-1)
+    reading_edge=(width-portrait_slot(width,height))/width
+    reveal=np.clip((xx-reading_edge+.19)/.50,0,1);reveal=reveal*reveal*(3-2*reveal)
+    exposure=(.14+.46*reveal)*(1-.20*(2*yy-1)**2-.08*(2*xx-1)**2)
+    ink=np.array((16,23,21),dtype=np.float32)
+    rgb=ink+(rgb-ink)*exposure[:,:,None]
+    palette=np.asarray(backdrop.convert('RGB').resize((1,1),Image.Resampling.BOX),dtype=np.float32)[0,0]
+    reflected=palette/max(1,float(palette.max()))*155+np.array((45,27,4))
+    reflected=reflected*.6+np.array((199,155,91))*.4
+    luminance=np.asarray(far.convert('L'),dtype=np.float32)/255
+    key=np.exp(-.5*(((xx-.70)/.27)**2+((yy-.12)/.86)**2))
+    key*=.16+.09*luminance
+    bounce=np.exp(-.5*(((xx-.18)/.38)**2+((yy-1.12)/.62)**2))*.045
+    # Screen light into the photo rather than laying a flat brown tint over it.
+    rgb+=(255-rgb)*(reflected[None,None,:]/255)*key[:,:,None]
+    rgb+=(255-rgb)*(np.array((111,134,107))/255)*bounce[:,:,None]
+    base=Image.fromarray(np.clip(rgb,0,255).astype('uint8'),'RGB').resize((width,height),Image.Resampling.BICUBIC)
+    # Fixed neutral grain prevents gradient banding; it never touches the
+    # clear portrait and cannot shimmer when a cached banner is reapplied.
+    rgb=np.asarray(base,dtype=np.float32)
+    grain=np.random.default_rng(73).normal(0,.65,(height,width,1)).astype(np.float32)
+    base=Image.fromarray(np.clip(rgb+grain,0,255).astype('uint8'),'RGB').convert('RGBA')
+    return base
+
+
 def compose(pixels,width,height):
     raw,size,alpha,stride=pixels
     photo=Image.frombytes('RGBA' if alpha else 'RGB',size,raw,'raw','RGBA' if alpha else 'RGB',stride).convert('RGBA')
-    backdrop=Image.new('RGBA',photo.size,(35,41,31,255));backdrop.alpha_composite(photo)
-    backdrop=backdrop.convert('RGB')
-    base=ImageOps.fit(backdrop,(width,height),Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(max(18,min(48,height*.085))))
-    base=ImageEnhance.Color(base).enhance(.4).convert('RGBA')
-    shade=ImageOps.mirror(Image.linear_gradient('L').rotate(90)).resize((width,height)).point(lambda v:120+int(v*.45))
-    base=Image.composite(Image.new('RGBA',(width,height),(26,30,22,255)),base,shade)
-    warmth=Image.new('RGBA',(width,height),(178,118,34,10));base=Image.alpha_composite(base,warmth)
+    base=atmospheric_backdrop(photo,width,height)
     # The background is atmospheric; the actual photo is contained in full,
     # with no face crop, stretching, edge fade or text painted over it.
     x,y,pw,ph=portrait_rect(photo.size,width,height)
