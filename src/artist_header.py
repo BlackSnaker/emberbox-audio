@@ -57,10 +57,11 @@ def atmospheric_backdrop(photo,width,height):
     return base
 
 
-def compose(pixels,width,height):
+def compose(pixels,width,height,with_atmosphere=False):
     raw,size,alpha,stride=pixels
     photo=Image.frombytes('RGBA' if alpha else 'RGB',size,raw,'raw','RGBA' if alpha else 'RGB',stride).convert('RGBA')
     base=atmospheric_backdrop(photo,width,height)
+    atmosphere=(width,height,base.tobytes('raw','BGRA')) if with_atmosphere else None
     # The background is atmospheric; the actual photo is contained in full,
     # with no face crop, stretching, edge fade or text painted over it.
     x,y,pw,ph=portrait_rect(photo.size,width,height)
@@ -81,7 +82,8 @@ def compose(pixels,width,height):
     base=Image.alpha_composite(base,frame);base.alpha_composite(portrait,(x,y))
     mask=Image.new('L',(width,height));ImageDraw.Draw(mask).rounded_rectangle((0,0,width-1,height-1),26,fill=255)
     base.putalpha(mask)
-    return base.tobytes()
+    data=base.tobytes()
+    return (data,atmosphere) if with_atmosphere else data
 
 
 class BannerCache:
@@ -99,6 +101,7 @@ class BannerCache:
 class ArtistBanner(Gtk.Overlay):
     def __init__(self,content,uri,cache,height):
         super().__init__();self.uri=uri;self.cache=cache;self.pixels=None;self.key=None;self.closed=False;self.content=content
+        self.atmosphere=None
         self.get_style_context().add_class('stage-artist-banner')
         self.minimum_height=height;self.photo_area_width=0;self.height_idle=0;self.requested_height=height
         self.base=Gtk.Box();self.base.set_size_request(-1,height);self.add(self.base)
@@ -151,18 +154,19 @@ class ArtistBanner(Gtk.Overlay):
         self.key=key;cached=self.cache.get(key)
         if cached:self.apply(key,cached);return
         pixels=self.pixels
-        future=self.cache.pool.submit(compose,pixels,width,height)
+        future=self.cache.pool.submit(compose,pixels,width,height,True)
         def done(result):
             try:data=result.result()
             except Exception:return
-            self.cache.put(key,data);GLib.idle_add(self.apply,key,data)
+            self.cache.put(key,data);GLib.idle_add(self.apply,key,data,priority=GLib.PRIORITY_DEFAULT)
         future.add_done_callback(done)
 
     def apply(self,key,data):
         if not self.closed and self.key==key:
+            data,self.atmosphere=data
             self.background.set_from_pixbuf(GdkPixbuf.Pixbuf.new_from_bytes(GLib.Bytes.new(data),GdkPixbuf.Colorspace.RGB,True,8,key[1],key[2],key[1]*4))
         return False
 
     def close(self,*_args):
-        self.closed=True;self.pixels=None;self.source_image.destroy()
+        self.closed=True;self.pixels=None;self.atmosphere=None;self.source_image.destroy()
         if self.height_idle:GLib.source_remove(self.height_idle);self.height_idle=0

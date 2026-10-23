@@ -84,7 +84,7 @@ void main(){
 
 
 class RevealGL:
-    def __init__(self,allow_software=False):
+    def __init__(self,allow_software=False,fragment=FRAGMENT,uniforms=()):
         name=find_library('GL')
         if not name:raise RuntimeError('System OpenGL unavailable')
         self.lib=C.CDLL(name)
@@ -122,7 +122,7 @@ class RevealGL:
             self.functions[name]=call
         shaders=[]
         try:
-            for kind,source in ((0x8B31,VERTEX),(0x8B30,FRAGMENT)):
+            for kind,source in ((0x8B31,VERTEX),(0x8B30,fragment)):
                 shader=self.call('CreateShader',kind);shaders.append(shader)
                 text=C.c_char_p(source)
                 self.call('ShaderSource',shader,1,C.byref(text),None)
@@ -139,7 +139,7 @@ class RevealGL:
             self.call('GenTextures',1,C.byref(value));self.room_texture=value.value
             self.call('GenTextures',1,C.byref(value));self.previous_texture=value.value
             self.uniforms={name:self.call('GetUniformLocation',self.program,name.encode()) for name in
-                           ('viewport','shell','artwork','pigment','progress','hasCover','cover','room','hasRoom','previous','hasPrevious','coverOnly','cornerRadius')}
+                           ('viewport','shell','artwork','pigment','progress','hasCover','cover','room','hasRoom','previous','hasPrevious','coverOnly','cornerRadius')+tuple(uniforms)}
         except Exception:
             self.close();raise
         finally:

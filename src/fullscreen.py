@@ -330,6 +330,7 @@ class FullscreenPlayer:
             self.music_changed();return
         self.library_view.deactivate();self.queue_view.deactivate();self.artist_view.deactivate()
         if self.page=='karaoke':self.karaoke.deactivate()
+        self.pages.set_transition_type(Gtk.StackTransitionType.NONE if page=='artist' else Gtk.StackTransitionType.CROSSFADE)
         self.page=page;self.pages.set_visible_child_name(page)
         self.lyrics_button.set_no_show_all(page!='playing');self.lyrics_button.set_visible(page=='playing')
         self.playing_caption.set_visible(page!='playing')
@@ -408,6 +409,7 @@ class FullscreenPlayer:
 
     def dismiss(self):
         if not self.visible:return
+        self.artist_view.cancel_intro()
         if self.reveal.active:self.hide();return
         if not self.window.get_settings().get_property('gtk-enable-animations'):
             self.hide();return
@@ -441,6 +443,7 @@ class FullscreenPlayer:
                 except (OSError,AttributeError,RuntimeError):pass
             self.motion_image.warmup()
             self.reveal.warmup(pixels,room=room,monitor=monitor)
+            if self.reveal.driver:self.artist_view.entrance.warmup()
         return False
 
     def set_lyrics_visible(self,visible):

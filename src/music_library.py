@@ -141,7 +141,7 @@ class MusicService:
             try:data,error=result.result(),None
             except Exception as exc:data,error=None,exc
             done(data,error);return False
-        future.add_done_callback(lambda result:GLib.idle_add(complete,result))
+        future.add_done_callback(lambda result:GLib.idle_add(complete,result,priority=GLib.PRIORITY_DEFAULT))
 
     def _youtube_results(self,items,error):
         value=self.youtube_done

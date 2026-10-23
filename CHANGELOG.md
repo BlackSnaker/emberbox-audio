@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.12.7 — 2026-10-23
+
+- Open the artist room with a 1.05-second layered entrance: ambient light first, then a gently approaching portrait, rising typography and music panels, with smooth acceleration and settling.
+- Prewarm the GL renderer alongside the listening room; animate fixed in-memory textures inside the catalogue viewport. Keep the transport and navigation live, defer catalogue repaints until handoff, and bound photo preparation. Reject portraits prepared for an older allocation.
+- Cancel cleanly on back, resize, source changes and fullscreen exit. Respect reduced motion, handle a lost context and offer a short cached-image fade without accelerated GL. Deliver completed catalogue/artwork jobs even while the frame clock is busy.
+- Check real GPU layers, stable textures, portrait dimensions, transport, deferred updates, cancellation, reduced motion, fallback and existing fullscreen transitions; retain bilingual layouts and original fixture media.
+
 ## 0.12.6 — 2026-10-23
 
 - Light the artist masthead with two soft-focus layers of the same photograph, a source-coloured glow behind the portrait, subtle reflected light and static matte grain. Retain the character of monochrome photographs.

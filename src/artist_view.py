@@ -8,12 +8,14 @@ from discovery_panel import clear
 from music_library import NAMES
 from artist_catalog import artist_ref,plain,SECTIONS,ReleaseCatalog
 from artist_header import ArtistBanner,BannerCache
+from artist_reveal import ArtistReveal
 
 CSS=b'''
 .stage-artist-hero { background-image: linear-gradient(to bottom right,rgba(76,73,49,.6),rgba(28,35,26,.55));
   border: 1px solid rgba(235,219,178,.045); border-radius: 28px; padding: 24px;
   box-shadow: inset 0 1px rgba(251,241,199,.045); }
 .stage-artist-banner { background-image: linear-gradient(to bottom right,#414431,#232d23); border-radius: 28px; }
+.stage-artist-banner.stage-artist-capture { background-image: none; background-color: transparent; }
 .stage-artist-hero.stage-artist-banner-content { background-image: none; background-color: transparent; border: none; box-shadow: none; }
 .stage-artist-name { color: #fbf1c7; font-size: 60px; font-weight: bold; letter-spacing: -1.8px; }
 .stage-artist-name.stage-artist-long { font-size: 40px; letter-spacing: -1px; }
@@ -98,6 +100,7 @@ class ArtistView(Gtk.Box):
         self.section='overview';self.items=[];self.sections=[];self.choices=[];self.next_offset=None
         self.cache={};self.card_size=164;self.portrait_size=184;self.busy=False;self.syncing=False
         self.banner_cache=BannerCache(artwork.pool)
+        self.intro_pending=False;self.render_queued=False
         self.saved_section='overview';self.note='';self.size=None
         self.catalog=ReleaseCatalog();self.card_page=0;self.card_page_size=48
         self.wide=True;self.height=1080;self.overview_panels={};self.shelf_widgets=[]
@@ -115,7 +118,8 @@ class ArtistView(Gtk.Box):
         self.filter_bar.set_halign(Gtk.Align.START);self.filter_bar.set_no_show_all(True)
         toolbar.pack_start(self.filter_bar,False,False,0)
         self.content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18)
-        self.scroll=scroll(self.content);self.pack_start(self.scroll,True,True,0)
+        self.scroll=scroll(self.content);self.entrance=ArtistReveal(self.scroll,self.finish_intro)
+        self.pack_start(self.entrance,True,True,0)
         foot=Gtk.Box(spacing=12)
         self.notice=label('','stage-library-note');self.notice.set_line_wrap(True);self.notice.set_lines(2)
         self.notice.set_ellipsize(Pango.EllipsizeMode.END);foot.pack_start(self.notice,True,True,0)
@@ -126,6 +130,8 @@ class ArtistView(Gtk.Box):
         self.show_all();self.accounts_button.hide();self.filter_bar.hide()
 
     def set_reference(self,ref):
+        self.cancel_intro()
+        self.intro_pending=True
         self.request+=1;self.reference=dict(ref);self.source=self.service.host.source
         self.profile=self.release=self.release_ref=None;self.items=[];self.sections=[];self.choices=[]
         self.section='overview';self.next_offset=None;self.note=''
@@ -133,6 +139,7 @@ class ArtistView(Gtk.Box):
 
     def activate(self):
         self.active=True
+        self.intro_pending=True
         if self.source!=self.service.host.source:self.set_reference(artist_ref(self.service.host))
         if not self.reference:self.reference=artist_ref(self.service.host)
         if self.profile:
@@ -141,15 +148,25 @@ class ArtistView(Gtk.Box):
         else:self.load('artist',self.reference)
 
     def deactivate(self):
+        self.cancel_intro()
         self.active=False;self.request+=1;self.busy=False;self.spinner.stop();self.service.cancel_browse()
 
+    def cancel_intro(self):
+        self.intro_pending=False;self.render_queued=False;self.entrance.finish()
+
+    def finish_intro(self):
+        if self.render_queued and self.active and not self.closed:
+            self.render_queued=False;self.render()
+
     def back(self):
+        self.cancel_intro()
         if self.release_ref:
             self.request+=1;self.service.cancel_browse();self.busy=False;self.spinner.stop()
             self.release=self.release_ref=None;self.section=self.saved_section;self.select(self.section,force=True)
         else:self.go_back()
 
     def refresh(self):
+        self.cancel_intro()
         if self.release_ref:self.load('release',self.release_ref,refresh=True)
         elif self.source=='apple-music' and self.section!='appears':
             self.catalog=ReleaseCatalog();self.card_page=0;self.load('artist',self.reference,refresh=True)
@@ -162,6 +179,7 @@ class ArtistView(Gtk.Box):
             self.syncing=True
             for key,b in self.filters.items():b.set_active(key==section)
             self.syncing=False;return
+        self.cancel_intro()
         self.section=section;self.release=self.release_ref=None;self.items=[];self.next_offset=None;self.card_page=0
         if self.catalog_mode():
             self.request+=1;self.service.cancel_browse();self.busy=False;self.spinner.stop()
@@ -174,6 +192,7 @@ class ArtistView(Gtk.Box):
         self.set_reference({'id':str(ref['id']),'name':str(ref.get('name') or '')});self.load('artist',self.reference)
 
     def open_release(self,value):
+        self.cancel_intro()
         self.saved_section=self.section;self.release_ref=dict(value);self.release=dict(value)
         self.items=[];self.next_offset=None;self.card_page=0;self.load('release',self.release_ref)
 
@@ -429,6 +448,11 @@ class ArtistView(Gtk.Box):
                 'Источник пока не передал релизы. Попробуй разделы «Альбомы» и «Синглы».'))
 
     def render(self):
+        if self.entrance.busy:
+            self.render_queued=True;return
+        animate=False
+        if self.intro_pending and self.profile and not self.release_ref:
+            self.intro_pending=False;animate=self.entrance.hold_loading()
         clear(self.content);clear(self.filter_bar);self.filter_bar.hide()
         self.song_buttons=[];self.album_buttons=[];self.choice_buttons=[];self.filters={}
         self.overview_panels={};self.shelf_widgets=[]
@@ -487,6 +511,7 @@ class ArtistView(Gtk.Box):
             retry=button(text('Continue loading the discography','Продолжить загрузку дискографии'),self.load_catalog)
             retry.set_sensitive(not self.busy);self.content.pack_start(retry,False,False,0)
         self.content.show_all()
+        if animate:self.entrance.begin(self.hero_banner)
 
     def paged_cards(self,values):
         # A large discography must not create hundreds of images/widgets on
@@ -553,8 +578,9 @@ class ArtistView(Gtk.Box):
         self.wide=width>=1200;self.height=height;self.crumb.set_visible(self.wide)
         size=(max(116,min(164,(width-160)//7-26)),88 if height<680 else 128 if height<800 else 164,self.wide,masthead_height(height))
         if self.size==size:return
+        self.cancel_intro()
         self.size=size;self.card_size,self.portrait_size=size[:2]
         if self.active:self.render()
 
     def close(self):
-        self.deactivate();self.closed=True;self.unsubscribe();self.cache.clear();self.banner_cache.clear()
+        self.deactivate();self.closed=True;self.entrance.close();self.unsubscribe();self.cache.clear();self.banner_cache.clear()

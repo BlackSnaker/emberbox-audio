@@ -39,6 +39,8 @@ The result is **physically inspired**, rather than an exact simulation of gas-di
 
 ## Interaction stays quiet
 
+The artist room unfolds over 1.05 seconds: atmospheric light, a subtly approaching portrait, then the name and music panels. A prewarmed GL layer moves fixed textures inside the catalogue viewport; the hidden live page is painted once, not resized or faded as a tree on every frame. The transport and navigation stay available. Preparation waits briefly for the correctly sized photograph, catalogue arrivals are applied after the handoff, and navigating away cancels immediately. Without accelerated GL, one cached image fades in over 320 ms. Disabling system animations opens the live page directly.
+
 Fullscreen opens with a centred cover; **Lyrics** explicitly enables text lookup and the split layout. Until then, no lyric lookup, line layout or scrolling runs.
 
 The 900 ms entrance uses a prewarmed hardware GL renderer: a rounded shell and cover move over a gradient, then a single cached image of the room reveals its controls. The GTK scene stays unmapped throughout the movement, avoiding costly opacity-zero Cairo groups and per-frame resizing. Only our own widgets are captured, in memory. The background is cached and prepared off the UI thread. Systems without accelerated GL use a short compositor fade; disabling system animations skips the entrance. Esc cancels immediately.

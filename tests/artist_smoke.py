@@ -51,6 +51,8 @@ def wait(predicate,limit=4):
     until=time.monotonic()+limit
     while not predicate() and time.monotonic()<until:f.settle(.03)
     assert predicate(),'Artist request did not finish'
+    while view.entrance.busy and time.monotonic()<until:f.settle(.03)
+    assert not view.entrance.busy,'Artist entrance must finish before checking live controls'
     f.settle(.2)
 
 
