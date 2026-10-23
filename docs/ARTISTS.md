@@ -11,15 +11,18 @@ not start a track.
 
 ## A warmer portrait
 
-A wide photographic masthead fades into olive charcoal: rounded portrait,
-large cream name, available genres and amber playback controls. The artist's
-image supplies the restrained background and clearer right edge. Missing photos
+A panoramic portrait fades into olive charcoal: a large cream name, available
+genre badges and amber playback controls. The artist's image supplies the
+restrained background and clearer right edge. Missing photos
 retain a quiet fallback. Image preparation runs away from GTK and completed
 banners use a small bounded cache.
 
 **Overview**, **Albums**, **Singles & EPs**, **Compilations**, **Appears on** and
-**About** stay above the scroll area. Overview brings together featured releases
-and popular songs. About shows the selected source's editorial description with
+**About** share the compact toolbar above the scroll area. Overview pairs a
+horizontal featured release with compact popular songs, followed by album,
+single and compilation shelves. Releases are deduplicated across the overview.
+If the catalogue really contains only one release, its supplied artist story
+appears beside it instead of repeated covers. About shows the source's description with
 attribution; biographies are not generated. Collaborations and unresolved names
 offer artist cards for an explicit choice. Exact recording relationships take
 precedence; name searches are never silently assigned to a namesake.
@@ -65,6 +68,9 @@ account or third-party biography service is introduced. Artwork uses the normal
 local thumbnail cache; catalogue results and browsing state use bounded memory
 caches. Passwords, cookies and tokens are not copied into this page.
 
+Apple independently fetches missing overview views by the exact artist ID,
+with a 2.2-second optional phase and a 6.5-second artist-command deadline. A
+failed section preserves successful music sections and offers a refresh.
 Apple uses documented [artist views](https://developer.apple.com/documentation/applemusicapi/artists/views-data.dictionary)
 and [artist attributes](https://developer.apple.com/documentation/applemusicapi/artists/attributes-data.dictionary).
 Editorial markup becomes plain text, not executable content or GTK markup.

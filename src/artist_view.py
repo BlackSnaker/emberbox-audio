@@ -15,7 +15,8 @@ CSS=b'''
   box-shadow: inset 0 1px rgba(251,241,199,.045); }
 .stage-artist-banner { background-image: linear-gradient(to bottom right,#414431,#232d23); border-radius: 28px; }
 .stage-artist-hero.stage-artist-banner-content { background-image: none; background-color: transparent; border: none; box-shadow: none; }
-.stage-artist-name { color: #fbf1c7; font-size: 44px; font-weight: bold; letter-spacing: -1px; }
+.stage-artist-name { color: #fbf1c7; font-size: 60px; font-weight: bold; letter-spacing: -1.8px; }
+.stage-artist-name.stage-artist-long { font-size: 40px; letter-spacing: -1px; }
 .stage-artist-kicker { color: #d4b568; font-size: 9px; letter-spacing: 2px; }
 .stage-artist-summary { color: #bdae93; font-size: 12px; }
 .stage-artist-prose { color: #d5c7a7; font-size: 15px; }
@@ -28,6 +29,20 @@ CSS=b'''
 .ember-stage button.stage-artist-filter { padding: 7px 12px; font-size: 11px; }
 .stage-artist-section { color: #ebdbb2; font-size: 19px; font-weight: bold; }
 .stage-artist-credit { color: #928374; font-size: 10px; }
+.stage-artist-chip { color: #d8c491; font-size: 10px; border: 1px solid rgba(235,219,178,.09); border-radius: 12px; padding: 4px 9px; background-color: rgba(16,23,16,.28); }
+.stage-overview-panel { background-image: linear-gradient(to bottom right,rgba(48,54,39,.86),rgba(25,34,25,.8));
+  border: 1px solid rgba(235,219,178,.055); border-radius: 23px; padding: 16px 18px;
+  box-shadow: inset 0 1px rgba(251,241,199,.04); }
+.stage-feature-title { color: #fbf1c7; font-size: 25px; font-weight: bold; letter-spacing: -.5px; }
+.stage-feature-caption { color: #bdae93; font-size: 11px; }
+.stage-feature-action { color: #e7bf6b; font-size: 11px; font-weight: bold; }
+.stage-overview-story { color: #cabc9e; font-size: 14px; }
+.stage-overview-panel .stage-track-row { background-color: rgba(14,23,15,.3); border-radius: 12px; padding: 1px 5px; }
+.ember-stage button.stage-feature-button { background: transparent; border: none; box-shadow: none; padding: 0; border-radius: 14px; }
+.ember-stage button.stage-feature-button:hover { background-color: rgba(235,219,178,.025); }
+.ember-stage button.stage-song-compact { font-size: 13px; padding: 3px 5px; min-height: 14px; }
+.ember-stage button.stage-add-compact { min-height: 16px; min-width: 18px; padding: 3px 6px; font-size: 13px; }
+.stage-release-type { color: #bba77b; font-size: 9px; letter-spacing: .6px; }
 .ember-stage .small-screen .stage-artist-name { font-size: 30px; }
 .ember-stage .small-screen .stage-artist-hero { padding: 16px; border-radius: 22px; }
 .ember-stage .small-screen .stage-artist-prose { font-size: 13px; }
@@ -41,7 +56,8 @@ NAMES_SECTION={
     'singles':('Singles & EPs','Синглы и EP'),'compilations':('Compilations','Сборники'),
     'appears':('Appears on','Участия'),'about':('About','Об артисте'),
     'latest-release':('Releases in the spotlight','В центре внимания'),
-    'top-songs':('Popular songs','Популярные песни')}
+    'top-songs':('Popular songs','Популярные песни'),
+    'featured-albums':('Essential releases','Главные релизы')}
 
 
 def paragraph(value,style='stage-artist-prose'):
@@ -61,6 +77,7 @@ class ArtistView(Gtk.Box):
         self.cache={};self.card_size=164;self.portrait_size=184;self.busy=False;self.syncing=False
         self.banner_cache=BannerCache(artwork.pool)
         self.saved_section='overview';self.note='';self.size=None
+        self.wide=True;self.height=1080;self.overview_panels={};self.shelf_widgets=[]
         self.song_buttons=[];self.album_buttons=[];self.choice_buttons=[];self.filters={}
         toolbar=Gtk.Box(spacing=12)
         self.back_button=button('‹ '+text('Back','Назад'),self.back)
@@ -73,8 +90,8 @@ class ArtistView(Gtk.Box):
         self.pack_start(toolbar,False,False,0)
         self.filter_bar=Gtk.Box(spacing=3);self.filter_bar.get_style_context().add_class('stage-nav')
         self.filter_bar.set_halign(Gtk.Align.START);self.filter_bar.set_no_show_all(True)
-        self.pack_start(self.filter_bar,False,False,0)
-        self.content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=22)
+        toolbar.pack_start(self.filter_bar,False,False,0)
+        self.content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18)
         self.scroll=scroll(self.content);self.pack_start(self.scroll,True,True,0)
         foot=Gtk.Box(spacing=12)
         self.notice=label('','stage-library-note');self.notice.set_line_wrap(True);self.notice.set_lines(2)
@@ -146,6 +163,9 @@ class ArtistView(Gtk.Box):
             result=result or {};self.cache[key]=(time.monotonic(),result)
             while len(self.cache)>24:self.cache.pop(next(iter(self.cache)))
             self.note=str(result.get('note') or '')[:450];self.choices=result.get('choices') or []
+            if not self.note and any(section.get('unavailable') for section in result.get('sections') or []):
+                self.note=text('Some catalogue sections did not respond. Available music is ready; refresh to retry.',
+                    'Часть каталога не ответила. Доступную музыку уже можно слушать; обнови для повтора.')
             if category=='artist':
                 self.profile=result.get('artist');self.sections=result.get('sections') or []
                 if self.profile and self.profile.get('id'):
@@ -182,19 +202,27 @@ class ArtistView(Gtk.Box):
         if self.portrait_size<128:shell.get_style_context().add_class('stage-artist-mini')
         image=Gtk.Image();image.set_valign(Gtk.Align.START)
         image.set_size_request(self.portrait_size,self.portrait_size)
-        shell.pack_start(image,False,False,0)
+        if release:shell.pack_start(image,False,False,0)
         names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=9);names.set_valign(Gtk.Align.CENTER);names.set_hexpand(True)
         if self.portrait_size<128:names.set_spacing(5)
         names.pack_start(label(NAMES[self.source].upper()+'  /  '+text('RELEASE' if release else 'ARTIST','РЕЛИЗ' if release else 'АРТИСТ'),'stage-artist-kicker'),False,False,0)
-        title=label(value.get('title') if release else value.get('name') or self.reference.get('name',''),'stage-artist-name',32)
+        name=value.get('title') if release else value.get('name') or self.reference.get('name','')
+        title=label(name,'stage-artist-name',28)
+        if len(str(name))>28 or release:title.get_style_context().add_class('stage-artist-long')
         title.set_line_wrap(True);title.set_lines(2);names.pack_start(title,False,False,0)
         meta=[]
         if release:
             meta=[value.get('artist') or (self.profile or {}).get('name',''),str(value.get('releaseDate') or '')[:10]]
-            if value.get('trackCount'):meta.append(text(f"{value['trackCount']} tracks",f"Треков: {value['trackCount']}"))
-        else:meta=value.get('genres') or []
-        summary=label('  ·  '.join(v for v in meta if v),'stage-artist-summary',80)
-        summary.set_line_wrap(True);names.pack_start(summary,False,False,0)
+            if value.get('trackCount'):meta.append(text(f"{value['trackCount']} "+('track' if value['trackCount']==1 else 'tracks'),f"Треков: {value['trackCount']}"))
+        if release:
+            summary=label('  ·  '.join(v for v in meta if v),'stage-artist-summary',80)
+            summary.set_line_wrap(True);names.pack_start(summary,False,False,0)
+        else:
+            chips=Gtk.Box(spacing=7)
+            for genre in (value.get('genres') or [])[:3]:chips.pack_start(label(genre,'stage-artist-chip',24),False,False,0)
+            count=len(self.release_catalog())
+            if count:chips.pack_start(label(text(f'{count} '+('release' if count==1 else 'releases')+' in this overview',f'Релизов в обзоре: {count}'),'stage-artist-chip'),False,False,0)
+            names.pack_start(chips,False,False,0)
         controls=Gtk.Box(spacing=9);songs=self.songs()
         self.play_all_button=button('▶ '+text('Listen','Слушать'),lambda:self.service.play_all(self.songs()),'stage-accent')
         self.add_all_button=button('+ '+text('Queue','В очередь'),lambda:self.add(self.songs()))
@@ -208,17 +236,109 @@ class ArtistView(Gtk.Box):
             self.artwork.load(image,value.get('image',''),self.portrait_size,24,high_quality=True)
             self.content.pack_start(shell,False,False,0)
         else:
-            banner=ArtistBanner(shell,value.get('image',''),self.banner_cache,152 if self.portrait_size<128 else 242)
-            size=self.portrait_size
+            height=152 if self.portrait_size<128 else 184 if self.height<800 else 220
+            if len(str(name))>28:height+=24
+            banner=ArtistBanner(shell,value.get('image',''),self.banner_cache,height)
+            self.hero_banner=banner
             def photo(pixels):
-                if not banner.closed and pixels:
-                    image.set_from_pixbuf(pixels.scale_simple(size,size,GdkPixbuf.InterpType.BILINEAR));banner.set_photo(pixels)
-            self.artwork.load(banner.source_image,value.get('image',''),600,24,high_quality=True,on_loaded=photo)
+                if not banner.closed and pixels:banner.set_photo(pixels)
+            self.artwork.load(banner.source_image,value.get('image',''),1000,0,high_quality=True,on_loaded=photo)
             self.content.pack_start(banner,False,False,0)
+
+    def section_items(self,key):
+        return next((section.get('items') or [] for section in self.sections if section.get('id')==key),[])
+
+    def release_catalog(self):
+        values=[];seen=set()
+        for section in self.sections:
+            if section.get('id')=='top-songs':continue
+            for item in section.get('items') or []:
+                key=item.get('uri') or item.get('id')
+                if key and key not in seen:seen.add(key);values.append(item)
+        return values
+
+    def panel(self):
+        item=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=11)
+        item.get_style_context().add_class('stage-overview-panel');item.set_hexpand(True)
+        return item
+
+    def feature(self,value):
+        panel=self.panel();panel.set_size_request(390 if self.wide else -1,-1)
+        panel.pack_start(label(text('A RELEASE TO STEP INTO','ПОГРУЗИСЬ В РЕЛИЗ'),'stage-artist-kicker'),False,False,0)
+        b=button('',lambda:self.open_release(value),'stage-feature-button',value.get('title',''))
+        box=Gtk.Box(spacing=19);cover=Gtk.Image();cover.set_valign(Gtk.Align.CENTER)
+        size=148 if self.wide else 108
+        self.artwork.load(cover,value.get('image',''),size,15,high_quality=True);box.pack_start(cover,False,False,0)
+        words=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=9);words.set_hexpand(True);words.set_valign(Gtk.Align.CENTER)
+        title=label(value.get('title',''),'stage-feature-title',24);title.set_line_wrap(True);title.set_lines(2)
+        words.pack_start(title,False,False,0)
+        meta=[]
+        if value.get('releaseDate'):meta.append(str(value['releaseDate'])[:4])
+        if value.get('isCompilation'):meta.append(text('Compilation','Сборник'))
+        elif value.get('isSingle'):meta.append(text('Single','Сингл'))
+        elif value.get('trackCount'):meta.append(text(f"{value['trackCount']} "+('track' if value['trackCount']==1 else 'tracks'),f"Треков: {value['trackCount']}"))
+        if not meta and value.get('subtitle'):meta.append(value['subtitle'])
+        words.pack_start(label('  ·  '.join(meta),'stage-feature-caption',36),False,False,0)
+        description=plain(value.get('description'),170)
+        if description:
+            teaser=label(description,'stage-feature-caption',40);teaser.set_line_wrap(True);teaser.set_lines(2)
+            words.pack_start(teaser,False,False,0)
+        words.pack_start(label(text('Open the release','Открыть релиз')+'  ›','stage-feature-action'),False,False,6)
+        box.pack_start(words,True,True,0);b.remove(b.get_child());b.add(box);panel.pack_start(b,True,True,0)
+        self.album_buttons.append((b,value));return panel
+
+    def story(self):
+        panel=self.panel();bio=plain((self.profile or {}).get('bio'),400)
+        panel.pack_start(label(text('BEHIND THE SOUND','ЗА ЭТИМ ЗВУКОМ'),'stage-artist-kicker'),False,False,0)
+        title=text('A little closer to the artist.','Чуть ближе к артисту.') if bio else text('There is more to explore.','Продолжим знакомство.')
+        panel.pack_start(label(title,'stage-artist-section',40),False,False,0)
+        prose=paragraph(bio or text('Explore albums, singles and collaborations from the connected source.',
+            'Открой альбомы, синглы и совместные записи в подключённом источнике.'),'stage-overview-story')
+        prose.set_lines(5);prose.set_ellipsize(Pango.EllipsizeMode.END);panel.pack_start(prose,True,True,0)
+        action=button(text('Read their story','Читать об артисте')+'  ›',lambda:self.select('about'),'stage-artist-link')
+        action.set_halign(Gtk.Align.START);panel.pack_start(action,False,False,0)
+        return panel
+
+    def overview(self):
+        self.overview_panels={};self.shelf_widgets=[]
+        releases=self.release_catalog();songs=self.section_items('top-songs')
+        latest=self.section_items('latest-release')
+        feature=latest[0] if latest else releases[0] if releases else None
+        columns=Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL if self.wide else Gtk.Orientation.VERTICAL,spacing=18)
+        used=set()
+        if feature:
+            panel=self.feature(feature);columns.pack_start(panel,True,True,0);self.overview_panels['feature']=panel
+            used.add(feature.get('uri') or feature.get('id'))
+        if songs:
+            panel=self.panel();heading=Gtk.Box(spacing=16)
+            heading.pack_start(label(text('Start with these songs','Начни с этих песен'),'stage-artist-section',32),True,True,0)
+            play=button(text('Play all','Слушать всё'),lambda:self.service.play_all(self.songs()),'stage-artist-link')
+            heading.pack_end(play,False,False,0);panel.pack_start(heading,False,False,0)
+            self.track_rows(songs[:4],container=panel,compact=True)
+            columns.pack_start(panel,True,True,0);self.overview_panels['songs']=panel
+        elif self.profile:
+            panel=self.story();columns.pack_start(panel,True,True,0);self.overview_panels['story']=panel
+        if columns.get_children():self.content.pack_start(columns,False,False,0)
+        for key in ('albums','featured-albums','singles','compilations','appears','latest-release'):
+            values=[]
+            for value in self.section_items(key):
+                ident=value.get('uri') or value.get('id')
+                if ident and ident not in used:used.add(ident);values.append(value)
+            if not values:continue
+            shelf=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=11)
+            heading=Gtk.Box(spacing=16);heading.pack_start(label(text(*NAMES_SECTION[key]),'stage-artist-section'),True,True,0)
+            if key in ('albums','singles','compilations','appears'):
+                heading.pack_end(button(text('See all','Все релизы')+'  ›',lambda k=key:self.select(k),'stage-artist-link'),False,False,0)
+            shelf.pack_start(heading,False,False,0);self.cards(values[:6],container=shelf)
+            self.content.pack_start(shelf,False,False,0);self.shelf_widgets.append(shelf)
+        if not releases and not songs and not self.busy:
+            self.notice.set_text(text('This source has not supplied releases yet. Try Albums or Singles.',
+                'Источник пока не передал релизы. Попробуй разделы «Альбомы» и «Синглы».'))
 
     def render(self):
         clear(self.content);clear(self.filter_bar);self.filter_bar.hide()
         self.song_buttons=[];self.album_buttons=[];self.choice_buttons=[];self.filters={}
+        self.overview_panels={};self.shelf_widgets=[]
         if self.release_ref:
             self.back_button.set_label('‹ '+text('Artist','Артист'));self.hero(self.release or self.release_ref,True)
             prose=(self.release or {}).get('description') or ''
@@ -252,12 +372,7 @@ class ArtistView(Gtk.Box):
                     reading.pack_start(label(NAMES[self.source]+' · '+text('Artist editorial information','Информация об артисте'),'stage-artist-credit'),False,False,0)
                     self.content.pack_start(reading,False,False,0)
                 elif self.section=='overview':
-                    for section in self.sections:
-                        values=section.get('items') or []
-                        if not values:continue
-                        self.content.pack_start(label(text(*NAMES_SECTION.get(section['id'],('Music','Музыка'))),'stage-artist-section'),False,False,0)
-                        self.track_rows(values[:8]) if section['id']=='top-songs' else self.cards(values[:8])
-                    if not any(s.get('items') for s in self.sections) and not self.busy:self.empty()
+                    self.overview()
                 elif self.items:self.cards(self.items)
                 elif not self.busy:self.empty()
         elif self.choices:
@@ -280,9 +395,9 @@ class ArtistView(Gtk.Box):
         self.content.pack_start(paragraph(text('No releases supplied in this section. Explore another chapter.',
             'В этом разделе источник не передал релизы. Загляни в другую главу.'),'stage-artist-empty'),False,False,18)
 
-    def cards(self,values,choices=False):
+    def cards(self,values,choices=False,container=None):
         flow=Gtk.FlowBox();flow.set_selection_mode(Gtk.SelectionMode.NONE);flow.set_homogeneous(True)
-        flow.set_min_children_per_line(1);flow.set_max_children_per_line(6);flow.set_column_spacing(16);flow.set_row_spacing(16)
+        flow.set_min_children_per_line(1);flow.set_max_children_per_line(min(8,max(1,len(values))));flow.set_column_spacing(14);flow.set_row_spacing(14)
         for value in values:
             title=str(value.get('name') if choices else value.get('title') or '')
             b=button('',lambda v=value:self.choose(v) if choices else self.open_release(v),'stage-album',title)
@@ -293,31 +408,37 @@ class ArtistView(Gtk.Box):
             title_label=label(title,'stage-card-title',22);title_label.set_line_wrap(True);title_label.set_lines(2)
             box.pack_start(title_label,False,False,0)
             meta=str(value.get('releaseDate') or '')[:4] or value.get('subtitle') or text('Open artist' if choices else 'Explore the release','Открыть артиста' if choices else 'Открыть релиз')
-            box.pack_start(label(meta,'stage-card-subtitle',24),False,False,0)
+            if value.get('isSingle'):meta+='  ·  '+text('SINGLE','СИНГЛ')
+            elif value.get('isCompilation'):meta+='  ·  '+text('COMPILATION','СБОРНИК')
+            box.pack_start(label(meta,'stage-card-subtitle' if choices else 'stage-release-type',24),False,False,0)
             b.remove(b.get_child());b.add(box);flow.add(b)
             (self.choice_buttons if choices else self.album_buttons).append((b,value))
-        self.content.pack_start(flow,False,False,0)
+        (container if container is not None else self.content).pack_start(flow,False,False,0)
 
-    def track_rows(self,values):
+    def track_rows(self,values,container=None,compact=False):
         context=tuple(v for v in values if track(v,self.source))
         for i,value in enumerate(values):
             row=Gtk.Box(spacing=10);row.get_style_context().add_class('stage-track-row')
-            row.pack_start(label(f'{i+1:02}','stage-row-number'),False,False,9)
-            image=Gtk.Image();self.artwork.load(image,value.get('image',''),42,7);row.pack_start(image,False,False,0)
+            row.pack_start(label(f'{i+1:02}','stage-row-number'),False,False,4 if compact else 9)
+            image=Gtk.Image();self.artwork.load(image,value.get('image',''),30 if compact else 42,6 if compact else 7);row.pack_start(image,False,False,0)
             names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=1)
             play=button(value.get('title',''),lambda v=value:self.service.play_now(v,context=context),'stage-song')
             play.get_child().set_xalign(0);play.get_child().set_ellipsize(Pango.EllipsizeMode.END);play.get_child().set_max_width_chars(65)
             play.get_style_context().add_class('stage-card-title');names.pack_start(play,False,False,0)
-            names.pack_start(label(value.get('artist',''),'stage-card-subtitle',65),False,False,5)
+            if compact:play.get_style_context().add_class('stage-song-compact')
+            else:names.pack_start(label(value.get('artist',''),'stage-card-subtitle',65),False,False,5)
             row.pack_start(names,True,True,0);row.pack_start(label(duration(value),'stage-card-subtitle'),False,False,0)
             add=button('+',lambda v=value:self.add([v]),'stage-add',text('Add to queue: ','В очередь: ')+value.get('title',''))
+            if compact:add.get_style_context().add_class('stage-add-compact')
             valid=bool(track(value,self.source));play.set_sensitive(valid);add.set_sensitive(valid)
-            row.pack_end(add,False,False,0);self.content.pack_start(row,False,False,0);self.song_buttons.append((play,add,value))
+            row.pack_end(add,False,False,0)
+            (container if container is not None else self.content).pack_start(row,False,False,0);self.song_buttons.append((play,add,value))
 
     def resize(self,width,height):
-        size=(max(118,min(200,(width-160)//6-28)),88 if height<680 else 128 if height<800 else 184)
+        self.wide=width>=1200;self.height=height;self.crumb.set_visible(self.wide)
+        size=(max(116,min(164,(width-160)//7-26)),88 if height<680 else 128 if height<800 else 164,self.wide)
         if self.size==size:return
-        self.size=size;self.card_size,self.portrait_size=size
+        self.size=size;self.card_size,self.portrait_size=size[:2]
         if self.active:self.render()
 
     def close(self):

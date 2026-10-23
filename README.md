@@ -35,7 +35,7 @@ Open **Listening room · Fullscreen** from settings, press the **⛶** header bu
 The fullscreen **Collection** page brings personal picks, saved albums and search into the room. **+** builds a private queue; its own **Queue** page lets you reorder, remove and play songs in sequence. Transport stays visible across the room. [Source support and queue controls →](docs/COLLECTION.md)
 
 **Step into the artist's world.** Click the artist's name for a photographic
-masthead, albums, singles/EPs, compilations, appearances and available editorial
+masthead, popular songs, album and single shelves, compilations, appearances and editorial
 stories. Open a release, read its liner notes, listen or build your queue without
 leaving fullscreen. Content depends on the selected source. [Explore the artist room →](docs/ARTISTS.md)
 

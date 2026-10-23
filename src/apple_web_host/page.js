@@ -89,7 +89,7 @@ async function emberboxAppleCommand(request) {
       isCompilation:a.isCompilation===true,isSingle:a.isSingle===true};
   }
   async function api(path, query = {}) {
-    const catalog=/^\/v1\/catalog\/[a-z]{2}\/(search|songs\/\d{1,20}(\/artists)?|albums\/\d{1,20}(\/tracks)?|artists\/\d{1,20}(\/view\/(top-songs|latest-release|full-albums|singles|compilation-albums|appears-on-albums))?)$/;
+    const catalog=/^\/v1\/catalog\/[a-z]{2}\/(search|songs\/\d{1,20}(\/artists)?|albums\/\d{1,20}(\/tracks)?|artists\/\d{1,20}(\/view\/(top-songs|latest-release|full-albums|singles|featured-albums|compilation-albums|appears-on-albums))?)$/;
     if (!path.startsWith('/v1/me/library/') && !catalog.test(path)) throw Error('Unsupported library request');
     if (typeof music.api.music === 'function') {
       const response = await music.api.music(path, query);
@@ -119,23 +119,58 @@ async function emberboxAppleCommand(request) {
       bio:String(a.editorialNotes?.standard||a.editorialNotes?.short||'').slice(0,14000),url:publicUrl(a.url)};
   }
   function page(result) {
-    const data=Array.isArray(result)?result:result.data||[];
+    const data=Array.isArray(result)?result:Array.isArray(result?.data)?result.data:[];
     let next=null;
     if(result.next) {try {const value=Number(new URL(result.next,'https://api.music.apple.com').searchParams.get('offset'));
       if(Number.isSafeInteger(value)&&value>offset&&value<=100000)next=value;
     }catch{}}
     return {items:data.filter(r=>['albums','songs'].includes(r.type)).map(item),next};
   }
+  // The metadata request's `views` field may omit individual views in the web
+  // MusicKit client. Read missing ones through Apple's documented view endpoint,
+  // never through a name search or a generic album list relabelled as a category.
+  // https://developer.apple.com/documentation/applemusicapi/fetch-a-view-on-this-resource-by-name-4kow5
+  const artistViews=[
+    {id:'top-songs',view:'top-songs',type:'songs',limit:10},
+    {id:'latest-release',view:'latest-release',type:'albums',limit:1},
+    {id:'albums',view:'full-albums',type:'albums',limit:8},
+    {id:'singles',view:'singles',type:'albums',limit:6},
+    {id:'featured-albums',view:'featured-albums',type:'albums',limit:6},
+    {id:'compilations',view:'compilation-albums',type:'albums',limit:6},
+    {id:'appears',view:'appears-on-albums',type:'albums',limit:6}
+  ];
+  function artistPage(result,spec) {
+    const raw=Array.isArray(result?.data)?result.data:[];const seen=new Set();
+    const data=raw.filter(r=>{
+      if(!r||r.type!==spec.type||!/^\d{1,20}$/.test(String(r.id))||
+         !r.attributes?.name||seen.has(String(r.id)))return false;
+      // Reject explicit contradictory flags in the full-album category. The
+      // singles view itself is authoritative for EPs, which need not isSingle.
+      if(spec.id==='albums'&&(r.attributes.isSingle===true||r.attributes.isCompilation===true))return false;
+      seen.add(String(r.id));return true;
+    }).slice(0,spec.limit);
+    return {id:spec.id,...page({...result,data})};
+  }
+  async function artistApi(path,query,deadline) {
+    const remaining=deadline-Date.now();if(remaining<=0)throw Error('TIMEOUT');
+    let timer;
+    // MusicKit exposes no AbortSignal here. Its late response is ignored, and
+    // every optional view has its own rejection handler before the deadline.
+    try {return await Promise.race([api(path,query),new Promise((_,reject)=>{
+      timer=setTimeout(()=>reject(Error('TIMEOUT')),remaining);
+    })]);}finally{clearTimeout(timer);}
+  }
   if(request.method==='artist') {
-    const sf=storefront();let artistId=id;
+    const sf=storefront(),deadline=Date.now()+6500;let artistId=id;
+    const core=(path,query)=>artistApi(path,query,Math.min(deadline,Date.now()+4500));
     if(artistId&&!/^\d{1,20}$/.test(artistId))throw Error('Invalid artist');
     if(!artistId) {
       const songId=String(params.songId||'');let song;
       const resourceType=['albums','library-albums','album'].includes(String(params.songKind||''))?'albums':'songs';
       if(/^\d{1,20}$/.test(songId)) {
-        song=(await api(`/v1/catalog/${sf}/${resourceType}/${songId}`,{include:'artists'})).data?.[0];
+        song=(await core(`/v1/catalog/${sf}/${resourceType}/${songId}`,{include:'artists'})).data?.[0];
       } else if(safeId.test(songId)) {
-        try {song=(await api(`/v1/me/library/${resourceType}/${encodeURIComponent(songId)}/catalog`,{include:'artists'})).data?.[0];}catch{}
+        try {song=(await core(`/v1/me/library/${resourceType}/${encodeURIComponent(songId)}/catalog`,{include:'artists'})).data?.[0];}catch{}
       }
       const choices=(song?.relationships?.artists?.data||[]).filter(a=>/^\d{1,20}$/.test(String(a.id))).map(artistItem);
       if(choices.length===1)artistId=choices[0].id;
@@ -143,20 +178,34 @@ async function emberboxAppleCommand(request) {
       else {
         const name=String(params.name||'').trim().slice(0,200);
         if(!name)return {choices:[]};
-        const result=await api(`/v1/catalog/${sf}/search`,{term:name,types:'artists',limit:12});
+        const result=await core(`/v1/catalog/${sf}/search`,{term:name,types:'artists',limit:12});
         return {choices:(result.results?.artists?.data||[]).map(artistItem)};
       }
     }
-    const resource=(await api(`/v1/catalog/${sf}/artists/${artistId}`,{views:'top-songs,latest-release',extend:'editorialNotes'})).data?.[0];
-    if(!resource)throw Error('NOT_FOUND');
-    const sections=['latest-release','top-songs'].map(key=>({id:key,...page(resource.views?.[key]||{})}));
+    const resource=(await core(`/v1/catalog/${sf}/artists/${artistId}`,
+      {views:artistViews.map(s=>s.view).join(','),extend:'editorialNotes'})).data?.[0];
+    if(!resource||resource.type!=='artists'||String(resource.id)!==artistId)throw Error('NOT_FOUND');
+    const optionalDeadline=Math.min(deadline,Date.now()+2200);
+    const sections=await Promise.all(artistViews.map(async spec=>{
+      const included=artistPage(resource.views?.[spec.view]||{},spec);
+      if(included.items.length)return included;
+      try {
+        const result=await artistApi(`/v1/catalog/${sf}/artists/${artistId}/view/${spec.view}`,
+          {limit:spec.limit},optionalDeadline);
+        if(!Array.isArray(result?.data))throw Error('Invalid artist view');
+        return artistPage(result,spec);
+      }
+      catch {return {...included,unavailable:true};}
+    }));
     return {artist:artistItem(resource),sections};
   }
   if(request.method==='artistSection') {
-    const views={albums:'full-albums',singles:'singles',compilations:'compilation-albums',appears:'appears-on-albums'};
-    const view=views[params.section];
-    if(!/^\d{1,20}$/.test(id)||!view)throw Error('Invalid artist section');
-    return page(await api(`/v1/catalog/${storefront()}/artists/${id}/view/${view}`,{limit:24,offset}));
+    const spec=artistViews.find(s=>s.id===params.section);
+    if(!/^\d{1,20}$/.test(id)||!spec)throw Error('Invalid artist section');
+    const result=await artistApi(`/v1/catalog/${storefront()}/artists/${id}/view/${spec.view}`,
+      {limit:24,offset},Date.now()+4500);
+    if(!Array.isArray(result?.data))throw Error('Invalid artist view');
+    return artistPage(result,{...spec,limit:24});
   }
   if(request.method==='release') {
     if(!/^\d{1,20}$/.test(id))throw Error('Invalid album');

@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.12.1 — 2026-10-23
+
+- Redesign the artist overview around a panoramic portrait, larger name and genre badges. Merge category navigation into the toolbar to bring more music onto the first screen.
+- Pair a horizontal featured release with compact popular songs, then show album/single/compilation shelves. Deduplicate releases across the overview; a genuinely sparse catalogue uses its supplied artist story beside the release.
+- Fetch missing Apple artist views by exact ID, independently and in parallel. Bound the optional phase to 2.2 seconds and the artist command to 6.5 seconds; keep successful sections when another view fails.
+- Verify the original one-latest-release regression, useful content in both wide columns, sparse data without invented cards, queue controls, source changes and three GTK layouts in English/Russian. Refresh the previews.
+
 ## 0.12.0 — 2026-10-23
 
 - Open the artist from the fullscreen song, collection or queue, with a photographic Grunesphism masthead, portrait, genre details and persistent category navigation.

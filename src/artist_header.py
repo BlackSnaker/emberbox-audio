@@ -8,16 +8,16 @@ from gi.repository import Gtk,GdkPixbuf,GLib
 def compose(pixels,width,height):
     raw,size,alpha,stride=pixels
     photo=Image.frombytes('RGBA' if alpha else 'RGB',size,raw,'raw','RGBA' if alpha else 'RGB',stride).convert('RGB')
-    base=ImageOps.fit(photo,(width,height),Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(18))
-    base=ImageEnhance.Color(base).enhance(.45).convert('RGBA')
+    base=ImageOps.fit(photo,(width,height),Image.Resampling.LANCZOS).filter(ImageFilter.GaussianBlur(24))
+    base=ImageEnhance.Color(base).enhance(.4).convert('RGBA')
     # A clearer portrait on the right fades into the quieter reading area.
-    part=min(width,int(height*2.2));portrait=ImageOps.fit(photo,(part,height),Image.Resampling.LANCZOS)
+    part=min(width,int(height*3.2));portrait=ImageOps.fit(photo,(part,height),Image.Resampling.LANCZOS,centering=(.5,.18))
     fade=Image.linear_gradient('L').rotate(90).resize((part,height))
     fade=fade.point(lambda value:min(255,int(value*1.7)))
     base.paste(portrait,(width-part,0),fade)
-    shade=ImageOps.mirror(Image.linear_gradient('L').rotate(90)).resize((width,height)).point(lambda v:85+int(v*.62))
-    base=Image.composite(Image.new('RGBA',(width,height),(23,29,21,255)),base,shade)
-    warmth=Image.new('RGBA',(width,height),(178,118,34,22));base=Image.alpha_composite(base,warmth)
+    shade=ImageOps.mirror(Image.linear_gradient('L').rotate(90)).resize((width,height)).point(lambda v:55+int(v*.71))
+    base=Image.composite(Image.new('RGBA',(width,height),(26,30,22,255)),base,shade)
+    warmth=Image.new('RGBA',(width,height),(178,118,34,14));base=Image.alpha_composite(base,warmth)
     mask=Image.new('L',(width,height));ImageDraw.Draw(mask).rounded_rectangle((0,0,width-1,height-1),26,fill=255)
     base.putalpha(mask)
     return base.tobytes()
