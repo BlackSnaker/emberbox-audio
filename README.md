@@ -6,6 +6,38 @@
   <p><a href="#get-started">Get started</a> · <a href="#system-requirements">System requirements</a> · <a href="docs/DESIGN.md">Grunesphism</a> · <a href="README.ru.md">Русский</a> · <a href="https://github.com/BlackSnaker/emberbox-video">Emberbox Video</a></p>
 </div>
 
+<a id="the-flow-update"></a>
+
+## 24 October 2026 · The Flow Update
+
+![The Flow Update: your music, in full flow — Ember DJ, beat matching and incandescent controls](assets/updates/2026-10-24.en.png)
+
+[Читать новость на русском →](README.ru.md#the-flow-update)
+
+**A personal DJ. Songs that flow together. Warmth you can see.** Today's big
+update brings together **Ember DJ and EmberFlow**, from versions 0.13 to 0.16.2.
+
+- **Tell Ember what the music should feel like.** Type or speak a wish, refine
+  it with “a little more upbeat” or “without vocals,” and build a set around
+  personal picks and your listening preferences. Optional local AI understands
+  free-form scenes; the new Russian voice is **Ksenia**. [Meet Ember DJ →](docs/DJ.md)
+- **Let the next song find its way in.** EmberFlow mixes real tracks from your
+  queue for up to **eight seconds** in built-in **Apple Music and YouTube**.
+  **Beats** aligns stable, compatible rhythms with tempo changes up to **±6%**,
+  preserving pitch, then gently restores the original tempo. Other material keeps
+  a smooth volume blend. [Inside EmberFlow →](docs/FLOW.md)
+- **A small piece of warm hi-fi.** The recessed EmberFlow switch now holds a
+  larger glass lamp: a visible filament warms from dull red through amber to
+  gold, then cools with thermal inertia. Quick repeated presses retain its heat;
+  the animation stops once settled.
+
+**Make it yours:** prepare voice/AI in **DJ → ⚙**, or enable
+**EmberFlow + Beats** in player settings and add songs to Ember's queue.
+
+[Install or update →](docs/INSTALL.md) · [All changes →](CHANGELOG.md) · [Русская версия →](README.ru.md#the-flow-update)
+
+---
+
 ![Emberbox Audio: full and compact interfaces in a warm Gruvbox presentation](assets/hero.png)
 
 ## Ember DJ — your own radio
