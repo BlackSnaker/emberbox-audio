@@ -1,7 +1,7 @@
 'use strict';
 const assert=require('node:assert/strict');
 const vm=require('node:vm');
-const {FlowDecks}=require('../src/apple_web_host/flow.cjs');
+const {FlowDecks,mixCurve}=require('../src/apple_web_host/flow.cjs');
 
 async function cancellation() {
  let release,entered;const started=new Promise(r=>entered=r),wait=new Promise(r=>release=r),calls=[];
@@ -28,14 +28,47 @@ async function envelope() {
  media.addEventListener=(name,fn)=>{if(name==='volumechange')guard=fn;};media.removeEventListener=()=>guard=null;
  const root={_services:{playback:{_currentPlayer:{_targetElement:media}}}};
  const sandbox={window:{MusicKit:{getInstance:()=>root}},HTMLMediaElement:Media,Node,
-  performance:{now:()=>now},setInterval:fn=>(tick=fn,1),clearInterval:()=>tick=null,Map,Set,Object,Number,Math};
+  performance:{now:()=>now},Date:{now:()=>now},setInterval:fn=>(tick=fn,1),clearInterval:()=>tick=null,Map,Set,Object,Number,Math};
  const page={isDestroyed:()=>false,webContents:{executeJavaScript:code=>Promise.resolve(vm.runInNewContext(code,sandbox))}};
  const flow=new FlowDecks(page,null,null,null);
- await flow.gain(page,0,4,1);now=2000;tick();
+ await flow.gain(page,0,8,1,0);
+ for(let i=0;i<=1000;i++){
+  now=i*8;tick();assert(Math.abs(physical-(1-mixCurve(i/1000)))<1e-10);
+  assert(physical>=0&&physical<=1);assert.equal(media.volume,1);
+ }
+ // A second fade exercises an ordinary source-volume change in mid-mix.
+ now=0;await flow.gain(page,0,8,1,0);now=4000;tick();
  assert(Math.abs(physical-.5)<1e-9);assert.equal(media.volume,1);assert.equal(logical,1,'The fade rewrote MusicKit logical volume');
  media.volume=.6;tick();assert(Math.abs(physical-.3)<1e-9,'A source-volume change lost its envelope');
  await flow.cancel();assert.equal(physical,.6);assert.equal(media.volume,.6);assert(!guard);
+ now=1200;await flow.gain(page,1,8,0,1000);
+ assert(Math.abs(physical-.6*mixCurve(.025))<1e-10,'A delayed page restarted the envelope instead of catching up');
+ await flow.cancel();
 }
 
-(async()=>{await cancellation();await envelope();console.log('PASS Apple cancellation, headroom envelope and logical-volume isolation');})()
+async function longMix(){
+ const window=()=>({dead:false,isDestroyed(){return this.dead;},destroy(){this.dead=true;},webContents:{executeJavaScript:async()=>true,setBackgroundThrottling(){}}});
+ const a=window(),b=window(),gains=[];
+ const flow=new FlowDecks(a,()=>b,async()=>({duration:180,position:160}),'');
+ flow.next=b;flow.key='entry';flow.holdTail=flow.startMuted=async()=>true;
+ flow.inspect=async()=>({playing:true,time:2});flow.gain=async(...args)=>gains.push(args);
+ try{
+  const result=await flow.transition({key:'entry',duration:8});
+  assert.equal(result.duration,8);assert(result.overlap);assert.equal(gains.length,2);
+  assert.equal(gains[0][4],gains[1][4],'Both pages need the same fade start time');
+ }finally{await flow.cancel();}
+}
+
+async function cancelWhileScheduling(){
+ let release,entered;const scheduled=new Promise(r=>entered=r),wait=new Promise(r=>release=r);
+ const window=()=>({dead:false,isDestroyed(){return this.dead;},destroy(){this.dead=true;},webContents:{executeJavaScript:async()=>true,setBackgroundThrottling(){}}});
+ const a=window(),b=window(),flow=new FlowDecks(a,()=>b,async()=>({duration:180,position:160}),'');
+ flow.next=b;flow.key='entry';flow.holdTail=flow.startMuted=async()=>true;
+ flow.inspect=async()=>({playing:true,time:2});flow.gain=async()=>{entered();await wait;};
+ const result=flow.transition({key:'entry',duration:8}).catch(e=>e.message);
+ await scheduled;await flow.cancel();release();
+ assert.equal(await result,'FLOW_CANCELLED');assert.equal(flow.current,a);assert(b.dead);assert(!flow.timer);
+}
+
+(async()=>{await cancellation();await envelope();await longMix();await cancelWhileScheduling();console.log('PASS Apple cancellation, eight-second synchronized mix, three-phase envelope and logical-volume isolation');})()
  .catch(e=>{console.error(e);process.exitCode=1;});

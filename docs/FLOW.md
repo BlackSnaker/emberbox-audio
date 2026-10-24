@@ -12,9 +12,19 @@ these views. Its preference is saved; it is off on first installation.
 
 Add songs to Ember's **Queue**, play an album/search result list or start an
 Ember DJ set. The next queued track is prepared near the end of the current one.
-Its opening overlaps the outgoing tail for up to **four seconds**, with gently
-eased, complementary volume curves. The curves sum to unity, retaining peak
-headroom. Source format and quality settings are retained.
+Its opening overlaps the outgoing tail for up to **eight seconds**:
+
+1. The incoming texture is introduced gently.
+2. A shorter middle phase hands over the foreground, limiting the time competing
+   vocals and bass lines spend at similar volume.
+3. The outgoing ambience dissolves behind the new song.
+
+The envelope has no sharp slope or curvature changes at phase boundaries. Gains
+sum to unity, retaining peak headroom; the master dial remains independent.
+Short tracks receive proportionally shorter transitions. When the existing lamp
+meter detects an already quiet outro, the entrance shortens to 1.4 seconds.
+Stale measurements and muted playback cannot trigger this shortcut.
+Source format and quality settings are retained.
 
 | Source | EmberFlow |
 | --- | --- |
@@ -48,7 +58,8 @@ normal queue. With no next item there is nothing to mix.
 
 Apple support depends on MusicKit's current playback implementation. The engine
 keeps a short, already authorized outgoing media element alive during handover;
-an eight-second watchdog bounds that lease. Logical source volume is isolated
+a fourteen-second watchdog bounds that lease, including incoming startup. Both
+pages receive a shared envelope start time. Logical source volume is isolated
 from the fade, and user transport commands cancel the handover. Authentication
 and EME/CDM checks remain with the service. No media URLs or keys are extracted.
 

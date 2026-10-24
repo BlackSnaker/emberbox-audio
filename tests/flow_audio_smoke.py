@@ -28,7 +28,7 @@ def run():
         module=subprocess.check_output(['pactl','load-module','module-null-sink','sink_name='+sink,'rate=48000','channels=2'],text=True).strip()
         with tempfile.TemporaryDirectory(prefix='emberflow-tones-') as directory:
             for deck,hz in ((old,220),(new,440)):
-                pcm=(.18*np.sin(np.arange(48000*9)*hz*2*np.pi/48000)*32767).astype('<i2')
+                pcm=(.18*np.sin(np.arange(48000*15)*hz*2*np.pi/48000)*32767).astype('<i2')
                 file=Path(directory)/(str(hz)+'.wav')
                 with wave.open(str(file),'wb') as stream:
                     stream.setparams((2,2,48000,0,'NONE','not compressed'));stream.writeframes(np.column_stack((pcm,pcm)).tobytes())
@@ -50,15 +50,15 @@ def run():
                         raw.append(block)
             reader=threading.Thread(target=read,daemon=True);reader.start()
             usage=resource.getrusage(resource.RUSAGE_SELF);cpu=usage.ru_utime+usage.ru_stime;start=time.monotonic()
-            settle(1);decks.standby=new;assert decks.transition(3)
-            settle(4.5);stop.set();reader.join(.3)
+            settle(1);decks.standby=new;assert decks.transition(8)
+            settle(9.5);stop.set();reader.join(.3)
             samples=np.frombuffer(b''.join(raw)[:len(b''.join(raw))//8*8],dtype='<f4').reshape(-1,2)[:,0]
             def bands(at):
                 value=samples[int(at*48000):int((at+.3)*48000)];assert len(value)>100
                 spectrum=np.abs(np.fft.rfft(value*np.hanning(len(value))))/len(value)*4
                 freq=np.fft.rfftfreq(len(value),1/48000)
                 return [round(float(spectrum[(freq>hz-8)&(freq<hz+8)].max()),4) for hz in (220,440)]
-            before,middle,after=bands(.4),bands(2.4),bands(4.7)
+            before,middle,after=bands(.4),bands(4.95),bands(9.7)
             # The server can restore the application's own output volume.
             # Compare against that baseline, without changing the user's mixer.
             baseline=before[0];assert baseline>.005

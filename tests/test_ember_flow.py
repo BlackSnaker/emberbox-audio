@@ -1,5 +1,5 @@
 """Queue ownership, resource limits and a peak-safe two-stream envelope."""
-import math,stat,sys,tempfile,unittest
+import json,math,shutil,stat,subprocess,sys,tempfile,unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock,patch
@@ -71,6 +71,34 @@ class FlowTests(unittest.TestCase):
         for a,b in pairs:self.assertAlmostEqual(a+b,1);self.assertLessEqual(abs(a+b),1.)
         self.assertLess(pairs[1][1],.00001);self.assertLess(1-pairs[-2][1],.00001)
         self.assertEqual(pairs,sorted(pairs,reverse=True))
+        self.assertAlmostEqual(curve(.38)[1],.18)
+        self.assertAlmostEqual(curve(.62)[1],.82)
+    @unittest.skipUnless(shutil.which('node'),'Node is needed for the cross-engine comparison')
+    def test_apple_and_youtube_follow_the_same_audible_envelope(self):
+        root=Path(__file__).resolve().parents[1]
+        script="const {mixCurve}=require('./src/apple_web_host/flow.cjs');console.log(JSON.stringify(Array.from({length:1001},(_,i)=>mixCurve(i/1000))));"
+        values=json.loads(subprocess.check_output(['node','-e',script],cwd=root,text=True))
+        for i,value in enumerate(values):self.assertAlmostEqual(value,curve(i/1000)[1],places=12)
+    def test_long_mix_begins_early_enough(self):
+        self.flow.enabled=True;self.flow.tick(self.state())
+        self.now=17.75;self.flow.tick(self.state(171.75))
+        self.decks.transition.assert_called_once_with(8.)
+    def test_short_next_track_uses_a_proportional_mix(self):
+        self.music.book.upcoming('youtube')[0][1]['duration_ms']=20000
+        self.flow.enabled=True;self.flow.tick(self.state())
+        self.now=23.7;self.flow.tick(self.state(177.7))
+        self.decks.transition.assert_called_once_with(2.)
+    def test_already_quiet_outro_uses_a_shorter_entrance(self):
+        self.host.meter=SimpleNamespace(last_sample=0,rms_level=.2)
+        self.flow.enabled=True;self.flow.tick(self.state(170))
+        self.now=.8;self.host.meter.last_sample=.8;self.flow.tick(self.state(170.8))
+        self.now=2;self.host.meter.last_sample=2;self.flow.tick(self.state(172))
+        self.decks.transition.assert_called_once_with(1.4)
+    def test_stale_meter_cannot_mistake_an_outro_for_silence(self):
+        self.host.meter=SimpleNamespace(last_sample=-1,rms_level=0)
+        self.flow.enabled=True;self.flow.tick(self.state(170))
+        self.now=2;self.flow.tick(self.state(172))
+        self.decks.transition.assert_called_once_with(7.8)
     def test_deck_promotion_keeps_the_outgoing_state_from_overwriting_the_new_one(self):
         old=Mock();new=Mock();new.loaded=True;new.failed=False;new.position=.5
         self.host.youtube=old;self.host.on_youtube_changed=Mock()

@@ -161,7 +161,7 @@ async function pageRequest(win, request, navigations=0) {
     playing:!!result.playing,position:Number(result.position)||0,duration:Number(result.duration)||0,
     hasTrack:!!result.title,windowVisible:win.isVisible()});
   if(request.method==='status') {
-    result.integrationVersion=yandex?5:10;
+    result.integrationVersion=yandex?5:11;
     if(!yandex)result.emberFlow=true;
     result.audioQuality=win.emberboxQuality?.snapshot(String(result.id||result.title||''))||{};
     record({audioQuality:result.audioQuality,maximumQualityRequested:result.qualityPreference?.applied===true});

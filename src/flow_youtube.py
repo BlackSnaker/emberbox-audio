@@ -5,7 +5,18 @@ from youtube_audio import YouTubeAudio
 
 
 def curve(position):
-    t=max(0.,min(1.,position));incoming=t*t*(3-2*t)
+    """Introduce the new song, hand over the foreground, dissolve the tail.
+
+    The short middle handover limits competing vocals/bass. The longer outer
+    phases let the listener hear the incoming texture and outgoing ambience.
+    Every join has zero first/second derivative; gains share one peak budget.
+    Keep this in sync with mixCurve in apple_web_host/flow.cjs.
+    """
+    t=max(0.,min(1.,position))
+    if t<.38:x=t/.38;start,span=0.,.18
+    elif t<.62:x=(t-.38)/.24;start,span=.18,.64
+    else:x=(t-.62)/.38;start,span=.82,.18
+    incoming=start+span*x*x*x*(x*(x*6-15)+10)
     return 1-incoming,incoming
 
 

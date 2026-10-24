@@ -5,12 +5,13 @@ from source_picker import text
 
 
 class EmberFlow:
-    DURATION=4.
+    DURATION=8.
     def __init__(self,music,path):
         self.music=music;self.host=music.host;self.path=path;self.enabled=False;self.closed=False
         self.context=None;self.ready=False;self.busy=False;self.preparing=False;self.attempted=False
         self.error='';self.youtube=None;self.apple=None;self.pending_item=None
         self.last_position=None;self.last_time=None;self.mixing_until=0.;self.clock=time.monotonic
+        self.quiet_since=None
         try:
             if path.stat().st_size<4096:self.enabled=json.loads(path.read_text()).get('enabled') is True
         except (OSError,ValueError,TypeError,AttributeError):pass
@@ -32,7 +33,7 @@ class EmberFlow:
         if self.preparing:return text('Preparing the next track','Готовим следующий трек')
         if self.music.book.active!=self.host.source or not self.music.book.upcoming(self.host.source):
             return text('Add a next track to the Ember queue','Добавь следующий трек в очередь Ember')
-        return text('A smooth four-second transition','Плавный переход · 4 секунды')
+        return text('Layered mix · up to 8 seconds','Объёмное сведение · до 8 секунд')
 
     def set_enabled(self,enabled):
         self.enabled=bool(enabled);self.error='';self.cancel()
@@ -44,6 +45,7 @@ class EmberFlow:
     def cancel(self):
         self.context=None;self.ready=self.busy=self.preparing=self.attempted=False;self.pending_item=None
         self.last_position=self.last_time=None;self.mixing_until=0.
+        self.quiet_since=None
         if self.youtube:self.youtube.cancel()
         if self.apple:self.apple.cancel()
 
@@ -115,9 +117,21 @@ class EmberFlow:
             elif failed or now-self.prepare_started>20:
                 self.preparing=False;deck.cancel();self.error=text('Next track is not ready; using the normal transition',
                     'Следующий трек не готов — обычное переключение');s.changed()
-        lead=6.5 if source=='apple-music' else self.DURATION+.4
+        # Reuse the lamp meter; no extra recorder, FFT or beat-analysis model.
+        # Long silence in an outro should not turn into another long fade-in.
+        meter=getattr(h,'meter',None)
+        quiet=bool(meter and 0<=now-getattr(meter,'last_sample',0)<.35
+                   and not getattr(getattr(h,'sound',None),'muted',False)
+                   and getattr(meter,'rms_level',1)<.28)
+        if quiet:
+            if self.quiet_since is None:self.quiet_since=now
+        else:self.quiet_since=None
+        duration=min(self.DURATION,max(2.,state['duration']*.1),
+                     max(2.,float(next_item.get('duration_ms') or 80000)/10000))
+        lead=duration+(2.5 if source=='apple-music' else .4)
         if self.ready and .5<remaining<=lead:
-            self.busy=True;self.ready=False;duration=min(self.DURATION,remaining-.2)
+            self.busy=True;self.ready=False;duration=min(duration,remaining-.2)
+            if self.quiet_since is not None and now-self.quiet_since>=.6:duration=min(duration,1.4)
             if source=='apple-music':self.pending_item=next_item;deck.transition(duration)
             else:
                 try:

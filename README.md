@@ -21,9 +21,10 @@ set. Direct commands remain immediate.
 ## EmberFlow — one song flows into the next
 
 A tactile amber switch blends the tail of one track into the opening of the next.
-Up to four seconds of real overlap for **in-player Apple Music and YouTube**,
-following your Ember queue. A briefly staged second deck keeps the transition
-local and avoids neural processing. [Controls and source support →](docs/FLOW.md)
+Up to eight seconds of real overlap for **in-player Apple Music and YouTube**,
+following your Ember queue: an emerging intro, a focused handover and a dissolving
+tail. Quiet outros use a shorter entrance. A briefly staged second deck keeps the
+transition local without a neural model. [Controls and source support →](docs/FLOW.md)
 
 ## Your music, a little warmer.
 

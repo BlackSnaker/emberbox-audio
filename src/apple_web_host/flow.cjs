@@ -1,4 +1,14 @@
 'use strict';
+// Three C2-continuous phases: reveal the intro, exchange the foreground,
+// release the old ambience. The complementary gains retain peak headroom.
+// The same curve drives mpv (flow_youtube.py); tests compare both engines.
+function mixCurve(position){
+ const t=Math.max(0,Math.min(1,position));let x,start,span;
+ if(t<.38){x=t/.38;start=0;span=.18;}
+ else if(t<.62){x=(t-.38)/.24;start=.18;span=.64;}
+ else{x=(t-.62)/.38;start=.82;span=.18;}
+ return start+span*x*x*x*(x*(x*6-15)+10);
+}
 // MusicKit keeps its media elements detached from the DOM. Resolve the ordinary
 // already-authorized element, without reading media URLs, credentials or keys.
 const MEDIA=`(()=>{if(window.__emberFlowMedia)return window.__emberFlowMedia;
@@ -26,16 +36,17 @@ class FlowDecks {
   const s=await win.webContents.executeJavaScript(`(()=>{const a=${MEDIA};return a?{playing:!a.paused&&!a.ended,ended:a.ended,error:!!a.error,time:a.currentTime,volume:Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'volume').get.call(a)}:null;})()`);
   return s?{...s,audible:win.webContents.isCurrentlyAudible()}:null;
  }
- async gain(win,to,duration=0,from=to){return win.webContents.executeJavaScript(`(()=>{const a=${MEDIA};if(!a)throw Error('FLOW_UNAVAILABLE');
+ async gain(win,to,duration=0,from=to,startsAt=Date.now()){return win.webContents.executeJavaScript(`(()=>{const a=${MEDIA};if(!a)throw Error('FLOW_UNAVAILABLE');
   const nativeVolume=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'volume');
   if(window.__emberFlowVolume===undefined){window.__emberFlowVolume=a.volume;
     Object.defineProperty(a,'volume',{configurable:true,get(){return window.__emberFlowVolume;},set(v){window.__emberFlowVolume=v;nativeVolume.set.call(a,v*(window.__emberFlowMultiplier??1));}});}
   if(!window.__emberFlowVolumeGuard){window.__emberFlowVolumeGuard=e=>e.stopImmediatePropagation();a.addEventListener('volumechange',window.__emberFlowVolumeGuard,true);}
   clearInterval(window.__emberFlowTimer);
-  const start=performance.now(),set=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'volume').set;
-  const step=()=>{let x=${duration}>0?Math.min(1,(performance.now()-start)/(${duration}*1000)):1;
-   x=x*x*(3-2*x);window.__emberFlowMultiplier=${from}+(${to}-${from})*x;
-   set.call(a,window.__emberFlowVolume*window.__emberFlowMultiplier);if(x>=1)clearInterval(window.__emberFlowTimer);};
+  const start=performance.now()+(${Number(startsAt)}-Date.now()),set=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'volume').set;
+  const envelope=${mixCurve.toString()};
+  const step=()=>{const t=${duration}>0?Math.max(0,Math.min(1,(performance.now()-start)/(${duration}*1000))):1;
+   const x=envelope(t);window.__emberFlowMultiplier=${from}+(${to}-${from})*x;
+   set.call(a,window.__emberFlowVolume*window.__emberFlowMultiplier);if(t>=1)clearInterval(window.__emberFlowTimer);};
   step();if(${duration}>0)window.__emberFlowTimer=setInterval(step,16);return true;})()`);}
  async cancel(){
   this.generation++;clearTimeout(this.timer);this.timer=null;this.pendingState=null;this.key='';
@@ -72,7 +83,7 @@ class FlowDecks {
    const release=()=>{if(released)return;released=true;for(const f of undo)f();m.removeEventListener?.('mediaPlaybackError',release);};
    window.__emberFlowRelease=release;m.addEventListener?.('mediaPlaybackError',release);
    // A bounded lease survives a lost IPC connection. EME/CDM checks remain intact.
-   setTimeout(()=>{if(!released){release();a.pause();}},8000);return true;})()`);
+   setTimeout(()=>{if(!released){release();a.pause();}},14000);return true;})()`);
  }
  async startMuted(win){
   await win.webContents.executeJavaScript(`(()=>{const proto=HTMLMediaElement.prototype,play=proto.play,
@@ -105,13 +116,15 @@ class FlowDecks {
    if(generation!==this.generation)throw Error('FLOW_CANCELLED');
    if(!a||!b?.playing)throw Error('FLOW_UNAVAILABLE');
    const remaining=this.pendingState.duration-this.pendingState.position-(a.time-this.tailStartTime)-.1;
-   const duration=a.playing?Math.max(.15,Math.min(6,Number(p.duration)||4,remaining)):.15;
-   await Promise.all([this.gain(old,0,duration,1),this.gain(next,1,duration,0)]);
+   const duration=a.playing?Math.max(.15,Math.min(8,Number(p.duration)||8,remaining)):.15;
+   const startsAt=Date.now()+60;
+   await Promise.all([this.gain(old,0,duration,1,startsAt),this.gain(next,1,duration,0,startsAt)]);
+   if(generation!==this.generation)throw Error('FLOW_CANCELLED');
    this.current=next;this.next=null;this.old=old;this.key='';this.pendingState=null;
    this.timer=setTimeout(()=>{this.timer=null;
     if(!old.isDestroyed())old.destroy();if(this.old===old)this.old=null;
     if(this.current===next&&!next.isDestroyed())next.webContents.executeJavaScript(RELEASE).catch(()=>{});
-   },duration*1000+80);
+   },duration*1000+160);
    return {started:true,duration,overlap:a.playing};
   }catch(e){
    if(generation===this.generation){await this.cancel();
@@ -133,4 +146,4 @@ class FlowDecks {
   throw Error('INVALID_ARGUMENTS');
  }
 }
-module.exports={FlowDecks};
+module.exports={FlowDecks,mixCurve};

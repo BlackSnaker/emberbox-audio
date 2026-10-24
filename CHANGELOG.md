@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.15.1 — 2026-10-24
+
+- Extend EmberFlow to an eight-second, three-phase blend: introduce the incoming texture, exchange the foreground, then dissolve the outgoing ambience. Smooth phase boundaries and complementary gain retain peak headroom without re-encoding or a new DSP/model process.
+- Proportionally shorten mixes for short tracks; reuse fresh lamp-meter measurements to avoid a long entrance after an already quiet outro. Ignore stale measurements and muted playback.
+- Synchronize both Apple renderer envelopes; integration 11 bounds the outgoing lease to fourteen seconds including startup. Check cross-engine curve parity, full-length real mpv overlap, cancellation, source-volume isolation and Apple queue handover.
+
 ## 0.15.0 — 2026-10-24
 
 - Add EmberFlow: an opt-in amber hardware switch shared by the widget, fullscreen console and mini-mode settings, with a short finite animation and private persisted preference.
