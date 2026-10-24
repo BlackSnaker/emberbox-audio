@@ -10,8 +10,8 @@ class AppleUpgrade(TestCase):
     def test_restore_waits_for_the_authorized_new_engine(self):
         app=AppleWeb.__new__(AppleWeb)
         app.closed=False;app.enabled=True;app._start_engine=Mock()
-        states=[{'ready':True,'authorized':False,'integrationVersion':11},
-                {'ready':True,'authorized':True,'integrationVersion':11}]
+        states=[{'ready':True,'authorized':False,'integrationVersion':13},
+                {'ready':True,'authorized':True,'integrationVersion':13}]
         observed=[]
         def request(method,**params):
             if method=='status':observed.append(states.pop(0));return observed[-1]

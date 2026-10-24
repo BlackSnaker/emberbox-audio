@@ -9,11 +9,14 @@ class EmberFlow:
     def __init__(self,music,path):
         self.music=music;self.host=music.host;self.path=path;self.enabled=False;self.closed=False
         self.context=None;self.ready=False;self.busy=False;self.preparing=False;self.attempted=False
+        self.beat_sync=True;self.beat_status=None
         self.error='';self.youtube=None;self.apple=None;self.pending_item=None
         self.last_position=None;self.last_time=None;self.mixing_until=0.;self.clock=time.monotonic
         self.quiet_since=None
         try:
-            if path.stat().st_size<4096:self.enabled=json.loads(path.read_text()).get('enabled') is True
+            if path.stat().st_size<4096:
+                saved=json.loads(path.read_text());self.enabled=saved.get('enabled') is True
+                self.beat_sync=saved.get('beat_sync',True) is True
         except (OSError,ValueError,TypeError,AttributeError):pass
 
     @property
@@ -29,23 +32,33 @@ class EmberFlow:
         karaoke=getattr(getattr(getattr(self.host,'fullscreen',None),'karaoke',None),'audio',None)
         if karaoke and (karaoke.active or karaoke.starting):return text('Flow waits while vocal reduction is on','Flow ждёт, пока включено приглушение вокала')
         if self.error:return self.error
-        if self.busy or self.mixing_until>self.clock():return text('Two songs, one flow','Две песни — один поток')
+        if self.busy or self.mixing_until>self.clock():
+            if self.beat_status:return text('Beats aligned','Биты совмещены')+f" · {self.beat_status['bpm']:g} BPM"
+            return text('Two songs, one flow','Две песни — один поток')
         if self.preparing:return text('Preparing the next track','Готовим следующий трек')
         if self.music.book.active!=self.host.source or not self.music.book.upcoming(self.host.source):
             return text('Add a next track to the Ember queue','Добавь следующий трек в очередь Ember')
-        return text('Layered mix · up to 8 seconds','Объёмное сведение · до 8 секунд')
+        return text('Beat sync when the rhythm is clear','Сводим биты, когда ритм распознан') if self.beat_sync else text('Layered mix · up to 8 seconds','Сведение · до 8 секунд')
 
     def set_enabled(self,enabled):
         self.enabled=bool(enabled);self.error='';self.cancel()
+        self.save();self.music.changed()
+
+    def set_beat_sync(self,enabled):
+        self.beat_sync=bool(enabled);self.cancel();self.save();self.music.changed()
+
+    def save(self):
         self.path.parent.mkdir(parents=True,exist_ok=True)
         temporary=self.path.with_suffix('.next.json')
-        temporary.write_text(json.dumps({'enabled':self.enabled}));temporary.chmod(0o600);temporary.replace(self.path)
-        self.music.changed()
+        temporary.write_text(json.dumps({'enabled':self.enabled,'beat_sync':self.beat_sync}));temporary.chmod(0o600);temporary.replace(self.path)
 
     def cancel(self):
         self.context=None;self.ready=self.busy=self.preparing=self.attempted=False;self.pending_item=None
         self.last_position=self.last_time=None;self.mixing_until=0.
         self.quiet_since=None
+        self.beat_status=None
+        meter=getattr(self.host,'meter',None)
+        if meter and hasattr(meter,'set_rhythm'):meter.set_rhythm(None)
         if self.youtube:self.youtube.cancel()
         if self.apple:self.apple.cancel()
 
@@ -54,6 +67,8 @@ class EmberFlow:
         if not pending or pending[0][1]['entry']!=item['entry']:
             self.cancel();return
         s.book.select(source,pending[0][0]);s.watch.reset();s.started=time.monotonic();s.loading=False
+        meter=getattr(self.host,'meter',None)
+        if meter and hasattr(meter,'set_rhythm'):meter.set_rhythm(None)
         self.context=None;self.pending_item=None;self.mixing_until=self.clock()+duration+extra+.3;s.changed()
 
     def tick(self,state):
@@ -75,9 +90,11 @@ class EmberFlow:
                 result=self.apple.result()
                 if result is None:return
                 self.busy=False
-                if result.get('started') is True:self.adopt(self.pending_item,float(result.get('duration',self.DURATION)))
+                if result.get('started') is True:
+                    self.beat_status=result.get('beatSync');self.adopt(self.pending_item,float(result.get('duration',self.DURATION)),float(result.get('recovery',0)))
             except Exception:
                 self.busy=False;self.error=text('The transition was not ready; continuing normally','Переход не готов — продолжаем обычное воспроизведение')
+                self.apple.cancel()
             s.changed();return
         if self.mixing_until>now:
             # The 750 ms source snapshot may still describe the outgoing track.
@@ -91,6 +108,8 @@ class EmberFlow:
         if not current or not pending or not matches(current,state) or state.get('duration',0)<20:return
         next_item=pending[0][1];context=(current['entry'],next_item['entry'])
         if self.context!=context:self.cancel();self.context=context;self.error=''
+        meter=getattr(h,'meter',None)
+        if meter and hasattr(meter,'set_rhythm'):meter.set_rhythm(context[0] if self.beat_sync and source=='youtube' else None)
         remaining=state['duration']-state.get('position',0);position=state.get('position',0)
         if self.last_position is not None and abs(position-self.last_position)>max(1.5,now-self.last_time+1.5):
             self.cancel();return
@@ -107,6 +126,7 @@ class EmberFlow:
                     from flow_youtube import YouTubeDecks
                     self.youtube=YouTubeDecks(h)
                 deck=self.youtube
+            deck.beat_sync=self.beat_sync
             try:deck.prepare(next_item)
             except Exception:self.preparing=False;deck.cancel()
             s.changed()
@@ -128,14 +148,17 @@ class EmberFlow:
         else:self.quiet_since=None
         duration=min(self.DURATION,max(2.,state['duration']*.1),
                      max(2.,float(next_item.get('duration_ms') or 80000)/10000))
-        lead=duration+(2.5 if source=='apple-music' else .4)
+        if self.quiet_since is not None and now-self.quiet_since>=.6:duration=min(duration,1.4)
+        beat_apple=source=='apple-music' and self.beat_sync and getattr(h.apple_web,'state',{}).get('emberBeatSync') is True
+        lead=duration+(10. if beat_apple else 2.5 if source=='apple-music' else 1.2 if self.beat_sync else .4)
         if self.ready and .5<remaining<=lead:
             self.busy=True;self.ready=False;duration=min(duration,remaining-.2)
-            if self.quiet_since is not None and now-self.quiet_since>=.6:duration=min(duration,1.4)
             if source=='apple-music':self.pending_item=next_item;deck.transition(duration)
             else:
                 try:
-                    if deck.transition(duration):self.adopt(next_item,duration,2.)
+                    if deck.transition(duration):
+                        self.beat_status=deck.beat_plan if isinstance(deck.beat_plan,dict) else None
+                        self.adopt(next_item,duration,2.+getattr(deck,'recovery',0.))
                 except Exception:deck.cancel()
                 self.busy=False
             s.changed()

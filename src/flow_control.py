@@ -2,6 +2,7 @@
 from gi.repository import Gtk
 from functools import lru_cache
 from hardware_controls import pixbuf
+from source_picker import text
 
 CSS=b'''
 button.ember-flow, .ember-stage button.ember-flow {
@@ -39,26 +40,28 @@ def switch_frame(index):
 
 
 class FlowControl(Gtk.ToggleButton):
-    def __init__(self,flow):
-        super().__init__();self.flow=flow;self.syncing=False
-        self.shown=self.target=float(flow.enabled);self.tick=0;self.frame_start=None
+    def __init__(self,flow,beats=False):
+        super().__init__();self.flow=flow;self.syncing=False;self.beats=beats
+        self.shown=self.target=float(flow.beat_sync if beats else flow.enabled);self.tick=0;self.frame_start=None
         self.get_style_context().add_class('ember-flow');self.set_has_tooltip(False)
-        self.get_accessible().set_name('EmberFlow')
+        self.get_accessible().set_name('Beat sync' if beats else 'EmberFlow')
         box=Gtk.Box(spacing=6);self.add(box)
-        box.pack_start(Gtk.Label(label='EmberFlow'),False,False,0)
+        box.pack_start(Gtk.Label(label=text('Beats','Биты') if beats else 'EmberFlow'),False,False,0)
         self.indicator=Gtk.Image();self.frame=None;box.pack_end(self.indicator,False,False,0)
         self.connect('toggled',self.toggled)
         self.unsubscribe=flow.music.subscribe(self.sync)
         self.connect('destroy',lambda *_:self.unsubscribe());self.sync()
 
     def toggled(self,_button):
-        if not self.syncing:self.flow.set_enabled(self.get_active())
+        if not self.syncing:
+            (self.flow.set_beat_sync if self.beats else self.flow.set_enabled)(self.get_active())
 
     def sync(self):
         self.syncing=True
-        try:self.set_active(self.flow.enabled);self.set_sensitive(self.flow.supported or self.flow.enabled)
+        value=self.flow.beat_sync if self.beats else self.flow.enabled
+        try:self.set_active(value);self.set_sensitive(self.flow.supported or self.flow.enabled)
         finally:self.syncing=False
-        target=float(self.flow.enabled)
+        target=float(value)
         if target!=self.target:
             self.from_position=self.shown;self.target=target;self.frame_start=None
             if self.get_mapped() and self.get_settings().get_property('gtk-enable-animations'):

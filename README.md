@@ -24,7 +24,9 @@ A tactile amber switch blends the tail of one track into the opening of the next
 Up to eight seconds of real overlap for **in-player Apple Music and YouTube**,
 following your Ember queue: an emerging intro, a focused handover and a dissolving
 tail. Quiet outros use a shorter entrance. A briefly staged second deck keeps the
-transition local without a neural model. [Controls and source support →](docs/FLOW.md)
+transition local without a neural model. The **Beats** switch aligns compatible
+rhythms with pitch-preserving tempo changes, then gently restores the song's own
+pace. [Controls and source support →](docs/FLOW.md)
 
 ## Your music, a little warmer.
 

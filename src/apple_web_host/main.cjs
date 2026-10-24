@@ -161,8 +161,8 @@ async function pageRequest(win, request, navigations=0) {
     playing:!!result.playing,position:Number(result.position)||0,duration:Number(result.duration)||0,
     hasTrack:!!result.title,windowVisible:win.isVisible()});
   if(request.method==='status') {
-    result.integrationVersion=yandex?5:11;
-    if(!yandex)result.emberFlow=true;
+    result.integrationVersion=yandex?5:13;
+    if(!yandex){result.emberFlow=true;result.emberBeatSync=true;}
     result.audioQuality=win.emberboxQuality?.snapshot(String(result.id||result.title||''))||{};
     record({audioQuality:result.audioQuality,maximumQualityRequested:result.qualityPreference?.applied===true});
     if(yandex)record({capabilities:Object.fromEntries(['player','wave','navigation','metadata','store','legacy'].map(key=>[key,result.capabilities?.[key]===true]))});

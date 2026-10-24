@@ -61,6 +61,15 @@ Emberbox does not bundle proprietary DRM binaries or install Spotify. Installing
 the GTK player does not establish a subscription or connect every source.
 [Account setup →](ACCOUNTS.md)
 
+## EmberFlow and beat matching
+
+No additional model is needed. One extra deck is prepared around the transition;
+Apple adds a MusicKit renderer and a small Web Audio graph. YouTube uses FFmpeg,
+already checked by the installer: one low-priority thread analyzes at most 6.5
+seconds. Observations stay in memory and playback uses its original engine. The
+outgoing YouTube detector shares the lamp worker, estimating BPM at most once a
+second. Turning Beats off stops this analysis and intro decoding.
+
 ## AI karaoke: additional resources
 
 - First use downloads a SHA256-verified **30 MB UVR model** and prepares a

@@ -36,6 +36,15 @@ class SpotifyAudioMeter:
         self.rms_level = 0.0
         self.last_sample = 0.0
         self.generation = 0
+        self.rhythm_key=None;self.rhythm=None;self.beat_grid=None;self.rhythm_check=0.
+
+    def set_rhythm(self,key):
+        if key==self.rhythm_key:return
+        self.rhythm_key=key;self.beat_grid=None;self.rhythm_check=0.
+        if key:
+            from flow_beats import EnergyTap
+            self.rhythm=EnergyTap()
+        else:self.rhythm=None
 
     def set_target(self, target):
         if target != self.target:
@@ -62,6 +71,7 @@ class SpotifyAudioMeter:
         self.levels = (0.0,) * 9
         self.rms_level = 0.0
         self.last_sample = 0.0
+        self.set_rhythm(None)
         if process:
             # A track transition may replace the output stream. Reaping the
             # old recorder must never wait inside GTK's event/paint callbacks.
@@ -135,11 +145,21 @@ class SpotifyAudioMeter:
                 break
             buffer.extend(chunk)
             while self.process is process and len(buffer) >= WINDOW_BYTES:
-                self._measure(bytes(buffer[:WINDOW_BYTES]))
+                # A read may deliver multiple hops. Backdate each window by
+                # its real place in the capture buffer, rather than stamping
+                # several different drum attacks with the same wall clock.
+                end=time.monotonic()-.05-(len(buffer)-WINDOW_BYTES)/FRAME_BYTES/RATE
+                self._measure(bytes(buffer[:WINDOW_BYTES]),end)
                 del buffer[:HOP_BYTES]
 
-    def _measure(self, raw):
+    def _measure(self, raw, sample_end=None):
         samples = np.frombuffer(raw, dtype='<f4').reshape(FRAMES, CHANNELS)
+        tap=self.rhythm
+        if tap:
+            now=time.monotonic();tap.feed(samples[-FRAMES//2:],sample_end if sample_end is not None else now-.05)
+            if now-self.rhythm_check>=1:
+                grid=tap.result()
+                if self.rhythm is tap:self.beat_grid=grid;self.rhythm_check=now
         # Measure stereo energy before summing channels: opposite-phase audio
         # is audible too. The VU scale covers -60 to 0 dBFS.
         rms = math.sqrt(float(np.mean(samples ** 2)))

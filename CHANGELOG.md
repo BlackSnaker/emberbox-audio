@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.16.0 — 2026-10-24
+
+- EmberFlow beat matching for native Apple Music and YouTube: measured tempo and phase, compatible rhythms within ±6%, preserved pitch, then a four-beat return to normal speed after the blend. Add a separate Beats switch in settings; low-confidence material keeps the musical crossfade.
+- Apple: silent intro analysis with rewind, Web Audio envelopes against the output clock, bounded waits and integration 13. Avoid MusicKit's stalled paused-seek promise. Authorization and DRM stay with MusicKit.
+- YouTube: at most 6.5 seconds of the selected audio stream analyzed by one low-priority FFmpeg thread; prime mpv at the chosen tempo. Reuse the lamp meter's worker for outgoing rhythm. No model, temporary audio device or PCM disk recording.
+- Exercise generated drum patterns in the native browser engine and actual mpv output: tempo/phase alignment, unchanged reference tone and speed recovery. Check syncopated patterns, random-signal rejection, real Apple tempo detection and applied rate, fallback blending, pause/cleanup, both interface languages and small screens.
+
 ## 0.15.1 — 2026-10-24
 
 - Extend EmberFlow to an eight-second, three-phase blend: introduce the incoming texture, exchange the foreground, then dissolve the outgoing ambience. Smooth phase boundaries and complementary gain retain peak headroom without re-encoding or a new DSP/model process.

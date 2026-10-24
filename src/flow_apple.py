@@ -5,14 +5,14 @@ from concurrent.futures import ThreadPoolExecutor
 class AppleDecks:
     def __init__(self,host):
         self.host=host;self.pool=ThreadPoolExecutor(max_workers=2,thread_name_prefix='emberflow-apple')
-        self.prepared=None;self.transitioning=None;self.reset=None;self.active=False;self.key=''
+        self.prepared=None;self.transitioning=None;self.reset=None;self.active=False;self.key='';self.beat_sync=True
     def request(self,operation,**params):return self.host.apple_web.request('flow',operation=operation,**params)
     def prepare(self,item):
         self.cancel();self.active=True;self.key=item['entry']
         reset=self.reset;key=self.key
         def load():
             if reset:reset.result(timeout=4)
-            return self.request('prepare',key=key,kind=item['kind'],id=item['id'])
+            return self.request('prepare',key=key,kind=item['kind'],id=item['id'],beatSync=self.beat_sync)
         self.prepared=self.pool.submit(load)
     @property
     def ready(self):

@@ -8,7 +8,7 @@ async function cancellation() {
  const window=()=>({dead:false,isDestroyed(){return this.dead;},destroy(){this.dead=true;},webContents:{executeJavaScript:async()=>true}});
  const a=window(),b=window();
  const request=async(w,r)=>{calls.push([w,r.method,r.params?.action]);
-  if(r.method==='status')return {duration:180,position:100};
+  if(r.method==='status')return {duration:180,position:160};
   if(w===b&&r.params?.action==='resume'){entered();await wait;}return {};};
  const flow=new FlowDecks(a,()=>b,request,'https://music.apple.com');
  flow.next=b;flow.key='entry';flow.holdTail=flow.startMuted=async()=>true;
@@ -70,5 +70,6 @@ async function cancelWhileScheduling(){
  assert.equal(await result,'FLOW_CANCELLED');assert.equal(flow.current,a);assert(b.dead);assert(!flow.timer);
 }
 
+const deadline=setTimeout(()=>{console.error('Timed out while exercising an engine race');process.exitCode=1;},12000);
 (async()=>{await cancellation();await envelope();await longMix();await cancelWhileScheduling();console.log('PASS Apple cancellation, eight-second synchronized mix, three-phase envelope and logical-volume isolation');})()
- .catch(e=>{console.error(e);process.exitCode=1;});
+ .catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>clearTimeout(deadline));

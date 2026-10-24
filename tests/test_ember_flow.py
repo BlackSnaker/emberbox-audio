@@ -23,7 +23,7 @@ class FlowTests(unittest.TestCase):
         self.music=SimpleNamespace(host=self.host,book=book,loading=False,watch=SimpleNamespace(reset=Mock()),changed=Mock())
         self.flow=EmberFlow(self.music,Path(self.tmp.name)/'flow.json');self.addCleanup(self.flow.close)
         self.now=0.;self.flow.clock=lambda:self.now
-        self.decks=Mock();self.decks.ready=True;self.decks.transition.return_value=True
+        self.decks=Mock();self.decks.ready=True;self.decks.transition.return_value=True;self.decks.recovery=0.
         self.patch=patch('flow_youtube.YouTubeDecks',return_value=self.decks);self.patch.start();self.addCleanup(self.patch.stop)
     def state(self,position=154,letter='A',playing=True):
         return dict(song(letter),position=position,duration=180,valid=True,playing=playing)
@@ -65,6 +65,13 @@ class FlowTests(unittest.TestCase):
         restored=EmberFlow(self.music,self.flow.path)
         try:self.assertTrue(restored.enabled);self.assertIsNone(restored.youtube)
         finally:restored.close()
+    def test_beat_switch_is_saved_independently_without_starting_a_deck(self):
+        self.flow.set_enabled(True);self.flow.set_beat_sync(False)
+        restored=EmberFlow(self.music,self.flow.path)
+        try:
+            self.assertTrue(restored.enabled);self.assertFalse(restored.beat_sync)
+            self.assertIsNone(restored.youtube);self.assertIsNone(restored.apple)
+        finally:restored.close()
     def test_envelope_has_no_gain_spike_or_endpoint_step(self):
         pairs=[curve(i/1000) for i in range(1001)]
         self.assertEqual(pairs[0],(1,0));self.assertEqual(pairs[-1],(0,1))
@@ -92,7 +99,7 @@ class FlowTests(unittest.TestCase):
         self.host.meter=SimpleNamespace(last_sample=0,rms_level=.2)
         self.flow.enabled=True;self.flow.tick(self.state(170))
         self.now=.8;self.host.meter.last_sample=.8;self.flow.tick(self.state(170.8))
-        self.now=2;self.host.meter.last_sample=2;self.flow.tick(self.state(172))
+        self.now=7.5;self.host.meter.last_sample=7.5;self.flow.tick(self.state(177.5))
         self.decks.transition.assert_called_once_with(1.4)
     def test_stale_meter_cannot_mistake_an_outro_for_silence(self):
         self.host.meter=SimpleNamespace(last_sample=-1,rms_level=0)
@@ -108,6 +115,16 @@ class FlowTests(unittest.TestCase):
             self.assertFalse(old.persistent);self.assertTrue(new.persistent)
             decks.cancel();old.close.assert_called_once();new.close.assert_not_called()
             self.assertIsNone(new.flow_cancel)
+    def test_lost_rhythm_restores_a_primed_deck_before_ordinary_blending(self):
+        self.host.meter=SimpleNamespace(rhythm_key='A',beat_grid=None)
+        self.host.youtube=Mock();self.host.on_youtube_changed=Mock()
+        new=Mock();new.loaded=True;new.failed=False;new.position=.5
+        decks=YouTubeDecks(self.host);decks.standby=new;decks.prepared_rate=.97
+        decks.preview=SimpleNamespace(future=SimpleNamespace(done=lambda:True,result=lambda:None),cancel=Mock())
+        self.assertTrue(decks.ready);self.assertEqual(decks.prepared_rate,1.)
+        new.mpv.command_async.assert_any_call('set','speed',1.)
+        with patch('flow_youtube.GLib.timeout_add',return_value=17),patch('flow_youtube.GLib.source_remove'):
+            self.assertTrue(decks.transition(4));self.assertIsNone(decks.beat_plan);decks.cancel()
     def test_apple_waits_for_confirmation_and_tolerates_the_old_sdk_pause(self):
         self.host.source='apple-music';self.host.apple_web.state={'emberFlow':True}
         values=[dict(song(x),uri='apple:songs:'+str(i),id=str(i)) for i,x in enumerate('ABC',100)]

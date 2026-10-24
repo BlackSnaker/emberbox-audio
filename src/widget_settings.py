@@ -60,7 +60,10 @@ class SettingsMenu:
         box.pack_start(caption, False, False, 2)
         if getattr(self,'flow',None):
             from flow_control import FlowControl
-            box.pack_start(FlowControl(self.flow),False,False,3)
+            switches=Gtk.Box(spacing=6)
+            switches.pack_start(FlowControl(self.flow),True,True,0)
+            switches.pack_start(FlowControl(self.flow,beats=True),False,False,0)
+            box.pack_start(switches,False,False,3)
             note=Gtk.Label(label=self.flow.message);note.set_line_wrap(True);note.set_max_width_chars(30)
             note.set_xalign(0);note.get_style_context().add_class('caption');box.pack_start(note,False,False,2)
 

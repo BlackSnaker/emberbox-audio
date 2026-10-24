@@ -21,6 +21,11 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
             control=stage.flow_control;x,y=control.translate_coordinates(stage.window,0,0);a=control.get_allocation()
             assert x>=0 and y>=0 and x+a.width<=width and y+a.height<=height
         second=FlowControl(stage.music.flow)
+        beats=FlowControl(stage.music.flow,beats=True)
+        assert beats.get_active()
+        beats.clicked();f.settle(.3);assert not stage.music.flow.beat_sync and second.get_active()==stage.music.flow.enabled
+        beats.clicked();f.settle(.3);assert stage.music.flow.beat_sync
+        beats.destroy()
         stage.flow_control.clicked();f.settle(.35)
         assert stage.music.flow.enabled and second.get_active() and stage.flow_control.shown==1 and not stage.flow_control.tick
         host.meter.last_sample=time.monotonic();host.meter.rms_level=.68;f.settle(.16)
