@@ -4,7 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
-from dj_intent import Intent,local_intent,model_intent
+from dj_intent import Intent,local_intent
+from dj_semantics import decode
 from dj_memory import ListeningMemory
 from dj_catalog import rank,DJCatalog
 from dj_setup import safe_unpack
@@ -32,17 +33,15 @@ class IntentTests(unittest.TestCase):
         self.assertEqual(local_intent('группа Next').action,'mix')
     def test_bad_model_output_and_constraints(self):
         fallback=local_intent('Без вокала, без металла')
-        i=model_intent({'mood':'injected','genres':'not-array','instrumental':False,'familiarity':[]},fallback)
+        i=decode({'kind':'mix','query':'soft piano'},'Без вокала, без металла',None,fallback)
         self.assertTrue(i.instrumental);self.assertIn('metal',i.avoid);self.assertEqual(i.mood,'any')
-        self.assertEqual(model_intent([],fallback),fallback)
+        with self.assertRaises(ValueError):decode([], '',None,fallback)
     def test_small_model_cannot_invent_artist_or_style(self):
         fallback=local_intent('Хочу расслабляющую музыку без вокала')
-        i=model_intent({'mood':'relax','genres':['electronic'],'artists':['Armin van Buuren'],
-            'avoid':['vocals'],'query':'invented jazz'},fallback,'Хочу расслабляющую музыку без вокала')
-        self.assertEqual(i.artists,());self.assertEqual(i.genres,());self.assertEqual(i.avoid,());self.assertEqual(i.query,'')
+        with self.assertRaises(ValueError):
+            decode({'kind':'artist','query':'Armin van Buuren'},'Хочу расслабляющую музыку без вокала',None,fallback)
     def test_model_never_selects_ids(self):
-        i=model_intent({'songs':['invented'],'action':'play','artists':['Real Artist']},Intent())
-        self.assertEqual(i.action,'mix');self.assertFalse(hasattr(i,'songs'))
+        with self.assertRaises(ValueError):decode({'kind':'mix','query':'music','songs':['invented']},'',None,Intent())
 
 
 class MemoryTests(unittest.TestCase):
@@ -138,13 +137,13 @@ class SetupTests(unittest.TestCase):
 class BrainTests(unittest.TestCase):
     def test_only_wish_and_intent_reach_model(self):
         b=LocalBrain();requests=[]
-        def request(url,data=None,**kw):
+        def request(url,data,*_args,**kw):
             requests.append(data)
-            return {'message':{'content':json.dumps({'mood':'relax','genres':[],'artists':[],'avoid':[],'instrumental':None,'familiarity':.65,'query':''})}}
-        with patch.object(b,'models',return_value=['qwen2.5:1.5b']),patch('dj_brain.request_json',side_effect=request):
+            return {'message':{'content':json.dumps({'kind':'mix','query':'calm stargazing'})}}
+        with patch('dj_brain.ready',return_value=False),patch.object(b,'models',return_value=['qwen2.5:1.5b']),patch.object(b,'generate',side_effect=request):
             intent,engine=b.interpret('Consider the atmosphere of an observatory under the stars far away from everything tonight')
         self.assertEqual(engine,'ai');self.assertEqual(intent.mood,'relax')
-        user=json.loads(requests[0]['messages'][1]['content']);self.assertEqual(set(user),{'previous','wish'})
+        user=json.loads(requests[0]['messages'][1]['content']);self.assertEqual(set(user),{'previous','wish','language'})
     def test_common_wishes_never_start_a_model(self):
         b=LocalBrain()
         with patch.object(b,'models',side_effect=AssertionError('A model was consulted')):

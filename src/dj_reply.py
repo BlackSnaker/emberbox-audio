@@ -12,13 +12,16 @@ MOODS={
 
 def summary(intent):
     parts=[]
+    if intent.caption and intent.mode=='mix':parts.append(intent.caption)
     if intent.mode=='artist' and intent.artists:parts.append(text('Artist only: ','Только исполнитель: ')+', '.join(intent.artists))
     elif intent.mode=='lookup':parts.append(text('Exact search: ','Точный поиск: ')+intent.query)
     elif intent.mode=='theme':parts.append(text('A set for: ','Подборка: ')+intent.query)
     elif intent.mode=='similar' and intent.artists:parts.append(text('Music like ','Музыка в духе ')+', '.join(intent.artists))
-    if intent.mood in MOODS:parts.append(text(*MOODS[intent.mood]))
-    if intent.genres:parts.append(', '.join(intent.genres))
+    if not intent.caption and intent.mood in MOODS:parts.append(text(*MOODS[intent.mood]))
+    genres=[g for g in intent.genres if not intent.caption or g not in intent.search.casefold()]
+    if genres:parts.append(', '.join(genres))
     if intent.instrumental is True:parts.append(text('without vocals','без вокала'))
+    elif intent.instrumental is False:parts.append(text('with vocals','с вокалом'))
     if intent.avoid:parts.append(text('excluding ','исключая ')+', '.join(intent.avoid))
     return ' · '.join(parts) or text('Personal music selection','Персональная подборка музыки')
 
@@ -48,6 +51,10 @@ def reply(intent,items,source):
 def spoken_reply(intent,items,language='ru'):
     """A short radio link; catalogue diagnostics stay in the written answer."""
     choose=lambda en,ru:ru if language=='ru' else en
+    if intent.caption and intent.mode=='mix':
+        import re
+        if bool(re.search('[А-Яа-яЁё]',intent.caption))==(language=='ru'):
+            return intent.caption.replace(' · ','. ').rstrip('.!?')+choose('. Your new set is ready.','. Я подобрала новый сет.')
     if intent.mode=='artist':
         name=intent.artists[0] if intent.artists else ''
         names={'the beatles':'Битлз','beatles':'Битлз','queen':'Куин','tame impala':'Тейм Импала',

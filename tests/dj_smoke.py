@@ -5,6 +5,7 @@ from unittest.mock import patch
 import fullscreen_smoke as f
 import fullscreen
 from dj_intent import local_intent
+import json
 from gi.repository import Gdk,Gtk
 from widget_settings import SettingsMenu
 
@@ -37,6 +38,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
     stage=fullscreen.FullscreenPlayer(host)
     s=stage.dj;v=stage.dj_view;host.fullscreen=stage
     real_collect=s.catalog.collect
+    real_interpret=s.brain.interpret
     s.memory.settings['voice']=False;s.probed=True;s.catalog.collect=collect
     s.brain.interpret=lambda prompt,previous,*_args:(local_intent(prompt,previous),'local')
     stage.music.repository.play=lambda item,alive:plays.append(item['uri']) if alive() else None
@@ -127,6 +129,25 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
             assert v.entry.get_text()==prompt and prompt in v.wish.get_text()
             assert 'Точный поиск' not in v.understanding.get_text() and 'Exact search' not in v.understanding.get_text()
             assert all(i.get('_dj_mood')=='melancholy' for i in s.items)
+        fixture_interpret=s.brain.interpret;s.brain.interpret=real_interpret
+        def generation(_url,data,*_args,**_kw):
+            payload=json.loads(data['messages'][-1]['content']);wish=payload['wish']
+            if 'принтер' in wish:return {'message':{'content':json.dumps({'kind':'clarify','query':'Which music?'})}}
+            return {'message':{'content':json.dumps({'kind':'mix','query':'vintage jazz lounge'})}}
+        with patch('dj_brain.ready',return_value=False),patch.object(s.brain,'models',return_value=['fixture']),patch.object(s.brain,'generate',side_effect=generation),patch.object(stage.music.repository,'load',side_effect=load),patch.object(s.catalog,'personal',return_value={'tracks':[]}):
+            s.memory.settings['ai']=True
+            v.entry.set_text('Хочу будто оказаться в старом джазовом баре');v.entry.emit('activate')
+            wait(lambda:not s.busy and s.intents['spotify'].search=='vintage jazz lounge')
+            assert s.engine=='ai' and len(s.items)==14 and queries[-1]=='vintage jazz lounge'
+            assert s.intents['spotify'].caption in v.understanding.get_text()
+            v.entry.set_text('А теперь в этом же духе, но чтобы никто не пел');v.send.clicked()
+            wait(lambda:not s.busy and s.intents['spotify'].instrumental is True)
+            assert queries[-1]=='vintage jazz lounge instrumental'
+            current=stage.music.book.current('spotify')['uri'];before_queries=len(queries)
+            v.entry.set_text('почини принтер');v.send.clicked();wait(lambda:not s.busy and s.phase=='clarify')
+            assert stage.music.book.current('spotify')['uri']==current and len(queries)==before_queries
+            assert v.reply.get_text().endswith('?')
+        s.brain.interpret=fixture_interpret
         successful=s.intents['spotify'];s.catalog.collect=lambda *_a,**_kw:([],[],[])
         v.entry.set_text('Unknown recording');v.entry.emit('activate');wait(lambda:not s.busy and s.phase=='empty')
         assert s.intents['spotify']==successful,'Failed lookup poisoned the conversation context'

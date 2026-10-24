@@ -12,7 +12,7 @@ def identity(value):
 class ListeningMemory:
     def __init__(self,path,clock=time.time):
         self.path=Path(path);self.clock=clock;self.lock=threading.RLock();self.write_lock=threading.Lock();self.dirty=False
-        self.sources={};self.settings={'voice':True,'language':'ru','ai':False,'model':'qwen2.5:1.5b','enabled':False}
+        self.sources={};self.settings={'voice':True,'language':'ru','ai':True,'model':'qwen3.5:2b','enabled':False}
         self.current=None;self.heard=0.;self.last_tick=None;self.credited=False
         try:
             if self.path.stat().st_size<2_000_000:

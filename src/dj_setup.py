@@ -8,7 +8,7 @@ from karaoke_model import _download
 ROOT=Path(os.environ.get('EMBERBOX_DJ_DIR',CACHE_DIR/'ember-dj'))
 VOICE_REV='5041a7a49ae5b3a0f30e6837769eb03fdbb231bd'
 VOICE_BASE='https://huggingface.co/rhasspy/piper-voices/resolve/'+VOICE_REV+'/'
-MODEL_NAME='qwen2.5-1.5b-instruct-q4_k_m.gguf'
+MODEL_NAME='Qwen3.5-2B-Q4_K_M.gguf'
 ASSETS={
  'piper':('https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_amd64.tar.gz',
     '467c17935d2a22dcce9dc9e08ba07485e29be813097e7cf08c5627aa09d32e42',25916047,'piper.tar.gz'),
@@ -24,8 +24,8 @@ ASSETS={
     '141d612cc0a95ed7efc1ca936b845c2364967f2e9217c5dbfcf69fc4d6c65860',4972,'en_US-ljspeech-medium.onnx.json'),
  'llama':('https://github.com/ggml-org/llama.cpp/releases/download/b11838/llama-b11838-bin-ubuntu-x64.tar.gz',
     '507e2f4fe3553499b518efe74a4244e35d709154a4e51c67e3affeef228ceb30',22349871,'llama.tar.gz'),
- 'brain':('https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/'+MODEL_NAME,
-    '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e',1117320736,MODEL_NAME)}
+ 'brain':('https://huggingface.co/unsloth/Qwen3.5-2B-GGUF/resolve/f6d5376be1edb4d416d56da11e5397a961aca8ae/'+MODEL_NAME,
+    'aaf42c8b7c3cab2bf3d69c355048d4a0ee9973d48f16c731c0520ee914699223',1280835840,MODEL_NAME)}
 VOICES={'ru':'silero-v5_5-kseniya','en':'en_US-ljspeech-medium'}
 
 
@@ -34,7 +34,7 @@ def ready(kind='voice',language='ru'):
         data=json.loads((ROOT/('brain.json' if kind=='brain' else kind+'-'+language+'.json')).read_text())
         if data.get('version')!=1:return False
         if kind=='voice' and data.get('voice')!=VOICES[language]:return False
-        if kind=='brain':return (ROOT/'llama/llama-server').is_file() and (ROOT/MODEL_NAME).stat().st_size==ASSETS['brain'][2]
+        if kind=='brain':return data.get('model')==MODEL_NAME and (ROOT/'llama/llama-server').is_file() and (ROOT/MODEL_NAME).stat().st_size==ASSETS['brain'][2]
         synthesis=(ROOT/ASSETS['tts-'+language][3]).stat().st_size==ASSETS['tts-'+language][2]
         return Path(data['python']).is_file() and synthesis and (language=='ru' or (ROOT/'piper/piper').is_file()) and (ROOT/('asr-'+language)/'am/final.mdl').is_file()
     except (OSError,ValueError,TypeError,KeyError):return False
@@ -158,5 +158,6 @@ def prepare(kind='voice',language='ru',progress=lambda *_:None,stop=None):
         python=runtime(progress,stop,language) if kind=='voice' else ''
         if stop.is_set():raise InterruptedError('cancelled')
         marker=ROOT/('brain.json' if kind=='brain' else kind+'-'+language+'.json');temporary=marker.with_suffix('.next')
-        temporary.write_text(json.dumps({'version':1,'python':str(python),'voice':VOICES[language] if kind=='voice' else ''}));temporary.chmod(0o600);temporary.replace(marker)
+        temporary.write_text(json.dumps({'version':1,'python':str(python),'voice':VOICES[language] if kind=='voice' else '',
+            'model':MODEL_NAME if kind=='brain' else ''}));temporary.chmod(0o600);temporary.replace(marker)
         progress('ready',1.)

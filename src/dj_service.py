@@ -56,6 +56,7 @@ class DJService:
         if not self.probed:
             self.probed=True;future=self.pool.submit(self.brain.models)
             future.add_done_callback(lambda result:GLib.idle_add(self.probe_done,result,priority=GLib.PRIORITY_DEFAULT))
+        if self.memory.settings.get('ai') and not self.brain.available.is_set():self.setup_pool.submit(self.brain.warm)
         self.changed()
 
     def probe_done(self,future):
@@ -85,8 +86,9 @@ class DJService:
         alive=lambda:not self.closed and not cancelled.is_set() and source==self.host.source
         def progress(phase):GLib.idle_add(self.progress,generation,phase,priority=GLib.PRIORITY_DEFAULT)
         def build():
-            intent,engine=self.brain.interpret(prompt,previous,settings.get('ai',False),settings.get('model','qwen2.5:1.5b'),alive)
+            intent,engine=self.brain.interpret(prompt,previous,settings.get('ai',True),settings.get('model','qwen3.5:2b'),alive)
             if not alive():raise InterruptedError('cancelled')
+            if intent.action=='clarify':return intent,engine,[],[]
             if intent.action!='mix':return intent,engine,[],[]
             affinity=self.memory.artist_affinity(source)
             values,recent,warnings=self.catalog.collect(source,intent,affinity,alive,progress)
@@ -119,6 +121,9 @@ class DJService:
             self.phase='error';self.error=text('The source did not return a mix. Check its connection and try again.',
                 'Источник не вернул подборку. Проверь подключение и попробуй ещё раз.');self.changed();return False
         self.engine=engine
+        if intent.action=='clarify':
+            self.phase='clarify';self.intro=intent.question;self.understood=''
+            self.changed();return False
         if intent.action!='mix':self.command(intent.action);return False
         self.understood=summary(intent)
         if not items:

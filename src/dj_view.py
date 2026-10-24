@@ -54,6 +54,7 @@ PHASES={'welcome':('Mood, a style, a few words. Then music.','Настроени
  'understand':('Listening to your wish…','Понимаю твоё пожелание…'),
  'personal':('Tuning in to your taste…','Настраиваюсь на твои вкусы…'),
  'catalogue':('Finding the right records…','Подбираю подходящие записи…'),
+ 'clarify':('A little detail will help me tune in','Уточнение поможет настроиться на твою волну'),
  'playing':('Your wavelength is on air','Твоя волна в эфире'),
  'empty':('Let us try a different direction','Попробуем другое направление'),
  'error':('A small pause. We can try again.','Небольшая пауза. Можно попробовать ещё раз.')}
@@ -134,7 +135,7 @@ class DJView(Gtk.Box):
         preferences.get_style_context().add_class('dj-preferences');self.settings.add(preferences)
         toggles=Gtk.Box(spacing=18)
         self.voice_toggle=Gtk.CheckButton(label=text('Voice replies','Ответы голосом'))
-        self.ai_toggle=Gtk.CheckButton(label=text('AI for complex wishes','ИИ для сложных пожеланий'))
+        self.ai_toggle=Gtk.CheckButton(label=text('Free-form wishes · local AI','Свободные пожелания · локальный ИИ'))
         for key,b in (('voice',self.voice_toggle),('ai',self.ai_toggle)):
             b.connect('toggled',lambda widget,k=key:service.option(k,widget.get_active()) if not self.syncing else None)
             toggles.pack_start(b,False,False,0)
@@ -207,12 +208,14 @@ class DJView(Gtk.Box):
             component={'piper':('DJ voice','голос DJ'),'asr-ru':('Russian recognition','распознавание русского'),
                 'asr-en':('English recognition','распознавание английского'),'tts-ru':('Russian voice','русская озвучка'),
                 'tts-en':('English voice','английская озвучка'),'llama':('AI runtime','среда ИИ'),
-                'brain':('Language model · 1.12 GB','языковая модель · 1,12 ГБ'),'runtime':('Speech runtime','среда распознавания'),
+                'brain':('Language model · 1.28 GB','языковая модель · 1,28 ГБ'),'runtime':('Speech runtime','среда распознавания'),
                 'ready':('Ready','готово')}.get(s.setup_phase,('components','компоненты'))
             message=text('Preparing: ','Готовлю: ')+text(*component)
         if s.error:message=s.error
         if s.engine and not s.busy and not s.setup_kind and not recording and not speaking:
-            message+=text(' · local AI',' · локальный ИИ') if s.engine=='ai' else text(' · mood matching',' · подбор по настроению')
+            if s.engine=='ai':message+=text(' · local AI',' · локальный ИИ')
+            elif s.engine=='local':message+=text(' · mood matching',' · подбор по настроению')
+        if s.engine in ('needs-model','disabled') and s.phase=='clarify':self.settings.set_reveal_child(True)
         self.status.set_text(message)
         busy=s.busy or bool(s.setup_kind) or s.voice.phase in ('preparing-voice','preparing-reply')
         self.spinner.start() if busy else self.spinner.stop()
@@ -226,12 +229,12 @@ class DJView(Gtk.Box):
         if intent and intent.mode=='artist' and intent.artists:
             self.title.set_text(', '.join(intent.artists)+text(' · on air',' · в эфире'))
         elif intent and intent.mode=='lookup':self.title.set_text(text('Your requested recording','Музыка по твоему запросу'))
-        else:self.title.set_text(text(*MOOD_LABEL[intent.mood]) if intent else text('Music on your frequency.','Музыка на твоей частоте.'))
+        else:self.title.set_text(intent.caption or text(*MOOD_LABEL[intent.mood]) if intent else text('Music on your frequency.','Музыка на твоей частоте.'))
         fallback=text('I am checking the catalogue for your request…','Проверяю каталог по твоему запросу…') if s.busy else text(*PHASES['welcome'])
         self.reply.set_text(s.intro or s.error or fallback)
         self.mix_title.set_text(NAMES[self.service.host.source]+'  ·  '+text('Your mix','Твой эфир'))
         self.setup_voice.set_sensitive(not s.setup_kind and not voice_ready)
-        self.setup_brain.set_sensitive(not s.setup_kind and not (s.models or ready('brain')))
+        self.setup_brain.set_sensitive(not s.setup_kind and not ready('brain'))
         self.setup_progress.set_fraction(s.setup_fraction if s.setup_kind else 0)
         self.setup_progress.set_visible(bool(s.setup_kind))
         self.stop_button.set_sensitive(s.session)

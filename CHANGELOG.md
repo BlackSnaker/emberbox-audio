@@ -2,6 +2,14 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.14.0 — 2026-10-24
+
+- Route free-form wishes by confidence, not word count or the presence of a single mood keyword. Use a local Qwen3.5 2B model for imagery, scenes and conversational changes; keep fully understood requests immediate.
+- Compile a grounded playlist search and localized sound description. Keep context for follow-ups, release it for new wishes, preserve no-vocal requests and exclusions, and ask for a musical detail when interpretation fails. Uncertain sentences never fall back to literal song-title searches.
+- Prefer the app-owned pinned 1.28 GB model, with reasoning disabled, two CPU threads, one inference at a time, a small context window, bounded response cache and 30-second idle unloading. Cancellation terminates the private HTTP helper so a new wish need not wait for the previous HTTP timeout.
+- Wait for model readiness during concurrent background warm-up. Handle fully covered vocal-only changes immediately, and keep previous genres from leaking into a new scene introduced with conversational filler.
+- Enable free-form mode for new preferences; preserve existing choices and expose setup when a model is missing. Verify the full keyboard-to-model-to-playlist-to-queue path in both languages, context isolation, unavailable models, validation and cancellation.
+
 ## 0.13.3 — 2026-10-24
 
 - Interpret the reported Russian “что - нибудь погрустнее” as a melancholy mix. Normalize spacing, Unicode dashes and indefinite pronoun forms consistently across mood, artist and theme parsing; strip conversational openings such as “ну, а можно”. Keep the submitted text visible as typed.

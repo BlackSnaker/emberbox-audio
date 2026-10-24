@@ -27,10 +27,20 @@ entrance extend Emberbox's Grunesphism materials.
 - Music gently ducks while listening or speaking. The dial and saved volume
   stay unchanged. Voice replies can be disabled.
 - Common mood/genre wishes and direct track searches use a lightweight local parser.
-  **AI for complex wishes** is optional and off by default. It is labelled separately.
-- First use: **⚙ → Prepare voice**, and **Prepare local AI** if no suitable
-  local Ollama model is available. Setup shows progress and cancellation,
+  **Free-form wishes · local AI** handles imagery such as “an old jazz bar”,
+  “a noir movie” or “music that makes me jump around the room”. A short request
+  can still need inference; a single mood keyword is not enough to bypass it.
+  New preferences enable this mode; existing choices are preserved.
+- First use: **⚙ → Prepare voice** and **Prepare local AI**. Ember's own model
+  is preferred. Setup shows progress and cancellation,
   runs in the background and requires no sudo. Voice languages: Russian / English.
+
+“Same atmosphere, but nobody singing” keeps the previous scene and adds the
+instrumental constraint. A new wish starts fresh. The original text remains
+visible alongside a localized description of the chosen sound. An unavailable
+model or invalid interpretation leads to a request for a musical detail/setup;
+current music continues. Free-form understanding remains experimental and does
+not promise correct interpretation of every possible sentence.
 
 ## Real music, shaped by your taste
 
@@ -85,8 +95,8 @@ and 3 GB additional free storage**. CPU mode was checked on the developer's
 Russian synthesis weights are about 145 MB, recognition about 46 MB; the PyTorch
 CPU runtime may also be needed. An existing runtime is reused; otherwise it is
 installed in DJ's private environment, without CUDA or sudo. English speech,
-recognition and runtime need roughly 200–350 MB. Qwen Q4 is about 1.12 GB.
-An existing suitable Ollama model is reused. No CUDA, cloud API key or extra
+recognition and runtime need roughly 200–350 MB. Qwen3.5 2B Q4 is about 1.28 GB.
+Ember's model is preferred; a suitable local Ollama is an alternative. No CUDA, cloud API key or extra
 account is required. Downloaded runtimes currently target Linux x86_64,
 glibc ≥ 2.34. Downloads are SHA256 checked; model weights are not in Git.
 
@@ -103,7 +113,8 @@ speech preparation; ducking starts only when the spoken audio is ready.
 - [Piper 1.2.0](https://github.com/rhasspy/piper/releases/tag/v1.2.0): English synthesis;
   retain its included licences. Female [LJ Speech](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD) voice, public-domain source data.
   Weights are downloaded from the provider repository, not bundled with Emberbox source.
-- [Qwen2.5-1.5B-Instruct GGUF](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF), Apache-2.0;
+- [Qwen3.5-2B](https://huggingface.co/Qwen/Qwen3.5-2B), Apache-2.0;
+  [Unsloth GGUF](https://huggingface.co/unsloth/Qwen3.5-2B-GGUF) with pinned revision and SHA256;
   [llama.cpp](https://github.com/ggml-org/llama.cpp), MIT; or an existing local Ollama service.
 
 Emberbox source remains MIT; external components retain their own licences.
@@ -120,6 +131,14 @@ pending message. External network/stream startup time cannot be guaranteed.
 Canceling a request stops waiting within a short polling interval. Hidden DJ
 views stop their animation ticks. Optional native language inference uses two
 CPU threads and its model is unloaded after 30 idle seconds.
+
+Semantic interpretation has a separate twelve-second budget including cold start.
+The first interpreted wish took about 8–10 seconds; subsequent free-form requests
+took about 4–6 seconds on the reference machine. Fully covered vocal-only changes
+keep the current sound without starting inference.
+These are measurements, not a guarantee for other CPUs. The catalogue's five-second
+wait is separate. Identical wishes/context reuse a 64-entry interpretation cache.
+Account secrets, the library and audio are never supplied to the language model.
 
 ## Exact artists and useful replies
 
