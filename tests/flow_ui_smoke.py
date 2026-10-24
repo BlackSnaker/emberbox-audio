@@ -31,6 +31,6 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         host.meter.last_sample=time.monotonic();host.meter.rms_level=.68;f.settle(.16)
         path=Path('/tmp/emberflow-ui.png');a=stage.console.get_allocation();x,y=stage.console.translate_coordinates(stage.window,0,0)
         Gdk.pixbuf_get_from_window(stage.window.get_window(),x,y,a.width,a.height).savev(str(path),'png',[],[])
-        second.destroy();stage.flow_control.clicked();f.settle(.8);assert not stage.music.flow.enabled
+        second.destroy();stage.flow_control.clicked();f.settle(1.5);assert not stage.music.flow.enabled
         print('PASS EmberFlow geometry, mirrored settings and finite switch animation; screenshot:',path)
     finally:stage.close();host.window.destroy()

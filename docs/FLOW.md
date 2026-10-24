@@ -4,8 +4,9 @@
 
 Turn on **EmberFlow** beside the widget's timeline, under the fullscreen tubes,
 or in player settings in mini mode. The tactile amber switch is shared across
-these views. The recessed glass indicator warms like an incandescent filament,
-then gently cools when switched off. Its animation stops after settling and
+these views. The recessed glass indicator warms from dull red to amber and gold,
+with the filament's centre warmer than its ends, then gently cools when switched
+off. Quick repeated presses retain its current heat. Its animation stops after settling and
 respects the desktop's animation setting. Its preference is saved; it is off on
 first installation.
 

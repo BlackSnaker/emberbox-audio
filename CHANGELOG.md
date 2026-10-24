@@ -2,6 +2,11 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.16.2 — 2026-10-24
+
+- Enlarge EmberFlow's glass lamp from 38×18 to 48×24 with a clearer, rounded filament. Gradually shift its emission from dull red through amber to warm gold, with cooler ends and restrained glass reflections.
+- Use a bounded thermal approximation for warm-up and cooling instead of a brightness tween. Quick reversals retain the current temperature; animation still stops when settled or hidden and respects reduced animation.
+
 ## 0.16.1 — 2026-10-24
 
 - Recess EmberFlow into the listening console, widget and settings. A glass capsule with a visible incandescent filament warms from amber to soft gold and cools gently when switched off.

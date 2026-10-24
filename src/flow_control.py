@@ -1,6 +1,7 @@
 """A recessed incandescent EmberFlow switch shared by widget, room and settings."""
 from gi.repository import Gtk
 from functools import lru_cache
+import math
 from hardware_controls import pixbuf
 from source_picker import text
 
@@ -54,50 +55,68 @@ def switch_frame(index):
     return pixbuf(svg,29,14)
 
 
-@lru_cache(maxsize=101)
+@lru_cache(maxsize=201)
 def lamp_frame(index):
-    """Small filter-free glass/filament sprites; no redraws once heat settles."""
-    heat=max(0.,min(1.,index/100));light=heat**3
+    """Larger glass capsule; emission and colour follow filament temperature."""
+    heat=max(0.,min(1.,index/200))
+    light=(max(0.,heat-.2)/.8)**3.5
+    emission=(max(0.,heat-.22)/.78)**.55
     def wire_color(value):
-        stops=((.0,(88,72,52)),(.35,(170,70,26)),(.68,(247,151,49)),(1.,(255,231,172)))
+        stops=((0.,(93,35,18)),(.25,(117,24,7)),(.45,(187,53,9)),
+               (.65,(248,126,24)),(.83,(255,190,87)),(1.,(255,229,168)))
         for (a,low),(b,high) in zip(stops,stops[1:]):
             if value<=b:
                 t=max(0.,(value-a)/(b-a))
                 return '#%02x%02x%02x'%tuple(round(x+(y-x)*t) for x,y in zip(low,high))
-        return '#ffe7ac'
-    center=wire_color(heat);edge=wire_color(max(0.,heat*1.15-.15))
-    coil='M10.5 9L11.8 9L12.6 7.7L14 10.3L15.4 7.7L16.8 10.3L18.2 7.7L19.6 10.3L21 7.7L22.4 10.3L23.8 7.7L25.2 10.3L26 9L27.5 9'
-    svg=f'''<svg xmlns="http://www.w3.org/2000/svg" width="38" height="18" viewBox="0 0 38 18">
+        return '#ffe5a8'
+    # Cooler lead-in wires carry heat away from the ends. A continuous gradient
+    # lets the centre become incandescent first without a travelling light effect.
+    colors=[]
+    for position in (0.,.15,.3,.5,.7,.85,1.):
+        temperature=heat*(.88+.12*math.sin(math.pi*position)**.55)
+        colors.append(f'<stop offset="{position}" stop-color="{wire_color(temperature)}"/>')
+    pieces=['M11 12'];x=11.;y=12.
+    for n in range(14):
+        end=x+26/14;tip=12. if n==13 else 12+(-1 if n%2==0 else 1)*1.9
+        pieces.append(f'C{x+.6:.3f} {y:.3f} {end-.6:.3f} {tip:.3f} {end:.3f} {tip:.3f}')
+        x,y=end,tip
+    coil=''.join(pieces)
+    svg=f'''<svg xmlns="http://www.w3.org/2000/svg" width="48" height="24" viewBox="0 0 48 24">
       <defs>
         <linearGradient id="glass" x1="0" y1="0" x2="0" y2="1">
-          <stop stop-color="#11160f"/><stop offset=".55" stop-color="#25271a"/><stop offset="1" stop-color="#151a12"/>
+          <stop stop-color="#10150f"/><stop offset=".5" stop-color="#25271b"/><stop offset="1" stop-color="#13180f"/>
         </linearGradient>
-        <radialGradient id="warmth"><stop stop-color="#ff9b24" stop-opacity="{light*.38:.4f}"/>
-          <stop offset=".5" stop-color="#e88318" stop-opacity="{light*.14:.4f}"/>
-          <stop offset="1" stop-color="#d47718" stop-opacity="0"/>
+        <radialGradient id="warmth"><stop stop-color="#ff9d29" stop-opacity="{light*.38:.4f}"/>
+          <stop offset=".5" stop-color="#ed8118" stop-opacity="{light*.17:.4f}"/>
+          <stop offset="1" stop-color="#ce6110" stop-opacity="0"/>
         </radialGradient>
-        <linearGradient id="wire"><stop stop-color="{edge}"/><stop offset=".5" stop-color="{center}"/><stop offset="1" stop-color="{edge}"/></linearGradient>
+        <linearGradient id="wire">{''.join(colors)}</linearGradient>
+        <linearGradient id="core"><stop stop-color="#ffecc7" stop-opacity="0"/>
+          <stop offset=".5" stop-color="#fff0cf" stop-opacity="{light**2*.42:.4f}"/>
+          <stop offset="1" stop-color="#ffecc7" stop-opacity="0"/>
+        </linearGradient>
       </defs>
-      <rect x=".5" y=".8" width="37" height="16.4" rx="8.2" fill="#0f140e"/>
-      <path d="M3 13.5Q5 17.2 10 17.2H28Q33 17.2 35 13.5" fill="none" stroke="#e1d1a6" stroke-opacity=".15" stroke-width=".6"/>
-      <rect x="1.8" y="2" width="34.4" height="13.7" rx="6.8" fill="url(#glass)" stroke="#79785b" stroke-opacity=".22" stroke-width=".6"/>
-      <ellipse cx="19" cy="9" rx="17" ry="6.6" fill="url(#warmth)"/>
-      <path d="M7 11.5L10.5 9M27.5 9L31 11.5" fill="none" stroke="#8c8566" stroke-opacity=".38" stroke-width=".65"/>
-      <path d="{coil}" fill="none" stroke="#fa8f18" stroke-width="5" stroke-opacity="{light*.07:.4f}" stroke-linejoin="round"/>
-      <path d="{coil}" fill="none" stroke="#ffa333" stroke-width="2.8" stroke-opacity="{light*.18:.4f}" stroke-linejoin="round"/>
-      <path d="{coil}" fill="none" stroke="url(#wire)" stroke-width=".8" stroke-opacity="{.45+heat*.55:.4f}" stroke-linejoin="round"/>
-      <path d="M14 9.2L15.4 7.7L16.8 10.3L18.2 7.7L19.6 10.3L21 7.7L22.4 10.3L23.2 8.9" fill="none" stroke="#fff4d5" stroke-width=".34" stroke-opacity="{light*.6:.4f}"/>
-      <path d="M6 4.7Q8 3.4 12 3.4H26" fill="none" stroke="#fff2cf" stroke-opacity=".13" stroke-width=".65" stroke-linecap="round"/>
-      <path d="M6.7 5.5H11" fill="none" stroke="#fff2cf" stroke-opacity=".045" stroke-width="1.2" stroke-linecap="round"/>
-      <path d="M5 12.6Q7 14.3 11 14.3H27Q31 14.3 33 12.6" fill="none" stroke="#f9b64b" stroke-opacity="{.025+light*.16:.4f}" stroke-width=".65"/>
+      <rect x=".5" y="1" width="47" height="22" rx="11" fill="#0d120c"/>
+      <path d="M3 18Q5 23 12 23H36Q43 23 45 18" fill="none" stroke="#e1d1a6" stroke-opacity=".15" stroke-width=".7"/>
+      <rect x="2" y="2.5" width="44" height="19" rx="9.5" fill="url(#glass)" stroke="#79785b" stroke-opacity=".23" stroke-width=".7"/>
+      <ellipse cx="24" cy="12" rx="21.5" ry="9" fill="url(#warmth)"/>
+      <path d="M7 16L11 12M37 12L41 16" fill="none" stroke="#999071" stroke-opacity=".34" stroke-width=".7"/>
+      <path d="{coil}" fill="none" stroke="#8b7e63" stroke-width=".85" stroke-opacity=".3"/>
+      <path d="{coil}" fill="none" stroke="#f78b1a" stroke-width="6.4" stroke-opacity="{light*.07:.4f}"/>
+      <path d="{coil}" fill="none" stroke="#ffa236" stroke-width="3.4" stroke-opacity="{light*.2:.4f}"/>
+      <path d="{coil}" fill="none" stroke="url(#wire)" stroke-width="1.05" stroke-opacity="{emission:.4f}"/>
+      <path d="{coil}" fill="none" stroke="url(#core)" stroke-width=".38"/>
+      <path d="M7 6Q10 4.4 15 4.4H33" fill="none" stroke="#fff2cf" stroke-opacity=".14" stroke-width=".75" stroke-linecap="round"/>
+      <path d="M8 7H14" fill="none" stroke="#fff2cf" stroke-opacity=".045" stroke-width="1.4" stroke-linecap="round"/>
+      <path d="M5.5 17.3Q8 20 14 20H34Q40 20 42.5 17.3" fill="none" stroke="#f9b64b" stroke-opacity="{.025+light*.16:.4f}" stroke-width=".8"/>
     </svg>'''
-    return pixbuf(svg,38,18)
+    return pixbuf(svg,48,24)
 
 
 class FlowControl(Gtk.ToggleButton):
     def __init__(self,flow,beats=False):
         super().__init__();self.flow=flow;self.syncing=False;self.beats=beats
-        self.shown=self.target=float(flow.beat_sync if beats else flow.enabled);self.tick=0;self.frame_start=None
+        self.shown=self.target=float(flow.beat_sync if beats else flow.enabled);self.tick=0;self.frame_start=None;self.last_frame=None
         self.get_style_context().add_class('ember-flow');self.set_has_tooltip(False)
         if not beats:self.get_style_context().add_class('ember-flow-lamp')
         self.get_accessible().set_name('Beat sync' if beats else 'EmberFlow')
@@ -111,7 +130,7 @@ class FlowControl(Gtk.ToggleButton):
 
     def settle(self,*_args):
         if self.tick:self.remove_tick_callback(self.tick);self.tick=0
-        self.shown=self.target;self.frame_start=None;self.render()
+        self.shown=self.target;self.frame_start=None;self.last_frame=None;self.render()
 
     def destroyed(self,*_args):
         if self.tick:self.remove_tick_callback(self.tick);self.tick=0
@@ -128,8 +147,7 @@ class FlowControl(Gtk.ToggleButton):
         finally:self.syncing=False
         target=float(value)
         if target!=self.target:
-            self.from_position=self.shown;self.target=target;self.frame_start=None
-            self.duration=.24 if self.beats else (.78 if target else .62)
+            self.from_position=self.shown;self.target=target;self.frame_start=None;self.last_frame=None
             if self.get_mapped() and self.get_settings().get_property('gtk-enable-animations'):
                 if not self.tick:self.tick=self.add_tick_callback(self.animate)
             else:self.settle()
@@ -138,13 +156,25 @@ class FlowControl(Gtk.ToggleButton):
     def animate(self,_widget,clock):
         now=clock.get_frame_time()/1e6
         if self.frame_start is None:self.frame_start=now
-        t=min(1.,(now-self.frame_start)/self.duration)
-        ease=t*t*t*(t*(t*6-15)+10) if self.beats else 1-(1-t)**3 if self.target else t*t*(3-2*t)
-        self.shown=self.from_position+(self.target-self.from_position)*ease;self.render()
-        if t>=1:self.tick=0;return False
+        if self.beats:
+            t=min(1.,(now-self.frame_start)/.24);ease=t*t*t*(t*(t*6-15)+10)
+            self.shown=self.from_position+(self.target-self.from_position)*ease;finished=t>=1
+        else:
+            # Bounded thermal approximation: conduction plus radiative loss.
+            # Temperature survives a reversal; visible radiance is non-linear.
+            elapsed=min(.05,max(0.,now-self.last_frame)) if self.last_frame is not None else 1/60
+            steps=max(1,math.ceil(elapsed/.008));dt=elapsed/steps
+            for _ in range(steps):
+                loss=.32*self.shown+.68*self.shown**4
+                self.shown+=dt*(3.2*(1-loss) if self.target else -2.8*loss)
+                self.shown=max(0.,min(1.,self.shown))
+            finished=(self.shown>=.998 if self.target else self.shown<=.22) or now-self.frame_start>=1.8
+            if finished:self.shown=self.target
+        self.last_frame=now;self.render()
+        if finished:self.tick=0;return False
         return True
 
     def render(self):
-        frame=round(self.shown*(50 if self.beats else 100))
+        frame=round(self.shown*(50 if self.beats else 200))
         if frame!=self.frame:
             self.frame=frame;self.indicator.set_from_pixbuf(switch_frame(frame) if self.beats else lamp_frame(frame))
