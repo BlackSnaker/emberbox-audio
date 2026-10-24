@@ -16,6 +16,8 @@ CSS=b'''
 .dj-frequency { color: #d4ac5b; font-size: 10px; letter-spacing: 2px; }
 .dj-title { color: #fbf1c7; font-weight: bold; font-size: 48px; letter-spacing: -1px; }
 .dj-reply { color: #d5c4a2; font-size: 13px; }
+.dj-request { color:#f3e6bf;font-size:16px;font-weight:600; }
+.dj-understanding { color:#c4a96c;font-size:11px; }
 .dj-hint { color: #a89984; font-size: 11px; }
 .dj-status { color: #d5b66b; font-size: 11px; }
 .ember-stage button.dj-microphone, .ember-stage button.dj-microphone:hover,
@@ -55,7 +57,9 @@ PHASES={'welcome':('Mood, a style, a few words. Then music.','Настроени
  'playing':('Your wavelength is on air','Твоя волна в эфире'),
  'empty':('Let us try a different direction','Попробуем другое направление'),
  'error':('A small pause. We can try again.','Небольшая пауза. Можно попробовать ещё раз.')}
-REASONS={'personal':('From your personal picks','Из твоих личных подборок'),
+REASONS={'requested-artist':('From the requested artist’s catalogue','Из каталога выбранного исполнителя'),
+ 'requested-track':('Matches your track request','По твоему запросу'),
+ 'personal':('From your personal picks','Из твоих личных подборок'),
  'artist':('An artist you return to','Исполнитель, к которому ты возвращаешься'),
  'catalogue':('A catalogue discovery','Открытие из каталога'),
  'instrumental':('Labelled as instrumental','Инструментальная версия'),
@@ -66,7 +70,7 @@ class DJView(Gtk.Box):
     def __init__(self,service,artwork,accounts,open_artist):
         super().__init__(orientation=Gtk.Orientation.VERTICAL,spacing=12)
         self.service,self.artwork,self.accounts,self.open_artist=service,artwork,accounts,open_artist
-        self.active=False;self.syncing=False;self.rows_key=None;self.rows=[];self.size=None;self.columns=2
+        self.active=False;self.syncing=False;self.rows_key=None;self.rows=[];self.size=None;self.columns=2;self.last_prompt=''
         content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12);self.content=content
         self.scroll=scroll(content);self.pack_start(self.scroll,True,True,0)
         desk=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12);desk.get_style_context().add_class('dj-desk')
@@ -78,7 +82,13 @@ class DJView(Gtk.Box):
         self.title=label(text('Music on your frequency.','Музыка на твоей частоте.'),'dj-title',34)
         self.title.set_line_wrap(True);self.title.set_lines(2)
         words.pack_start(self.title,False,False,0)
-        self.reply=label(text(*PHASES['welcome']),'dj-reply',85);self.reply.set_line_wrap(True);self.reply.set_lines(2)
+        self.wish=label('','dj-request',68);self.wish.set_ellipsize(Pango.EllipsizeMode.NONE)
+        self.wish.set_line_wrap(True);self.wish.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR);self.wish.set_selectable(True)
+        self.wish.set_no_show_all(True);words.pack_start(self.wish,False,False,0)
+        self.understanding=label('','dj-understanding',75);self.understanding.set_line_wrap(True)
+        self.understanding.set_no_show_all(True);words.pack_start(self.understanding,False,False,0)
+        self.reply=label(text(*PHASES['welcome']),'dj-reply',75);self.reply.set_line_wrap(True)
+        self.reply.set_ellipsize(Pango.EllipsizeMode.NONE);self.reply.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
         words.pack_start(self.reply,False,False,0);header.pack_start(words,True,True,0)
         mic_box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=6);mic_box.set_valign(Gtk.Align.CENTER)
         self.mic=button('',service.microphone,'dj-microphone',text('Speak to DJ','Сказать пожелание DJ'))
@@ -144,8 +154,6 @@ class DJView(Gtk.Box):
         settings_actions.pack_start(button(text('Reset taste memory','Сбросить память вкусов'),service.forget),False,False,0)
         settings_actions.pack_start(button(text('Music accounts','Музыкальные аккаунты'),accounts),False,False,0)
         preferences.pack_start(settings_actions,False,False,0);content.pack_start(self.settings,False,False,0)
-        self.wish=label('','dj-wish',100);self.wish.set_ellipsize(Pango.EllipsizeMode.END)
-        self.wish.set_no_show_all(True);content.pack_start(self.wish,False,False,0)
         heading=Gtk.Box(spacing=10);self.mix_title=label(text('A little closer to you.','Чуть ближе к тебе.'),'stage-artist-section',60)
         heading.pack_start(self.mix_title,True,True,0)
         self.like=button('♥ '+text('Like','Нравится'),lambda:service.feedback(1))
@@ -167,7 +175,7 @@ class DJView(Gtk.Box):
 
     def submit(self):
         value=self.entry.get_text().strip()
-        if value:self.service.ask(value);self.entry.set_text('')
+        if value:self.service.ask(value)
 
     def preset(self,value):self.entry.set_text(value);self.submit()
     def toggle_settings(self):self.settings.set_reveal_child(not self.settings.get_reveal_child())
@@ -190,11 +198,11 @@ class DJView(Gtk.Box):
         self.mic.get_accessible().set_name(text('Finish recording','Закончить запись') if recording else text('Speak to DJ','Сказать пожелание DJ'))
         self.mic_level.set_fraction(s.voice.level if recording else 0)
         self.mic.set_sensitive(not bool(s.setup_kind))
-        message=text('Ready when you are','Готов, когда будешь готов') if s.phase=='welcome' else text(*PHASES.get(s.phase,PHASES['welcome']))
+        message=text('Ember is here for your next wish','Эмбер на связи') if s.phase=='welcome' else text(*PHASES.get(s.phase,PHASES['welcome']))
         if s.refilling:message=text('Preparing the next block…','Собираю следующий музыкальный блок…')
         if preparing:message=text('Preparing the microphone…','Готовлю микрофон…')
         if recording:message=text('Microphone on · speak, then press again or pause','Микрофон включён · скажи пожелание, затем нажми ещё раз или сделай паузу')
-        elif speaking:message=text('Your DJ is speaking','Твой DJ в эфире')
+        elif speaking:message=text('Ember is speaking','Эмбер в эфире')
         if s.setup_kind:
             component={'piper':('DJ voice','голос DJ'),'asr-ru':('Russian recognition','распознавание русского'),
                 'asr-en':('English recognition','распознавание английского'),'tts-ru':('Russian voice','русская озвучка'),
@@ -210,10 +218,17 @@ class DJView(Gtk.Box):
         self.spinner.start() if busy else self.spinner.stop()
         self.cancel_button.set_visible(busy)
         self.partial.set_text(s.partial);self.partial.set_visible(bool(s.partial) and recording)
-        self.wish.set_text(text('Your wish: ','Твоё пожелание: ')+s.prompt);self.wish.set_visible(bool(s.prompt))
+        self.wish.set_text(text('You: “','Ты: «')+s.prompt+text('”','»'));self.wish.set_visible(bool(s.prompt))
+        self.understanding.set_text(text('I understood: ','Я поняла: ')+s.understood);self.understanding.set_visible(bool(s.understood))
+        if s.prompt and s.prompt!=self.last_prompt:
+            self.last_prompt=s.prompt;self.entry.set_text(s.prompt)
         intent=s.intents.get(self.service.host.source)
-        self.title.set_text(text(*MOOD_LABEL[intent.mood]) if intent else text('Music on your frequency.','Музыка на твоей частоте.'))
-        self.reply.set_text(s.intro or text(*PHASES['welcome']))
+        if intent and intent.mode=='artist' and intent.artists:
+            self.title.set_text(', '.join(intent.artists)+text(' · on air',' · в эфире'))
+        elif intent and intent.mode=='lookup':self.title.set_text(text('Your requested recording','Музыка по твоему запросу'))
+        else:self.title.set_text(text(*MOOD_LABEL[intent.mood]) if intent else text('Music on your frequency.','Музыка на твоей частоте.'))
+        fallback=text('I am checking the catalogue for your request…','Проверяю каталог по твоему запросу…') if s.busy else text(*PHASES['welcome'])
+        self.reply.set_text(s.intro or s.error or fallback)
         self.mix_title.set_text(NAMES[self.service.host.source]+'  ·  '+text('Your mix','Твой эфир'))
         self.setup_voice.set_sensitive(not s.setup_kind and not voice_ready)
         self.setup_brain.set_sensitive(not s.setup_kind and not (s.models or ready('brain')))

@@ -3,6 +3,7 @@ import hashlib,json,re,subprocess,time
 from concurrent.futures import wait,FIRST_COMPLETED
 from contextlib import nullcontext
 from dj_lookups import Lookups
+from dj_intent import artist_key,same_artist
 from discovery import LocalSpotify,cached_home
 from listening_queue import track
 from music_library import youtube_item
@@ -80,10 +81,38 @@ class DJCatalog:
             except Exception:pass
         return {'tracks':values[:150],'recent':recent}
 
+    def specific(self,source,intent):
+        """Resolve a requested artist before asking for tracks, not song-title hits."""
+        term=intent.query or ' '.join(intent.artists[:1]);resolved=None
+        if artist_key(term)=='beatles':term='The Beatles'
+        if source!='youtube':
+            try:
+                result=self.music.repository.load(source,'artist',collection={'name':term})
+                choices=([result['artist']] if result.get('artist') else result.get('choices') or [])
+                exact=[v for v in choices if artist_key(v.get('name',''))==artist_key(term)]
+                if len(exact)==1:
+                    resolved=exact[0]
+                    if source=='apple-music':
+                        data=self.music.repository.load(source,'artist-section',collection={'id':resolved['id'],'section':'top-songs'})
+                        songs=data.get('items',[])
+                    else:
+                        data=self.music.repository.load(source,'artist',collection={'id':resolved['id']})
+                        songs=[v for section in data.get('sections',[]) if section.get('id')=='top-songs' for v in section.get('items',[])]
+                    return {'items':[dict(v,_requested_artist=resolved['name'],_requested_artist_id=resolved['id'])
+                        for v in songs if isinstance(v,dict) and same_artist(v.get('artist',''),resolved['name'])],
+                        'artist':resolved}
+            except Exception:
+                # A failed exact-artist fetch must never silently switch to a
+                # different act or a personal radio mix.
+                if resolved:return {'items':[],'artist':resolved}
+        if source=='youtube':result=self.youtube(term,lambda:not self.closed)
+        else:result=self.music.repository.load(source,'search',term=term[:200])
+        return {'items':[dict(v,_search_query=term) for v in (result.get('items') or result.get('tracks') or []) if isinstance(v,dict)]}
+
     def collect(self,source,intent,affinity,alive=lambda:True,progress=lambda *_:None):
         if not alive():raise InterruptedError('cancelled')
         started=time.monotonic();deadline=started+self.BUDGET;candidates=[];recent=[];warnings=[]
-        requested=' '.join(intent.artists[:1]) or intent.query
+        requested=intent.query or ' '.join(intent.artists[:1])
         anchor=max(affinity,key=affinity.get) if affinity else ''
         query=requested or ' '.join(intent.genres[:1]) or (anchor if intent.mood=='any' and affinity.get(anchor,0)>0 else MOOD_QUERY[intent.mood])
         if intent.instrumental is True and 'instrumental' not in query.casefold():query+=' instrumental'
@@ -93,8 +122,10 @@ class DJCatalog:
             if source=='youtube':return self.youtube(query,lambda:not self.closed)
             return self.music.repository.load(source,'search',term=query[:200])
         # Search takes priority over background enrichment on UI-backed sources.
-        search_future=self.cache.get((source,'search',query),lambda:self.guarded(source,search),ttl=180)
-        personal_future=self.cache.get((source,'personal'),lambda:self.guarded(source,lambda:self.personal(source,intent,affinity)))
+        specific=intent.mode in ('lookup','artist')
+        key=(source,'specific' if specific else 'search',query)
+        search_future=self.cache.get(key,lambda:self.guarded(source,lambda:self.specific(source,intent) if specific else search()),ttl=180)
+        personal_future=None if specific else self.cache.get((source,'personal'),lambda:self.guarded(source,lambda:self.personal(source,intent,affinity)))
         pending={f for f in (search_future,personal_future) if f is not None};search_done=False;personal_done=False;first=None
         progress('catalogue')
         while pending and time.monotonic()<deadline:
@@ -150,11 +181,18 @@ class DJCatalog:
 
 def rank(values,source,intent,profile,affinity,exclude=(),limit=14,seed=''):
     seen=set(exclude);pool=[];now=time.time()
+    resolved=next((v.get('_requested_artist') for v in values if v.get('_requested_artist')),None)
+    requested=resolved or (intent.artists[0] if intent.mode=='artist' and intent.artists else '')
+    direct=bool(requested or intent.mode=='lookup')
     by_song={(normalized(v.get('artist','')),normalized(v.get('title',''))):v for v in profile.values()}
     for value in values:
         valid=track(value,source)
         if not valid or valid['uri'] in seen:continue
         seen.add(valid['uri']);info=hints(value);artist=normalized(valid['artist'])
+        if requested and not same_artist(valid['artist'],requested):continue
+        if intent.mode=='lookup' and not requested:
+            terms=set(normalized(intent.query).split());actual=set((normalized(valid['title'])+' '+artist).split())
+            if not terms or len(terms&actual)/len(terms)<.75:continue
         preference=profile.get(valid['uri']) or by_song.get((artist,normalized(valid['title'])),{})
         if int(preference.get('vote',0))<0:continue
         if any(normalized(word) in normalized(info) for word in intent.avoid):continue
@@ -173,7 +211,7 @@ def rank(values,source,intent,profile,affinity,exclude=(),limit=14,seed=''):
         if artist and intent.artists and any(normalized(a) in artist or artist in normalized(a) for a in intent.artists):score+=14
         jitter=int(hashlib.sha256((seed+valid['uri']).encode()).hexdigest()[:8],16)/0xffffffff
         score+=jitter*(3 if intent.mood=='discover' else 1)
-        reason='personal' if value.get('_personal') else 'artist' if affinity.get(valid['artist'].casefold(),0)>0 else 'catalogue'
+        reason='requested-artist' if requested else 'requested-track' if intent.mode=='lookup' else 'personal' if value.get('_personal') else 'artist' if affinity.get(valid['artist'].casefold(),0)>0 else 'catalogue'
         if intent.instrumental is True:reason='instrumental'
         elif intent.mood in MOOD_MATCH and re.search(MOOD_MATCH[intent.mood],info):reason='mood'
         pool.append((score,dict(value,_reason=reason)))
@@ -182,7 +220,7 @@ def rank(values,source,intent,profile,affinity,exclude=(),limit=14,seed=''):
     for _,value in pool:
         artist=normalized(value.get('artist',''));title=normalized(value.get('title',''))
         title=re.sub(r'\b(?:remaster(?:ed)?|\d{4})\b','',title).strip()
-        if (artist,title) in titles or artists.get(artist,0)>=(4 if intent.artists else 2):continue
+        if (artist,title) in titles or artists.get(artist,0)>=(limit if direct else 4 if intent.artists else 2):continue
         artists[artist]=artists.get(artist,0)+1;titles.add((artist,title));selected.append(value)
         if len(selected)>=limit:break
     return selected

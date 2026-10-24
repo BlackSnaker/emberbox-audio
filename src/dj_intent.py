@@ -40,12 +40,14 @@ class Intent:
     familiarity:float=.65
     action:str='mix'
     query:str=''
+    mode:str='mix'
     def data(self):return asdict(self)
 
 
 def local_intent(prompt,previous=None):
     value=clean(prompt,500).casefold().replace('ё','е')
-    base=previous or Intent()
+    followup=bool(re.search(r'^(?:а |но |теперь |ещ[её]|больше|меньше|поспокойн|чуть|без |с вокалом|more |less |calmer|without |with vocals)',value))
+    base=(previous or Intent()) if followup else Intent()
     if re.search(r'совсем другое|с чистого листа|start over|different style',value):base=Intent()
     for action,pattern in ACTIONS.items():
         if re.search(pattern,value):return replace(base,action=action)
@@ -60,12 +62,22 @@ def local_intent(prompt,previous=None):
     elif re.search(r'с вокалом|с голосом|with vocals',value):instrumental=False
     familiarity=.2 if mood=='discover' else .85 if re.search(r'любим|знаком|familiar|favourites|favorites',value) else base.familiarity
     artists=base.artists
-    similar=re.search(r'(?:как|в стиле|похож[а-я]* на|like|similar to)\s+([\w &.\-]{2,80})',clean(prompt,500),re.I)
+    similar=re.search(r'(?:как|в стиле|похож[а-я]* на|like|similar to)\s+(.{2,80}?)(?=,|\s+(?:но|только|без|but|without)\b|$)',clean(prompt,500),re.I)
     if similar:artists=(similar.group(1).strip(),)
-    exact=re.sub(r'^(?:найди|включи|поставь|ищи|play|find|search for)\s+', '', clean(prompt,160), flags=re.I).strip(' \"«»')
-    known=bool(genres or avoid or mood!=base.mood or instrumental!=base.instrumental or re.search(r'музык|music|волна|mix|микс|поспокойн',value))
+    stripped=clean(prompt,160).strip(' \"«»')
+    stripped=re.sub(r'^(?:(?:я|мне|хочу|пожалуйста|можно|только|давай|накидай|насыпь|включи|поставь|найди|ищи|послушать|слушать|послушаем|play|find|search for|please|i want|listen to)\s+)+','',stripped,flags=re.I)
+    stripped=re.sub(r'^(?:(?:музык[ауи]|песни|песен|треки|треков|групп[уы]|исполнител[ья]|music by|songs by|tracks by|band|artist)\s+)+','',stripped,flags=re.I).strip(' \"«»')
+    stripped=re.sub(r'(?:,?\s+пожалуйста|,?\s+please|\s+без рекомендаций|\s+без других исполнителей)[.!?]*$', '', stripped, flags=re.I).strip()
+    # A named target must survive generic words such as "music" in the wish.
+    known=bool(genres or avoid or mood!='any' or instrumental is not None)
+    generic=bool(re.fullmatch(r'(?:музык[ауи]|music|микс|mix|моя волна|в мо[её]м вкусе|что.?нибудь|something)(?: в мо[её]м вкусе)?',stripped,re.I))
+    query=artists[0] if similar else '' if known or generic else stripped
+    mode='similar' if similar else 'lookup' if query else 'mix'
+    if followup and previous and not similar and not genres and (known or re.fullmatch(r'ещ[её]|more|побольше|продолжай',stripped,re.I)):
+        query=base.query;mode=base.mode
     return Intent(mood,genres or base.genres,artists,tuple(dict.fromkeys(base.avoid+avoid)),
-                  instrumental,familiarity,'mix',artists[0] if similar else '' if known else exact)
+                  instrumental,familiarity,'mix',query,mode)
+
 
 
 SCHEMA={'type':'object','properties':{
@@ -114,7 +126,7 @@ def model_intent(data,fallback,prompt=None):
         allowed=wish+' '+norm(' '.join(genres+artists))
         if query and any(part not in allowed.split() for part in norm(query).split()):query=''
     return Intent(mood,genres or fallback.genres,artists or fallback.artists,
-        tuple(dict.fromkeys(fallback.avoid+avoid)),instrumental,familiarity,'mix',query)
+        tuple(dict.fromkeys(fallback.avoid+avoid)),instrumental,familiarity,'mix',query or fallback.query,fallback.mode)
 
 
 def quick_wish(prompt):
@@ -124,3 +136,16 @@ def quick_wish(prompt):
     if any(re.search(pattern,value) for pattern in ACTIONS.values()):return True
     if re.search(r'без вокала|без слов|instrumental|without vocals|как |like |в стиле|найди |включи |поставь |^play |^find ',value):return True
     return len(value.split())<=8
+
+
+def artist_key(value):
+    value=re.sub(r'[^\w]+',' ',str(value).casefold()).strip()
+    value=re.sub(r'^the\s+','',value)
+    return {'битлз':'beatles','битлс':'beatles','битлы':'beatles'}.get(value,value)
+
+
+def same_artist(actual,requested):
+    target=artist_key(requested)
+    if not target:return False
+    if artist_key(actual)==target:return True
+    return any(artist_key(part)==target for part in re.split(r'\s*(?:,|&|feat\.?| featuring | with | and )\s*',str(actual),flags=re.I))

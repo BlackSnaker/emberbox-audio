@@ -64,7 +64,7 @@ def recognize(root,language,audio=None):
 
 
 def synthesize(root,language,text,output):
-    voice='ru_RU-denis-medium' if language=='ru' else 'en_US-joe-medium'
+    voice='ru_RU-irina-medium' if language=='ru' else 'en_US-ljspeech-medium'
     command=[str(root/'piper/piper'),'-m',str(root/(voice+'.onnx')),'-f',str(output),
         '--length_scale','1.02','--sentence_silence','0.12']
     process=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

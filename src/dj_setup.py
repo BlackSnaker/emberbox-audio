@@ -14,27 +14,28 @@ ASSETS={
     '467c17935d2a22dcce9dc9e08ba07485e29be813097e7cf08c5627aa09d32e42',25916047,'piper.tar.gz'),
  'asr-ru':('https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip',
     '961d5ff98a17f4aa6de69864d0aa71fa5bac682301d2b5d17a3f24c5c99a46d4',46236750,'asr-ru.zip'),
- 'tts-ru':(VOICE_BASE+'ru/ru_RU/denis/medium/ru_RU-denis-medium.onnx',
-    '15fab56e11a097858ee115545d0f697fc2a316c41a291a5362349fb870411b0a',63201294,'ru_RU-denis-medium.onnx'),
- 'tts-ru-config':(VOICE_BASE+'ru/ru_RU/denis/medium/ru_RU-denis-medium.onnx.json',
-    '831c860dac0b5073eaa81610a0a638ec23d90a6cf8e5f871b4485c2cec3767c8',4823,'ru_RU-denis-medium.onnx.json'),
+ 'tts-ru':(VOICE_BASE+'ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx',
+    '8ff38212d23da300bbe3705c645e6e5b9475f0bfde01558eb17813e22acaaaaa',63201294,'ru_RU-irina-medium.onnx'),
+ 'tts-ru-config':(VOICE_BASE+'ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx.json',
+    'c2ec28bb38e2b59e93b959b3e40348c1afebbd272f30fed5d41205d08e98a9d7',4765,'ru_RU-irina-medium.onnx.json'),
  'asr-en':('https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip',
     '30f26242c4eb449f948e42cb302dd7a686cb29a3423a8367f99ff41780942498',41205931,'asr-en.zip'),
- 'tts-en':(VOICE_BASE+'en/en_US/joe/medium/en_US-joe-medium.onnx',
-    '58afce0321b8d9c46d7cdf9c16500cc55a793b4220212dba6b70fb788b3baf06',63201294,'en_US-joe-medium.onnx'),
- 'tts-en-config':(VOICE_BASE+'en/en_US/joe/medium/en_US-joe-medium.onnx.json',
-    '3d6d5410b3795cb1950595247ef8f06190719e6fdbfa3a2356d8ec368e1aad33',4794,'en_US-joe-medium.onnx.json'),
+ 'tts-en':(VOICE_BASE+'en/en_US/ljspeech/medium/en_US-ljspeech-medium.onnx',
+    '6f52a751e2349abe7a76735eb09dc1875298c77ea2342ffd2fef79ff81b87f22',63531379,'en_US-ljspeech-medium.onnx'),
+ 'tts-en-config':(VOICE_BASE+'en/en_US/ljspeech/medium/en_US-ljspeech-medium.onnx.json',
+    '141d612cc0a95ed7efc1ca936b845c2364967f2e9217c5dbfcf69fc4d6c65860',4972,'en_US-ljspeech-medium.onnx.json'),
  'llama':('https://github.com/ggml-org/llama.cpp/releases/download/b11838/llama-b11838-bin-ubuntu-x64.tar.gz',
     '507e2f4fe3553499b518efe74a4244e35d709154a4e51c67e3affeef228ceb30',22349871,'llama.tar.gz'),
  'brain':('https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/'+MODEL_NAME,
     '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e',1117320736,MODEL_NAME)}
-VOICES={'ru':'ru_RU-denis-medium','en':'en_US-joe-medium'}
+VOICES={'ru':'ru_RU-irina-medium','en':'en_US-ljspeech-medium'}
 
 
 def ready(kind='voice',language='ru'):
     try:
         data=json.loads((ROOT/('brain.json' if kind=='brain' else kind+'-'+language+'.json')).read_text())
         if data.get('version')!=1:return False
+        if kind=='voice' and data.get('voice')!=VOICES[language]:return False
         if kind=='brain':return (ROOT/'llama/llama-server').is_file() and (ROOT/MODEL_NAME).stat().st_size==ASSETS['brain'][2]
         return Path(data['python']).is_file() and (ROOT/'piper/piper').is_file() and (ROOT/('asr-'+language)/'am/final.mdl').is_file() and (ROOT/(VOICES[language]+'.onnx')).stat().st_size==ASSETS['tts-'+language][2]
     except (OSError,ValueError,TypeError,KeyError):return False
@@ -150,5 +151,5 @@ def prepare(kind='voice',language='ru',progress=lambda *_:None,stop=None):
         python=runtime(progress,stop) if kind=='voice' else ''
         if stop.is_set():raise InterruptedError('cancelled')
         marker=ROOT/('brain.json' if kind=='brain' else kind+'-'+language+'.json');temporary=marker.with_suffix('.next')
-        temporary.write_text(json.dumps({'version':1,'python':str(python)}));temporary.chmod(0o600);temporary.replace(marker)
+        temporary.write_text(json.dumps({'version':1,'python':str(python),'voice':VOICES[language] if kind=='voice' else ''}));temporary.chmod(0o600);temporary.replace(marker)
         progress('ready',1.)

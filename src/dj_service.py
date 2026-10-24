@@ -1,11 +1,13 @@
 """A source-aware personal DJ shared by the room and its existing music queue."""
 from concurrent.futures import ThreadPoolExecutor
 import threading,time
+from dataclasses import replace
 from gi.repository import GLib
 from paths import CONFIG_DIR
 from source_picker import text,RU
 from music_library import snapshot,NAMES
 from dj_intent import Intent
+from dj_reply import reply,summary
 from dj_memory import ListeningMemory
 from dj_brain import LocalBrain
 from dj_catalog import DJCatalog,rank
@@ -31,7 +33,7 @@ class DJService:
         self.save_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-dj-memory')
         self.listeners=[];self.closed=False;self.generation=0;self.cancelled=threading.Event()
         self.source=self.host.source;self.intents={};self.items=[];self.prompt='';self.partial=''
-        self.phase='welcome';self.error='';self.intro='';self.engine='';self.models=[];self.probed=False
+        self.phase='welcome';self.error='';self.intro='';self.understood='';self.engine='';self.models=[];self.probed=False
         self.busy=False;self.session=False;self.played=set();self.refill_after=0.;self.refilling=False
         self.setup_kind='';self.setup_phase='';self.setup_fraction=0.;self.setup_stop=threading.Event()
         self.save_busy=False;self.last_save=0.;self.last_track=''
@@ -75,7 +77,7 @@ class DJService:
         prompt=str(prompt).strip()[:500]
         if not prompt or self.closed:return
         if self.source!=self.host.source:self.switch_source()
-        self.cancel();self.prompt=prompt;self.partial='';self.error='';self.phase='understand';self.busy=True
+        self.cancel();self.prompt=prompt;self.partial='';self.error='';self.intro='';self.understood='';self.phase='understand';self.busy=True
         source=self.host.source;generation=self.generation;cancelled=self.cancelled
         previous=self.intents.get(source)
         settings=dict(self.memory.settings)
@@ -88,6 +90,8 @@ class DJService:
             affinity=self.memory.artist_affinity(source)
             values,recent,warnings=self.catalog.collect(source,intent,affinity,alive,progress)
             if not alive():raise InterruptedError('cancelled')
+            resolved=next((v.get('_requested_artist') for v in values if v.get('_requested_artist')),None)
+            if resolved:intent=replace(intent,artists=(resolved,),mode='artist')
             self.memory.import_recent(source,recent)
             selected=rank(values,source,intent,self.memory.profile(source),self.memory.artist_affinity(source),
                           seed=str(generation)+prompt)
@@ -110,7 +114,7 @@ class DJService:
                 'Источник не вернул подборку. Проверь подключение и попробуй ещё раз.');self.changed();return False
         self.engine=engine
         if intent.action!='mix':self.command(intent.action);return False
-        self.intents[source]=intent
+        self.intents[source]=intent;self.understood=summary(intent)
         if not items:
             self.phase='empty'
             self.error=text('No matching playable tracks were found. Try a different wish or connect your library.',
@@ -125,8 +129,7 @@ class DJService:
                 'Очередь заполнена. Освободи немного места для DJ.');self.changed();return False
         self.items=items;self.played={v['uri'] for v in items};self.source=source;self.session=True
         self.refill_after=time.monotonic()+15;self.phase='playing'
-        self.intro=text('I have put together a new block for you. You can change its direction at any time.',
-            'Собрал новый музыкальный блок. Можешь менять его настроение на ходу.')
+        self.intro=reply(intent,items,NAMES[source])
         if self.memory.settings.get('voice') and ready('voice',self.language):self.voice.launch('speak',self.language,self.intro)
         self.changed();return False
 
@@ -143,7 +146,7 @@ class DJService:
         current=self.state()
         if current.get('valid'):
             self.memory.record(self.host.source,current,'like' if vote>0 else 'dislike')
-            self.intro=text('Remembered for your Ember DJ mixes.','Запомнил для твоих подборок Ember DJ.')
+            self.intro=text('Remembered for your Ember DJ mixes.','Запомнила для твоих подборок Ember DJ.')
             if vote<0:self.next()
             self.changed()
 
@@ -221,7 +224,12 @@ class DJService:
         def build():
             affinity=self.memory.artist_affinity(source)
             values,_,_=self.catalog.collect(source,intent,affinity,alive)
-            return rank(values,source,intent,self.memory.profile(source),affinity,exclude,seed=str(time.time()))
+            selected=rank(values,source,intent,self.memory.profile(source),affinity,exclude,seed=str(time.time()))
+            if not selected and intent.mode=='artist':
+                current=self.music.book.current(source) or {}
+                selected=rank(values,source,intent,self.memory.profile(source),affinity,
+                    {current.get('uri','')},seed=str(time.time()))
+            return selected
         future=self.pool.submit(build)
         def done(result):
             if self.closed or generation!=self.generation or source!=self.host.source:return False
@@ -229,7 +237,7 @@ class DJService:
             try:items=result.result()
             except Exception:items=[]
             if items:
-                self.music.extend_dj(items);self.played.update(v['uri'] for v in items)
+                self.music.extend_dj(items,before_pending=intent.mode=='artist');self.played.update(v['uri'] for v in items)
                 self.items=(self.items+items)[-40:]
             self.changed();return False
         future.add_done_callback(lambda result:GLib.idle_add(done,result,priority=GLib.PRIORITY_DEFAULT))

@@ -75,9 +75,10 @@ glibc ≥ 2.34. Downloads are SHA256 checked; model weights are not in Git.
 
 - [Vosk models](https://alphacephei.com/vosk/models): small RU/EN models, Apache-2.0.
 - [Piper 1.2.0](https://github.com/rhasspy/piper/releases/tag/v1.2.0): separate synthesis runtime;
-  retain its included licences. [Denis](https://huggingface.co/rhasspy/piper-voices/blob/main/ru/ru_RU/denis/medium/MODEL_CARD)
-  / [Joe](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/joe/medium/MODEL_CARD)
-  model cards identify their datasets as CC0.
+  retain its included licences. Female voices: [Irina](https://huggingface.co/rhasspy/piper-voices/blob/main/ru/ru_RU/irina/medium/MODEL_CARD)
+  / [LJ Speech](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD).
+  Irina’s card marks the source dataset licence Unknown; LJ Speech identifies public-domain data.
+  Weights are downloaded from the provider repository, not bundled with Emberbox source.
 - [Qwen2.5-1.5B-Instruct GGUF](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF), Apache-2.0;
   [llama.cpp](https://github.com/ggml-org/llama.cpp), MIT; or an existing local Ollama service.
 
@@ -95,3 +96,17 @@ pending message. External network/stream startup time cannot be guaranteed.
 Canceling a request stops waiting within a short polling interval. Hidden DJ
 views stop their animation ticks. Optional native language inference uses two
 CPU threads and its model is unloaded after 30 idle seconds.
+
+## Exact artists and useful replies
+
+**Beatles** or **“Play songs by The Beatles”** resolves the exact catalogue
+artist first. This mode can select up to 14 available recordings without
+the two-songs-per-artist diversity cap. It excludes unrelated “Black Beatles”
+search hits and personal radio recommendations. Continuations retain that
+artist, cycling available recordings when exhausted. Explicit manual queue
+entries are preserved for after the DJ session. Use **“like Beatles”** or
+**“similar to Beatles”** to explicitly broaden the mix.
+
+Your wish stays in the input and is shown beside Ember’s response, together
+with the interpreted scope. Replies name the actual result count and first
+recording; Ember uses a female voice.

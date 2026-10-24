@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.13.1 — 2026-10-24
+
+- Resolve exact artist requests through the artist catalogue; bypass diversity caps, exclude unrelated title hits and recommendations, and keep artist continuations ahead of the preserved user tail.
+- Keep the submitted wish visible in the input and response area. Describe the actual artist, track count and first recording instead of repeating fixed copy.
+- Give Ember female RU/EN voices, pinned model hashes and voice identity checks; retain the two-CPU speech budget.
+
 ## 0.13.0 — 2026-10-24
 
 - Ember DJ: an integrated personal radio tab with keyboard Enter/button requests, push-to-talk and local neural RU/EN speech. Soft tab transitions, a metal microphone dial, live tubes and responsive music cards.

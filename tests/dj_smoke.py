@@ -47,7 +47,8 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         f.key(stage.window,'space');f.key(stage.window,'Left');assert host.calls==before,'Keyboard typing triggered transport'
         slow[0]=True;painted=[0];stage.window.get_frame_clock().connect('after-paint',lambda *_:painted.__setitem__(0,painted[0]+1))
         stage.music.add([dict(tracks[0],uri='spotify:track:Manual',title='Manual selection')])
-        v.entry.emit('activate');wait(entered.is_set);assert s.busy and not v.entry.get_text()
+        v.entry.emit('activate');wait(entered.is_set);assert s.busy and v.entry.get_text()=='Relaxing music'
+        assert v.wish.get_mapped() and 'Relaxing music' in v.wish.get_text()
         frames=painted[0];f.settle(.2);assert painted[0]>frames,'DJ blocked GTK'
         release.set();slow[0]=False;wait(lambda:not s.busy and len(v.rows)>0);wait(lambda:not stage.music.loading)
         assert plays and s.session and any(i['uri']=='spotify:track:Manual' for _,i in stage.music.book.upcoming('spotify'))
@@ -74,6 +75,23 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         v.entry.set_text('Energetic music');v.send.clicked();wait(entered.is_set)
         v.cancel_button.clicked();release.set();f.settle(.35);assert len(plays)==count
         assert not s.busy
+        # The reported case: Beatles gets a full artist block and a visible, specific answer.
+        beatles=[dict(tracks[0],uri='spotify:track:B'+str(i),id='B'+str(i),artist='The Beatles',
+            title='Original Beatles fixture '+str(i),_requested_artist='The Beatles',_requested_artist_id='136975') for i in range(24)]
+        s.catalog.collect=lambda *_a,**_kw:(beatles,[],[])
+        v.entry.set_text('Beatles');v.entry.emit('activate');wait(lambda:not s.busy and s.intents.get('spotify').mode=='artist')
+        assert len(s.items)==14 and all(i['artist']=='The Beatles' for i in s.items)
+        assert v.entry.get_text()=='Beatles' and v.wish.get_mapped() and 'Beatles' in v.wish.get_text()
+        assert 'The Beatles' in v.reply.get_text() and '14' in v.reply.get_text()
+        assert 'The Beatles' in v.understanding.get_text()
+        for width,height in ((1024,600),(1920,1080)):
+            stage.window.resize(width,height);f.settle(.3)
+            fits(stage,[v.wish,v.reply,v.understanding,v.entry,stage.knob])
+        shot(stage,'dj-beatles-1920')
+        s.refill();wait(lambda:not s.busy)
+        tail=[i for _,i in stage.music.book.upcoming('spotify')]
+        assert len(tail)>14 and all(i['artist']=='The Beatles' for i in tail[:-1])
+        assert tail[-1]['uri']=='spotify:track:Manual','Artist refill lost the user tail'
         s.stop();assert all(i.get('origin')!='dj' for _,i in stage.music.book.upcoming('spotify'))
         assert any(i['uri']=='spotify:track:Manual' for _,i in stage.music.book.upcoming('spotify'))
         stage.close();assert s.closed and not s.voice.process

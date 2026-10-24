@@ -223,10 +223,15 @@ class MusicService:
         self.play_generation+=1;self.loading=False;self.watch.reset()
         self.book.replace(source,before+values+pending);self.start(len(before));return True
 
-    def extend_dj(self,items):
+    def extend_dj(self,items,before_pending=False):
         source=self.host.source;existing={value['uri'] for _,value in self.book.upcoming(source)}
         values=[dict(value,origin='dj') for value in items if value.get('uri') not in existing]
-        count=self.book.add(source,values);self.changed();return count
+        count=self.book.add(source,values)
+        if count and before_pending:
+            queue=self.book.queues[source];added=queue[-count:];del queue[-count:]
+            insertion=next((i for i,v in self.book.upcoming(source) if v.get('origin')!='dj'),len(queue))
+            queue[insertion:insertion]=added;self.book.save()
+        self.changed();return count
 
     def clear_dj(self,source):
         index=self.book.indices[source];values=self.book.queues[source]
