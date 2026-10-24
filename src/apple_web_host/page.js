@@ -83,6 +83,7 @@ async function emberboxAppleCommand(request) {
       subtitle: String(a.artistName || a.curatorName || ''), image: image(a.artwork),
       artist: String(a.artistName || ''), duration_ms: Number(a.durationInMillis || 0),
       uri: `apple:${resource.type}:${resource.id}`, playable: !!a.playParams,
+      genres:(a.genreNames||[]).filter(v=>typeof v==='string').slice(0,8),album:String(a.albumName||''),
       releaseDate:String(a.releaseDate||''),trackCount:Number(a.trackCount||0),
       description:String(a.editorialNotes?.standard||a.editorialNotes?.short||'').slice(0,14000),
       copyright:String(a.copyright||''),recordLabel:String(a.recordLabel||''),
@@ -90,7 +91,9 @@ async function emberboxAppleCommand(request) {
   }
   async function api(path, query = {}) {
     const catalog=/^\/v1\/catalog\/[a-z]{2}\/(search|songs\/\d{1,20}(\/artists)?|albums\/\d{1,20}(\/tracks)?|artists\/\d{1,20}(\/albums|\/view\/(top-songs|latest-release|full-albums|singles|featured-albums|compilation-albums|appears-on-albums))?)$/;
-    if (!path.startsWith('/v1/me/library/') && !catalog.test(path)) throw Error('Unsupported library request');
+    const dj=path==='/v1/me/recommendations'||path==='/v1/me/recent/played/tracks'||
+      /^\/v1\/catalog\/[a-z]{2}\/playlists\/[\w.-]{1,200}\/tracks$/.test(path);
+    if (!path.startsWith('/v1/me/library/') && !catalog.test(path) && !dj) throw Error('Unsupported library request');
     if (typeof music.api.music === 'function') {
       const response = await music.api.music(path, query);
       return response?.data || response || {};
@@ -270,15 +273,38 @@ async function emberboxAppleCommand(request) {
     return {ok:true};
   }
   if (request.method === 'browse') {
+    if(category==='dj') {
+      const deadline=Date.now()+5000;
+      const results=await Promise.allSettled([
+        artistApi('/v1/me/recommendations',{limit:20,include:'contents'},deadline),
+        artistApi('/v1/me/recent/played/tracks',{types:'songs,library-songs',limit:30},deadline)]);
+      const roots=results[0].status==='fulfilled'?(results[0].value?.data||[]):[];
+      const collections=[],songs=[],seen=new Set();
+      function visit(resource,depth=0) {
+        if(!resource||depth>3)return;
+        if(['songs','library-songs','playlists','library-playlists','albums','library-albums'].includes(resource.type)) {
+          const key=resource.type+':'+resource.id;
+          if(!safeId.test(String(resource.id))||seen.has(key))return;seen.add(key);
+          (resource.type.endsWith('songs')?songs:collections).push(item(resource));return;
+        }
+        for(const child of resource.relationships?.contents?.data||[])visit(child,depth+1);
+      }
+      for(const value of roots)visit(value);
+      const recent=results[1].status==='fulfilled'?(results[1].value?.data||[]):[];
+      return {personal:true,items:collections.slice(0,40),tracks:songs.slice(0,50),
+        recent:recent.filter(v=>['songs','library-songs'].includes(v.type)).slice(0,30).map(item),
+        partial:results.some(v=>v.status==='rejected')};
+    }
     if (!['playlists','albums','songs'].includes(category)) throw Error('Unsupported category');
     const result = await api(`/v1/me/library/${category}`, {limit: 50, offset});
     const data = Array.isArray(result) ? result : result.data || [];
     return {items: data.map(item), next: result.next ? offset + data.length : null};
   }
   if (request.method === 'tracks') {
-    if (!['library-albums','library-playlists'].includes(kind) || !safeId.test(id)) throw Error('Invalid collection');
+    if (!['library-albums','library-playlists','albums','playlists'].includes(kind) || !safeId.test(id)) throw Error('Invalid collection');
     const collection = kind.replace('library-', '');
-    const result = await api(`/v1/me/library/${collection}/${encodeURIComponent(id)}/tracks`, {limit: 100, offset});
+    const base=kind.startsWith('library-')?'/v1/me/library':`/v1/catalog/${storefront()}`;
+    const result = await api(`${base}/${collection}/${encodeURIComponent(id)}/tracks`, {limit: 100, offset});
     const data = Array.isArray(result) ? result : result.data || [];
     return {tracks: data.map(item), next: result.next ? offset + data.length : null};
   }

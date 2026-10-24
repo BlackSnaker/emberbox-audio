@@ -32,7 +32,7 @@ physical pixels to retain the tested logical workspace.
 | --- | --- |
 | Platform | Linux; **x86_64 is the currently tested target**. The built-in Apple/Yandex DRM path expects Linux x64 Widevine. ARM has not been validated. Windows and macOS are unsupported. |
 | Desktop session | X11, or Wayland **with XWayland**; GTK uses its X11 backend in both cases |
-| Audio | Running PipeWire, its `pw-record`, `pw-link` and `pw-dump` tools, plus `pactl` and `pacat`. Karaoke additionally needs a compatible PulseAudio protocol server, normally PipeWire-Pulse, with null-sink support. |
+| Audio | Running PipeWire, its `pw-record`, `pw-play`, `pw-link` and `pw-dump` tools, plus `pactl` and `pacat`. Karaoke additionally needs a compatible PulseAudio protocol server, normally PipeWire-Pulse, with null-sink support. |
 | Python and UI | Python ≥ 3.10, PyGObject, GTK 3, GdkX11 and an SVG image loader |
 | Python libraries | NumPy ≥ 1.24, Pillow ≥ 10 and websocket-client ≥ 1.6 |
 | YouTube | libmpv, python-mpv, yt-dlp with matching EJS scripts, and Deno ≥ 2.3 or Node ≥ 22 |
@@ -103,3 +103,10 @@ entitlements or real-time AI speed. For a hardware report, include CPU model,
 RAM, distribution, desktop/session, display scale, source and the affected mode.
 
 [Back to the player](../README.md) · [Install](INSTALL.md) · [Karaoke](KARAOKE.md)
+
+## Local Ember DJ
+
+Optional: plan for 4 modern cores, 8 GB total RAM and 2 GB additional storage
+for local models/runtime. Text-based mood matching works without models;
+voice and language AI are prepared in the DJ tab.
+[Setup, checked components and limitations →](DJ.md)

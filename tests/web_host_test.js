@@ -33,7 +33,7 @@ function host(yandex){
   assert.equal((await yandex.command(win,{method:'status'})).integrationVersion,5);
   const apple=host(false);win.webContents.getURL=()=> 'https://music.apple.com/us/new';
   responses.push({ready:true,authorized:true});
-  assert.equal((await apple.command(win,{method:'status'})).integrationVersion,6);
+  assert.equal((await apple.command(win,{method:'status'})).integrationVersion,7);
   responses.push({ready:true,id:'123'});win.emberboxQuality={snapshot:id=>({codec:'aac',track:id,evidence:'decoder'})};
   assert.equal((await apple.command(win,{method:'status'})).audioQuality.track,'123');
   console.log('PASS bounded official-site navigation, adapter update version and decoder quality');

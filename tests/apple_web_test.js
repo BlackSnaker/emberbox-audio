@@ -18,7 +18,7 @@ const music = {isAuthorized:true,isPlaying:false,bitrate:64,currentPlaybackTime:
   seekToTime:async value=>calls.push({seek:value})};
 const context = vm.createContext({location:{origin:'https://music.apple.com'},
   window:{MusicKit:{getInstance:()=>music,PlaybackBitrate:{STANDARD:64,HIGH:256}}},navigator:{},
-  document:{querySelectorAll:()=>[],querySelector:()=>null},URL});
+  document:{querySelectorAll:()=>[],querySelector:()=>null},URL,setTimeout,clearTimeout});
 vm.runInContext(fs.readFileSync('src/apple_web_host/page.js','utf8'),context);
 const call = (method,params={})=>context.emberboxAppleCommand({method,params});
 (async()=>{
@@ -53,6 +53,28 @@ const call = (method,params={})=>context.emberboxAppleCommand({method,params});
   await call('transport',{action:'pause'});assert.equal(calls.at(-1),'pause');
   await call('transport',{action:'toggle'});assert.equal(calls.at(-1),'play');
   await call('seek',{position:25});assert.equal(calls.at(-1).seek,25);
+  // The DJ sees typed catalogue resources; account and relationship secrets stay inside MusicKit.
+  const originalApi=music.api.music;
+  music.api.music=async(path,query)=>{
+    calls.push({path,query});
+    if(path==='/v1/me/recommendations')return {data:{data:[{id:'recommendation',type:'personal-recommendations',
+      attributes:{privateToken:'NEVER_EXPORT'},relationships:{contents:{data:[
+        {id:'pl.fixture',type:'playlists',attributes:{name:'Personal chill',genreNames:['Ambient']}},
+        {id:'invalid/../account',type:'playlists',attributes:{name:'Invalid'}},
+        {id:'123',type:'songs',attributes:{name:'Real song',artistName:'Artist'}},
+        {id:'user',type:'accounts',attributes:{name:'NEVER_EXPORT'}}]}}}]}};
+    if(path==='/v1/me/recent/played/tracks')return {data:{data:[resource]}};
+    return {data:{data:[{...resource,id:'123',type:'songs'}]}};
+  };
+  result=await call('browse',{category:'dj'});
+  assert.equal(result.personal,true);assert.equal(result.items.length,1);assert.equal(result.items[0].id,'pl.fixture');
+  assert.equal(result.tracks[0].uri,'apple:songs:123');assert.equal(result.recent[0].uri,'apple:library-songs:i.fixture');
+  assert(!JSON.stringify(result).includes('NEVER_EXPORT'));
+  await call('tracks',{kind:'playlists',id:'pl.fixture'});
+  assert.equal(calls.at(-1).path,'/v1/catalog/us/playlists/pl.fixture/tracks');
+  music.api.music=async(path)=>{if(path.includes('recommendations'))throw Error('unavailable');return {data:{data:[resource]}};};
+  result=await call('browse',{category:'dj'});assert.equal(result.partial,true);assert.equal(result.recent.length,1);
+  music.api.music=originalApi;
   // A queue request can finish after the user switches sources.
   music.setQueue=async()=>{context.window.__emberboxPlaybackAllowed=false;};
   const starts=calls.filter(value=>value==='play').length;

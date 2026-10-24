@@ -2,6 +2,15 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.13.0 — 2026-10-24
+
+- Ember DJ: an integrated personal radio tab with keyboard Enter/button requests, push-to-talk and local neural RU/EN speech. Soft tab transitions, a metal microphone dial, live tubes and responsive music cards.
+- Real source tracks, Apple/Spotify personal picks, bounded local taste, feedback and queue continuation preserving manual additions.
+- Optional model setup with progress, cancellation and hashes; private preferences, explicit microphone capture, background inference and temporary ducking without changing the dial.
+- Check input, cancellation, queues, geometry, privacy and audio gain; exercise real local speech synthesis, recognition and intent inference.
+
+- Lightweight common-wish parsing, single-flight bounded metadata caches, five-second response budget, cancellation, no hidden-tab drawing and optional two-thread language inference. Spotify transport no longer waits for background Home/Search navigation.
+
 ## 0.12.7 — 2026-10-23
 
 - Open the artist room with a 1.05-second layered entrance: ambient light first, then a gently approaching portrait, rising typography and music panels, with smooth acceleration and settling.

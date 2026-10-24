@@ -152,7 +152,7 @@ async function command(win, request, navigations=0) {
     playing:!!result.playing,position:Number(result.position)||0,duration:Number(result.duration)||0,
     hasTrack:!!result.title,windowVisible:win.isVisible()});
   if(request.method==='status') {
-    result.integrationVersion=yandex?5:6;
+    result.integrationVersion=yandex?5:7;
     result.audioQuality=win.emberboxQuality?.snapshot(String(result.id||result.title||''))||{};
     record({audioQuality:result.audioQuality,maximumQualityRequested:result.qualityPreference?.applied===true});
     if(yandex)record({capabilities:Object.fromEntries(['player','wave','navigation','metadata','store','legacy'].map(key=>[key,result.capabilities?.[key]===true]))});

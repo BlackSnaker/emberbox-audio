@@ -308,7 +308,7 @@ def inspect(python=None, *, youtube=True, os_release='/etc/os-release', environ=
     probe = probe_python(selected)
     checks = {key: bool(probe['checks'].get(key)) for key in ('python', 'gi', 'gtk3', 'gdkx11', 'svg', 'numpy', 'pillow', 'websocket')}
     path = os.pathsep.join((str(Path(selected).absolute().parent), env.get('PATH', os.defpath)))
-    checks['pipewire'] = all(shutil.which(name, path=path) for name in ('pw-record', 'pw-link', 'pw-dump'))
+    checks['pipewire'] = all(shutil.which(name, path=path) for name in ('pw-record', 'pw-play', 'pw-link', 'pw-dump'))
     checks['pactl'] = all(shutil.which(name,path=path) for name in ('pactl','pacat'))
     wayland = env.get('XDG_SESSION_TYPE', '').lower() == 'wayland' or bool(env.get('WAYLAND_DISPLAY'))
     if wayland:checks['xwayland'] = bool(shutil.which('Xwayland', path=path))

@@ -27,11 +27,18 @@ def window_button(icon_name, label, callback):
 
 
 class SettingsMenu:
-    def __init__(self, compact, refresh, restart, accounts=None, fullscreen=None, hide=None, quit=None):
+    def __init__(self, compact, refresh, restart, accounts=None, fullscreen=None, hide=None, quit=None, dj=None):
         self.compact, self.refresh, self.restart = compact, refresh, restart
         self.accounts,self.fullscreen = accounts,fullscreen
+        owner=getattr(fullscreen,'__self__',None)
+        self.dj=dj or ((lambda:self.open_dj(owner)) if owner else None)
         self.hide,self.quit = hide,quit
         self.popover = None
+
+    def open_dj(self,host):
+        from fullscreen import FullscreenPlayer
+        if host.fullscreen is None:host.fullscreen=FullscreenPlayer(host)
+        host.fullscreen.open_dj()
 
     def show(self, anchor, compact, source):
         if self.popover:
@@ -62,6 +69,7 @@ class SettingsMenu:
 
         if self.fullscreen:
             self.fullscreen_button = action(text('Listening room · Fullscreen','Комната прослушивания · На весь экран'),self.fullscreen)
+        if self.dj:self.dj_button=action(text('Ember DJ · Your own radio','Ember DJ · Личное радио'),self.dj)
         if self.accounts:
             self.accounts_button = action(text('Accounts · Spotify / Apple / Yandex','Аккаунты · Spotify / Apple / Яндекс'),self.accounts)
         self.mode_button = action(

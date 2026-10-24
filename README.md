@@ -8,6 +8,14 @@
 
 ![Emberbox Audio: full and compact interfaces in a warm Gruvbox presentation](assets/hero.png)
 
+## Ember DJ — your own radio
+
+A Grunesphism DJ tab inside Ember: **type a wish and press Enter**, or use
+the microphone. Personal picks, listening and feedback shape the next music
+block. Local AI, recognition and speech; a soft entrance, a metal microphone
+dial and live tubes. [Open and prepare your DJ →](docs/DJ.md)
+
+
 ## Your music, a little warmer.
 
 A warm desktop companion for **Spotify, Apple Music, YouTube and Yandex Music**, with audio-reactive gas-discharge tubes and controls that feel like a small piece of hi-fi equipment.

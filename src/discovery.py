@@ -147,10 +147,11 @@ class LocalSpotify:
                 raise RuntimeError('Spotify has not returned the list yet. Try refreshing.')
             return result.get('result', {}).get('value')
 
-    def home(self):
+    def home(self,deadline=None):
         if not self.evaluate("!!document.querySelector('[data-testid=\"home-page\"]')"):
             self.evaluate("document.querySelector('[data-testid=\"home-button\"]')?.click()")
         for _ in range(35):
+            if deadline is not None and time.monotonic()>=deadline:break
             shelves = self.evaluate(HOME_SCRIPT)
             if shelves:
                 first = shelves[0]['items']
@@ -187,7 +188,7 @@ class LocalSpotify:
         if not played:
             raise ConnectionUnavailable('Connect Spotify to play tracks in the background.')
 
-    def tracks(self, item):
+    def tracks(self, item, deadline=None):
         href = item.get('href', '')
         if not re.fullmatch(r'/(playlist|album)/[A-Za-z0-9]+', href):
             raise ValueError('Could not open this collection.')
@@ -210,6 +211,7 @@ class LocalSpotify:
                 raise RuntimeError('This collection changed. Go back and refresh your picks.')
         best = None
         for _ in range(40):
+            if deadline is not None and time.monotonic()>=deadline:break
             data = self.evaluate(script)
             if data and data.get('tracks'):
                 best = data

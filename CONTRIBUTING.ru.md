@@ -17,6 +17,7 @@ node tests/artist_web_test.js
 node tests/yandex_artist_test.js
 GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a python3 tests/gui_smoke.py
 GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' python3 tests/fullscreen_smoke.py
+GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' python3 tests/dj_smoke.py
 GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' python3 tests/artist_smoke.py
 GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a python3 tests/motion_smoke.py
 ```

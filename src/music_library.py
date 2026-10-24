@@ -63,12 +63,15 @@ class MusicRepository:
 
     def play(self,item,alive):
         source=item['source'];h=self.host
+        if source=='spotify':
+            # URI playback calls the desktop player's transport directly. It
+            # does not navigate the UI and must not queue behind Home/Search.
+            with LocalSpotify() as client:
+                if alive():client.play(item['uri'])
+            return
         with self.locks[source]:
             if not alive():return
-            if source=='spotify':
-                with LocalSpotify() as client:
-                    if alive():client.play(item['uri'])
-            elif source=='apple-music':
+            if source=='apple-music':
                 player=h.apple_web if h.apple_mode=='native' else h.apple
                 player.request('play',kind=item['kind'],id=item['id'])
             elif source=='yandex-music':
@@ -207,6 +210,28 @@ class MusicService:
         self.book.replace(self.host.source,[dict(item,origin='context') for item in items])
         if self.book.queues[self.host.source]:self.start(0)
         else:self.changed()
+
+    def play_dj(self,items):
+        """Start a DJ block while preserving every pending non-DJ entry."""
+        source=self.host.source
+        values=[dict(value,origin='dj') for value in items if track(value,source)]
+        pending=[dict(value) for _,value in self.book.upcoming(source) if value.get('origin')!='dj']
+        current=self.book.current(source);before=[dict(current)] if current else []
+        room=LIMIT-len(pending)-len(before)
+        if room<1 or not values:return False
+        values=values[:room]
+        self.play_generation+=1;self.loading=False;self.watch.reset()
+        self.book.replace(source,before+values+pending);self.start(len(before));return True
+
+    def extend_dj(self,items):
+        source=self.host.source;existing={value['uri'] for _,value in self.book.upcoming(source)}
+        values=[dict(value,origin='dj') for value in items if value.get('uri') not in existing]
+        count=self.book.add(source,values);self.changed();return count
+
+    def clear_dj(self,source):
+        index=self.book.indices[source];values=self.book.queues[source]
+        self.book.queues[source]=values[:index+1]+[v for v in values[index+1:] if v.get('origin')!='dj']
+        self.book.save();self.changed()
 
     def start(self,index=None):
         source=self.host.source

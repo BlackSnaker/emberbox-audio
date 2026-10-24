@@ -3,6 +3,7 @@
 import json
 import subprocess
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from paths import CACHE_DIR, CONFIG_DIR
@@ -26,6 +27,7 @@ class SpotifyVolume:
         self.changed = changed
         self.target = None
         self.volume, self.muted, self.available = 1.0, False, False
+        self.ducking=self.duck_target=1.;self.duck_timer=0
         self.configured = False
         try:
             saved = json.loads(STATE.read_text())
@@ -69,6 +71,8 @@ class SpotifyVolume:
             if old and old.source != target.source:
                 self._remember()
             self.target = target
+            if getattr(self,'duck_timer',0):GLib.source_remove(self.duck_timer);self.duck_timer=0
+            self.ducking=self.duck_target=1.
             self.revision += 1
             self.stream_ids = set()
             if not old or old.source != target.source:
@@ -96,6 +100,23 @@ class SpotifyVolume:
     def toggle_mute(self):
         self.muted = not self.muted
         self._change()
+
+    def set_ducking(self,gain):
+        """Temporary DJ attenuation; the dial and saved volume stay unchanged."""
+        if self.closed or not self.configured:return
+        gain=max(.1,min(1.,float(gain)))
+        if gain==self.duck_target:return
+        self.duck_from=self.ducking;self.duck_target=gain;self.duck_started=time.monotonic()
+        if not self.duck_timer:self.duck_timer=GLib.timeout_add(30,self._duck_step)
+
+    def _duck_step(self):
+        if self.closed:self.duck_timer=0;return False
+        t=min(1.,(time.monotonic()-self.duck_started)/.22);ease=t*t*t*(t*(t*6-15)+10)
+        self.ducking=self.duck_from+(self.duck_target-self.duck_from)*ease
+        self.revision+=1;self.dirty=True
+        if not self.timer:self.timer=GLib.timeout_add(30,self._dispatch)
+        if t>=1.:self.duck_timer=0;return False
+        return True
 
     def _change(self):
         self.configured = self.dirty = True
@@ -135,7 +156,7 @@ class SpotifyVolume:
             return False
         self.busy = True
         revision = self.revision
-        future = self.pool.submit(self._sync, self.target, self.volume, self.muted,
+        future = self.pool.submit(self._sync, self.target, self.volume*self.ducking, self.muted,
                                   self.dirty, self.configured, set(self.stream_ids))
         future.add_done_callback(lambda result: GLib.idle_add(self._done, revision, result))
         return False
@@ -173,7 +194,7 @@ class SpotifyVolume:
         elif streams:
             channels = list(streams[0].get('volume', {}).values())
             if channels:
-                volume = max(0.0, min(1.0, sum(c['value'] for c in channels) / (65536 * len(channels))))
+                volume = max(0.0, min(1.0, sum(c['value'] for c in channels) / (65536 * len(channels)*self.ducking)))
                 muted = bool(streams[0].get('mute', False))
                 if abs(volume - self.volume) > .002 or muted != self.muted:
                     self.volume, self.muted = volume, muted
@@ -186,6 +207,16 @@ class SpotifyVolume:
         return False
 
     def close(self):
+        if getattr(self,'duck_timer',0):GLib.source_remove(self.duck_timer);self.duck_timer=0
+        if self.ducking<.999 and self.target:
+            target,volume=self.target,self.volume
+            def restore():
+                try:
+                    for stream in source_streams(target):
+                        subprocess.run(['pactl','set-sink-input-volume',str(stream['index']),f'{volume*100:.1f}%'],
+                            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=2)
+                except (OSError,ValueError,subprocess.SubprocessError):pass
+            threading.Thread(target=restore,daemon=False,name='ember-dj-volume-restore').start()
         self.closed = True
         if self.timer:
             GLib.source_remove(self.timer)
