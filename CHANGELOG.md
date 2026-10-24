@@ -2,6 +2,11 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.16.1 — 2026-10-24
+
+- Recess EmberFlow into the listening console, widget and settings. A glass capsule with a visible incandescent filament warms from amber to soft gold and cools gently when switched off.
+- Keep the animation finite, stop it when hidden, and respect the desktop's reduced-animation setting. Verify both interface languages and compact layouts.
+
 ## 0.16.0 — 2026-10-24
 
 - EmberFlow beat matching for native Apple Music and YouTube: measured tempo and phase, compatible rhythms within ±6%, preserved pitch, then a four-beat return to normal speed after the blend. Add a separate Beats switch in settings; low-confidence material keeps the musical crossfade.
