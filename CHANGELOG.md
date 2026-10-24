@@ -2,6 +2,14 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.13.2 — 2026-10-24
+
+- Understand conversational mood changes: “something happier”, “livelier”, “calmer”, “for work” and “something else”. Generic mood changes release the previous artist; “Beatles, but happier” and “their songs, but happier” keep the named scope. “More” continues it.
+- Search Apple Music mood playlists and load real songs; use collections returned by Spotify search. Rank the requested mood ahead of unrelated favourites and cache each musical direction separately. Unfamiliar occasion requests can use playlist search without entering an exact song-title filter.
+- Prefer fresh songs when changing a mix; failed searches retain the last successful musical context. Keep common requests local, bounded and asynchronous, with female speech unchanged.
+- Verify the keyboard-to-catalogue-to-queue sequence, mood collection loading, exclusions, repeat avoidance and Apple search resource validation.
+- Replace the Russian voice with locally synthesized Silero v5.5 Kseniya at 48 kHz, automatic stress and “ё”, pinned package verification, two CPU threads and soft audio edges. Use short mood-aware spoken links; retain full written replies. Prepare/reuse CPU-only PyTorch in the private voice environment; document the model licence and updated storage budget.
+
 ## 0.13.1 — 2026-10-24
 
 - Resolve exact artist requests through the artist catalogue; bypass diversity caps, exclude unrelated title hits and recommendations, and keep artist continuations ahead of the preserved user tail.

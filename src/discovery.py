@@ -265,6 +265,13 @@ class LocalSpotify:
               title:card.querySelector('[data-encore-id="cardTitle"]')?.textContent.trim()||link.textContent.trim(),
               subtitle:card.querySelector('[data-encore-id="cardSubtitle"]')?.textContent.trim()||'',image:card.querySelector('img')?.src||''});
           }
+          for(const link of document.querySelectorAll('main a[href^="/playlist/"]')){
+            const href=link.getAttribute('href');if(!/^\/playlist\/[A-Za-z0-9]+$/.test(href)||seen.has(href))continue;
+            const card=link.closest('[data-encore-id="card"]');if(!card)continue;seen.add(href);
+            items.push({uri:'spotify:'+href.slice(1).replace('/',':'),href,kind:'playlist',
+              title:card.querySelector('[data-encore-id="cardTitle"]')?.textContent.trim()||link.textContent.trim(),
+              subtitle:card.querySelector('[data-encore-id="cardSubtitle"]')?.textContent.trim()||'',image:card.querySelector('img')?.src||''});
+          }
           return {items:items.filter(i=>i.title).slice(0,75)};
         })()'''
         for _ in range(35):

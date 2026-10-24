@@ -7,7 +7,7 @@ from paths import CONFIG_DIR
 from source_picker import text,RU
 from music_library import snapshot,NAMES
 from dj_intent import Intent
-from dj_reply import reply,summary
+from dj_reply import reply,summary,spoken_reply
 from dj_memory import ListeningMemory
 from dj_brain import LocalBrain
 from dj_catalog import DJCatalog,rank
@@ -17,6 +17,7 @@ from dj_voice import DJVoice
 MOOD_LABEL={
  'any':('Your own wavelength','На твоей частоте'),'relax':('On a softer frequency','На мягких частотах'),
  'focus':('Room to concentrate','Пространство для мыслей'),'energy':('Sparks in every beat','Искры в каждом такте'),
+ 'happy':('A little more sunshine','Солнечные ноты'),'romance':('A little closer','Тепло между строк'),
  'party':('Where rhythm lives','Там, где живёт ритм'),'melancholy':('A feeling between the notes','Чувства между нотами'),
  'discover':('Somewhere you have not been','Знакомые чувства. Новые имена.')}
 
@@ -79,7 +80,7 @@ class DJService:
         if self.source!=self.host.source:self.switch_source()
         self.cancel();self.prompt=prompt;self.partial='';self.error='';self.intro='';self.understood='';self.phase='understand';self.busy=True
         source=self.host.source;generation=self.generation;cancelled=self.cancelled
-        previous=self.intents.get(source)
+        previous=self.intents.get(source);previous_played=set(self.played)
         settings=dict(self.memory.settings)
         alive=lambda:not self.closed and not cancelled.is_set() and source==self.host.source
         def progress(phase):GLib.idle_add(self.progress,generation,phase,priority=GLib.PRIORITY_DEFAULT)
@@ -93,8 +94,13 @@ class DJService:
             resolved=next((v.get('_requested_artist') for v in values if v.get('_requested_artist')),None)
             if resolved:intent=replace(intent,artists=(resolved,),mode='artist')
             self.memory.import_recent(source,recent)
-            selected=rank(values,source,intent,self.memory.profile(source),self.memory.artist_affinity(source),
-                          seed=str(generation)+prompt)
+            profile=self.memory.profile(source);affinity=self.memory.artist_affinity(source)
+            continuing_artist=bool(intent.mode=='artist' and previous and previous.mode=='artist' and intent.artists==previous.artists)
+            exclude=previous_played if intent.mode not in ('artist','lookup') or continuing_artist else set()
+            selected=rank(values,source,intent,profile,affinity,exclude,seed=str(generation)+prompt)
+            if not selected and exclude:
+                current=self.music.book.current(source) or {}
+                selected=rank(values,source,intent,profile,affinity,{current.get('uri','')},seed=str(generation)+prompt)
             return intent,engine,selected,warnings
         future=self.pool.submit(build)
         future.add_done_callback(lambda result:GLib.idle_add(self.built,generation,source,result,priority=GLib.PRIORITY_DEFAULT))
@@ -114,7 +120,7 @@ class DJService:
                 'Источник не вернул подборку. Проверь подключение и попробуй ещё раз.');self.changed();return False
         self.engine=engine
         if intent.action!='mix':self.command(intent.action);return False
-        self.intents[source]=intent;self.understood=summary(intent)
+        self.understood=summary(intent)
         if not items:
             self.phase='empty'
             self.error=text('No matching playable tracks were found. Try a different wish or connect your library.',
@@ -127,10 +133,12 @@ class DJService:
         if not self.music.play_dj(items):
             self.phase='error';self.error=text('The queue is full. Free a little space for the DJ.',
                 'Очередь заполнена. Освободи немного места для DJ.');self.changed();return False
+        self.intents[source]=intent
         self.items=items;self.played={v['uri'] for v in items};self.source=source;self.session=True
         self.refill_after=time.monotonic()+15;self.phase='playing'
         self.intro=reply(intent,items,NAMES[source])
-        if self.memory.settings.get('voice') and ready('voice',self.language):self.voice.launch('speak',self.language,self.intro)
+        if self.memory.settings.get('voice') and ready('voice',self.language):
+            self.voice.launch('speak',self.language,spoken_reply(intent,items,self.language))
         self.changed();return False
 
     def state(self):

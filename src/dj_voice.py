@@ -23,7 +23,7 @@ class DJVoice:
         if self.closed or not ready('voice',language):return False
         if mode=='speak' and self.host.sound.muted:return False
         self.generation+=1;generation=self.generation;self.mode=mode;self.source=self.host.source;self.started=time.monotonic()
-        python=json.loads((ROOT/('voice-'+language+'.json')).read_text())['python'] if mode=='listen' else sys.executable
+        python=json.loads((ROOT/('voice-'+language+'.json')).read_text())['python']
         self.emit('preparing-voice' if mode=='listen' else 'preparing-reply')
         command=[python,'-I',str(Path(__file__).with_name('dj_voice_worker.py')),mode,'--root',str(ROOT),'--language',language]
         try:

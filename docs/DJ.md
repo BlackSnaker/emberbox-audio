@@ -12,6 +12,11 @@ entrance extend Emberbox's Grunesphism materials.
 
 - Type “Relaxing music in my taste” and press **Enter** or **Make & play my mix**.
   Follow up with “calmer”, “without vocals”, “jazz, without metal” or “like Tame Impala”.
+- Conversational wishes include “something happier”, “livelier”, “for work”,
+  “for a date” and “something else”. A new generic mood after Beatles changes
+  direction; “Beatles, but happier” or “their songs, but happier” keeps the artist.
+  “More” continues the preceding conditions. Other occasions, such as “music
+  for an evening walk”, can use the source's own collection search.
 - The microphone turns on **only when clicked**. Click again or pause to finish;
   capture stops automatically within 15 seconds. The label and indicator show
   when capture is actually active.
@@ -27,7 +32,7 @@ entrance extend Emberbox's Grunesphism materials.
 
 | Source | Candidate music |
 | --- | --- |
-| Apple Music | Account recommendations, recent tracks, recommended collections and catalogue search. Sign-in and subscription required. |
+| Apple Music | Account recommendations, recent tracks, mood playlists and catalogue search. Sign-in and subscription required. |
 | Spotify | Personal shelves through the experimental desktop-client connection, their tracks and search. A connected Spotify client is required. |
 | Yandex Music | Available collection playlists and search through the existing web engine; subscription playback still needs tester verification. |
 | YouTube | Public music search and taste learned in Ember; individual videos must be playable. |
@@ -51,7 +56,12 @@ harmony or vocal detection. “Without vocals” requires an explicitly labelled
 instrumental recording/collection; an empty match is reported honestly.
 Language models never invent playable song identifiers.
 
-Vosk recognition and Piper speech run locally in separate processes. Microphone
+Vosk recognition and speech synthesis run locally in separate processes.
+Russian uses **Kseniya, Silero v5.5, 48 kHz**, with automatic stress and “ё”
+restoration; English uses LJ Speech / Piper. Spoken replies are short radio
+links; the full catalogue result stays on screen. After upgrading an older
+Russian voice, choose **⚙ → Prepare voice** to download its replacement.
+Microphone
 PCM stays in memory and is never saved. A temporary synthesized WAV is deleted
 after each reply. Leaving the DJ tab stops capture and speech. Only the wish
 and preceding musical intent enter the local language model: no library,
@@ -66,18 +76,28 @@ source profiles. Listening preferences are not used for model training.
 ## Resources and attribution
 
 Planning recommendation for local AI: **4 modern CPU cores, 8 GB total RAM
-and 2 GB additional free storage**. CPU mode was checked on the developer's
+and 3 GB additional free storage**. CPU mode was checked on the developer's
 16 GB system; a minimum hardware configuration has not been benchmarked.
-One voice/recognizer/runtime needs roughly 200–350 MB; Qwen Q4 is about 1.12 GB.
+Russian synthesis weights are about 145 MB, recognition about 46 MB; the PyTorch
+CPU runtime may also be needed. An existing runtime is reused; otherwise it is
+installed in DJ's private environment, without CUDA or sudo. English speech,
+recognition and runtime need roughly 200–350 MB. Qwen Q4 is about 1.12 GB.
 An existing suitable Ollama model is reused. No CUDA, cloud API key or extra
 account is required. Downloaded runtimes currently target Linux x86_64,
 glibc ≥ 2.34. Downloads are SHA256 checked; model weights are not in Git.
 
+In a local check, Kseniya generated a 4.3-second link in about 4.8 seconds from
+a cold start; the separate synthesis process peaked at about 683 MiB. This is
+a developer-machine measurement, not a guarantee for other CPUs. Synthesis uses
+two threads and exits after the link. Music selection/playback does not wait for
+speech preparation; ducking starts only when the spoken audio is ready.
+
 - [Vosk models](https://alphacephei.com/vosk/models): small RU/EN models, Apache-2.0.
-- [Piper 1.2.0](https://github.com/rhasspy/piper/releases/tag/v1.2.0): separate synthesis runtime;
-  retain its included licences. Female voices: [Irina](https://huggingface.co/rhasspy/piper-voices/blob/main/ru/ru_RU/irina/medium/MODEL_CARD)
-  / [LJ Speech](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD).
-  Irina’s card marks the source dataset licence Unknown; LJ Speech identifies public-domain data.
+- [Silero v5.5](https://github.com/snakers4/silero-models#text-to-speech): Russian Kseniya voice;
+  [CC BY-NC-SA 4.0 model licence](https://github.com/snakers4/silero-models/blob/master/LICENSE),
+  including its noncommercial restriction. Model weights are downloaded separately.
+- [Piper 1.2.0](https://github.com/rhasspy/piper/releases/tag/v1.2.0): English synthesis;
+  retain its included licences. Female [LJ Speech](https://huggingface.co/rhasspy/piper-voices/blob/main/en/en_US/ljspeech/medium/MODEL_CARD) voice, public-domain source data.
   Weights are downloaded from the provider repository, not bundled with Emberbox source.
 - [Qwen2.5-1.5B-Instruct GGUF](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF), Apache-2.0;
   [llama.cpp](https://github.com/ggml-org/llama.cpp), MIT; or an existing local Ollama service.

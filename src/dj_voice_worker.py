@@ -63,8 +63,44 @@ def recognize(root,language,audio=None):
     finally:reap(process)
 
 
+def write_pcm(audio,output):
+    import torch
+    # The model returns inference tensors. Copy before applying edge fades
+    # outside InferenceMode; otherwise newer PyTorch rejects in-place writes.
+    audio=audio.detach().cpu().flatten().clone()
+    if audio.numel()<2 or not torch.isfinite(audio).all():raise ValueError('voice-audio-invalid')
+    peak=float(audio.abs().max())
+    if peak>.94:audio*=.94/peak
+    fade=min(576,audio.numel()//2)
+    audio[:fade]*=torch.linspace(0,1,fade);audio[-fade:]*=torch.linspace(1,0,fade)
+    pcm=array.array('h',(audio*32767).round().to(torch.int16).tolist())
+    if sys.byteorder!='little':pcm.byteswap()
+    with wave.open(str(output),'wb') as stream:
+        stream.setnchannels(1);stream.setsampwidth(2);stream.setframerate(48000);stream.writeframes(pcm.tobytes())
+
+
 def synthesize(root,language,text,output):
-    voice='ru_RU-irina-medium' if language=='ru' else 'en_US-ljspeech-medium'
+    if language=='ru':
+        import hashlib
+        # A torch package contains executable model code: verify the pinned
+        # publisher asset before importing it, including after installation.
+        path=root/'silero-v5_5_ru.pt'
+        if path.stat().st_size!=145420684:raise ValueError('voice-model-invalid')
+        digest=hashlib.sha256()
+        with path.open('rb') as source:
+            while chunk:=source.read(1024*1024):
+                if STOP:return
+                digest.update(chunk)
+        if digest.hexdigest()!='50081637b602126ee06cb3bc8a744d25651d2da149ee8864b9a379bfdd934437':raise ValueError('voice-model-invalid')
+        import torch
+        torch.set_num_threads(2);torch.set_num_interop_threads(1)
+        model=torch.package.PackageImporter(str(path)).load_pickle('tts_models','model');model.to(torch.device('cpu'))
+        if STOP:return
+        with torch.inference_mode():
+            audio=model.apply_tts(text=str(text)[:500],speaker='kseniya',sample_rate=48000,put_accent=True,put_yo=True)
+        write_pcm(audio,output)
+        return
+    voice='en_US-ljspeech-medium'
     command=[str(root/'piper/piper'),'-m',str(root/(voice+'.onnx')),'-f',str(output),
         '--length_scale','1.02','--sentence_silence','0.12']
     process=subprocess.Popen(command,stdin=subprocess.PIPE,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)

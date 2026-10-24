@@ -14,10 +14,8 @@ ASSETS={
     '467c17935d2a22dcce9dc9e08ba07485e29be813097e7cf08c5627aa09d32e42',25916047,'piper.tar.gz'),
  'asr-ru':('https://alphacephei.com/vosk/models/vosk-model-small-ru-0.22.zip',
     '961d5ff98a17f4aa6de69864d0aa71fa5bac682301d2b5d17a3f24c5c99a46d4',46236750,'asr-ru.zip'),
- 'tts-ru':(VOICE_BASE+'ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx',
-    '8ff38212d23da300bbe3705c645e6e5b9475f0bfde01558eb17813e22acaaaaa',63201294,'ru_RU-irina-medium.onnx'),
- 'tts-ru-config':(VOICE_BASE+'ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx.json',
-    'c2ec28bb38e2b59e93b959b3e40348c1afebbd272f30fed5d41205d08e98a9d7',4765,'ru_RU-irina-medium.onnx.json'),
+ 'tts-ru':('https://models.silero.ai/models/tts/ru/v5_5_ru.pt',
+    '50081637b602126ee06cb3bc8a744d25651d2da149ee8864b9a379bfdd934437',145420684,'silero-v5_5_ru.pt'),
  'asr-en':('https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip',
     '30f26242c4eb449f948e42cb302dd7a686cb29a3423a8367f99ff41780942498',41205931,'asr-en.zip'),
  'tts-en':(VOICE_BASE+'en/en_US/ljspeech/medium/en_US-ljspeech-medium.onnx',
@@ -28,7 +26,7 @@ ASSETS={
     '507e2f4fe3553499b518efe74a4244e35d709154a4e51c67e3affeef228ceb30',22349871,'llama.tar.gz'),
  'brain':('https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/'+MODEL_NAME,
     '6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e',1117320736,MODEL_NAME)}
-VOICES={'ru':'ru_RU-irina-medium','en':'en_US-ljspeech-medium'}
+VOICES={'ru':'silero-v5_5-kseniya','en':'en_US-ljspeech-medium'}
 
 
 def ready(kind='voice',language='ru'):
@@ -37,7 +35,8 @@ def ready(kind='voice',language='ru'):
         if data.get('version')!=1:return False
         if kind=='voice' and data.get('voice')!=VOICES[language]:return False
         if kind=='brain':return (ROOT/'llama/llama-server').is_file() and (ROOT/MODEL_NAME).stat().st_size==ASSETS['brain'][2]
-        return Path(data['python']).is_file() and (ROOT/'piper/piper').is_file() and (ROOT/('asr-'+language)/'am/final.mdl').is_file() and (ROOT/(VOICES[language]+'.onnx')).stat().st_size==ASSETS['tts-'+language][2]
+        synthesis=(ROOT/ASSETS['tts-'+language][3]).stat().st_size==ASSETS['tts-'+language][2]
+        return Path(data['python']).is_file() and synthesis and (language=='ru' or (ROOT/'piper/piper').is_file()) and (ROOT/('asr-'+language)/'am/final.mdl').is_file()
     except (OSError,ValueError,TypeError,KeyError):return False
 
 
@@ -89,10 +88,12 @@ def asset(name,progress,stop):
     return path
 
 
-def runtime(progress,stop):
+def runtime(progress,stop,language='ru'):
     python=ROOT/'runtime/bin/python'
+    check='import vosk,torch' if language=='ru' else 'import vosk'
+    env=dict(os.environ,OMP_NUM_THREADS='2',OPENBLAS_NUM_THREADS='1',MKL_NUM_THREADS='2')
     if python.is_file():
-        if subprocess.run([str(python),'-I','-c','import vosk'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15).returncode==0:return python
+        if subprocess.run([str(python),'-I','-c',check],env=env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15).returncode==0:return python
     progress('runtime',0.)
     build=ROOT/'runtime-next'
     if build.exists():shutil.rmtree(build)
@@ -102,23 +103,29 @@ def runtime(progress,stop):
     wheel=next(x for x in data['urls'] if x['filename'].endswith('py3-none-any.whl'))
     _download(wheel['url'],bootstrap,wheel['digests']['sha256'],4_000_000,lambda _:None,stop)
     code='import sys,runpy;sys.path.insert(0,sys.argv.pop(1));runpy.run_module("pip",run_name="__main__")'
-    command=[str(executable),'-I','-c',code,str(bootstrap),'install','--isolated','--disable-pip-version-check',
-             '--no-input','--index-url','https://pypi.org/simple','vosk==0.3.45']
+    pip=[str(executable),'-I','-c',code,str(bootstrap),'install','--isolated','--disable-pip-version-check','--no-input']
+    commands=[[*pip,'--index-url','https://pypi.org/simple','vosk==0.3.45']]
+    # Use an existing system CPU runtime when present. Otherwise install only
+    # CPU wheels in the private speech environment; no CUDA payload or sudo.
+    if language=='ru' and subprocess.run([str(executable),'-I','-c','import torch'],env=env,
+            stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15).returncode:
+        commands.append([*pip,'--index-url','https://download.pytorch.org/whl/cpu','torch==2.14.1'])
     with (ROOT/'setup.log').open('w') as log:
         os.chmod(ROOT/'setup.log',0o600)
-        process=subprocess.Popen(command,stdout=log,stderr=log)
-        try:
-            deadline=time.monotonic()+240
-            while process.poll() is None:
-                if stop.wait(.1):raise InterruptedError('cancelled')
-                if time.monotonic()>deadline:raise TimeoutError('Voice runtime setup timed out')
-            if process.returncode:raise RuntimeError('voice-runtime-install')
-        finally:
-            if process.poll() is None:
-                process.terminate()
-                try:process.wait(timeout=2)
-                except subprocess.TimeoutExpired:process.kill();process.wait(timeout=2)
-    subprocess.run([str(executable),'-I','-c','import vosk'],check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15)
+        for command in commands:
+            process=subprocess.Popen(command,env=env,stdout=log,stderr=log)
+            try:
+                deadline=time.monotonic()+360
+                while process.poll() is None:
+                    if stop.wait(.1):raise InterruptedError('cancelled')
+                    if time.monotonic()>deadline:raise TimeoutError('Voice runtime setup timed out')
+                if process.returncode:raise RuntimeError('voice-runtime-install')
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    try:process.wait(timeout=2)
+                    except subprocess.TimeoutExpired:process.kill();process.wait(timeout=2)
+    subprocess.run([str(executable),'-I','-c',check],env=env,check=True,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=15)
     target=ROOT/'runtime'
     if target.exists():shutil.rmtree(target)
     build.replace(target);bootstrap.unlink(missing_ok=True)
@@ -135,7 +142,7 @@ def prepare(kind='voice',language='ru',progress=lambda *_:None,stop=None):
             try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB);break
             except BlockingIOError:
                 if stop.wait(.15):raise InterruptedError('cancelled')
-        names=('llama','brain') if kind=='brain' else ('piper','asr-'+language,'tts-'+language,'tts-'+language+'-config')
+        names=('llama','brain') if kind=='brain' else ('asr-ru','tts-ru') if language=='ru' else ('piper','asr-en','tts-en','tts-en-config')
         for name in names:
             if stop.is_set():raise InterruptedError('cancelled')
             path=asset(name,progress,stop)
@@ -148,7 +155,7 @@ def prepare(kind='voice',language='ru',progress=lambda *_:None,stop=None):
                 target=ROOT/name
                 if target.exists():shutil.rmtree(target)
                 contents[0].replace(target);destination.rmdir()
-        python=runtime(progress,stop) if kind=='voice' else ''
+        python=runtime(progress,stop,language) if kind=='voice' else ''
         if stop.is_set():raise InterruptedError('cancelled')
         marker=ROOT/('brain.json' if kind=='brain' else kind+'-'+language+'.json');temporary=marker.with_suffix('.next')
         temporary.write_text(json.dumps({'version':1,'python':str(python),'voice':VOICES[language] if kind=='voice' else ''}));temporary.chmod(0o600);temporary.replace(marker)

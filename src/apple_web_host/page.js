@@ -245,8 +245,10 @@ async function emberboxAppleCommand(request) {
     music.storefrontId = undefined;
     const storefront = String(music.storefrontId || 'us');
     if (!/^[a-z]{2}$/.test(storefront)) throw Error('Invalid request');
-    const result = await api(`/v1/catalog/${storefront}/search`, {term,types:'songs',limit:25});
-    return {items:(result.results?.songs?.data || []).map(item),next:null};
+    const types=params.types===undefined?'songs':String(params.types);
+    if(!['songs','playlists'].includes(types))throw Error('Invalid search type');
+    const result = await api(`/v1/catalog/${storefront}/search`, {term,types,limit:25});
+    return {items:(result.results?.[types]?.data || []).map(item),next:null};
   }
   if (request.method === 'transport') {
     const action = params.action;

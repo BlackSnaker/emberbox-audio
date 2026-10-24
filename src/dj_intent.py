@@ -2,18 +2,20 @@
 from dataclasses import dataclass,asdict,replace
 import re
 
-MOODS=('any','relax','focus','energy','party','melancholy','discover')
+MOODS=('any','relax','focus','happy','energy','party','romance','melancholy','discover')
 MOOD_WORDS={
-    'relax':r'расслаб|спокой|отдох|чилл|успок|chill|relax|calm|unwind',
-    'focus':r'сосредоточ|фокус|работ[аыуе]|уч[её]б|focus|study|concentrat|work',
-    'energy':r'бодр|энерги|заряд|трениров|проснут|energy|energetic|workout|wake up',
-    'party':r'танце|танцо|вечерин|дискотек|dance|party',
+    'relax':r'расслаб|спокой|отдох|чилл|успок|помягче|помедленнее|полегче|нежн|перед сном|заснут|для сна|chill|relax|calm|unwind|softer|slower|sleep|wind down',
+    'focus':r'сосредоточ|фокус|работ[аыуе]|уч[её]б|кодить|программиров|для чтения|focus|study|concentrat|\bwork\b|coding|reading',
+    'happy':r'весел|радост|позитив|жизнерадост|подн\w* настроен|поднять мне настроение|развесел|cheerful|happ(?:y|ier)|upbeat|uplift|feel.good|cheer me up',
+    'energy':r'бодр|энерги|заряд|трениров|проснут|поживее|живее|побыстрее|драйв|energy|energetic|workout|wake up|livelier|faster|more lively',
+    'party':r'танц|вечерин|дискотек|dance|party',
+    'romance':r'романти|свидани|romantic|date night',
     'melancholy':r'груст|меланхол|погруст|melanchol|sad',
-    'discover':r'открыти|новеньк|незнаком|необыч|discover|something new|new music'}
+    'discover':r'открыти|новеньк|новое|незнаком|необыч|друго[ейую]|другое|разнообраз|удиви|discover|something new|new music|something else|different|surprise me|change it up'}
 GENRES={
     'indie':r'инди|\bindie\b','psychedelic':r'психодел|psychedelic',
     'jazz':r'джаз|\bjazz\b','blues':r'блюз|\bblues\b','rock':r'\bрок\w*|\brock\b',
-    'metal':r'метал|\bmetal\b','ambient':r'эмбиент|амбиент|\bambient\b',
+    'metal':r'метал|потяжелее|пожестче|\bmetal\b|heavier','ambient':r'эмбиент|амбиент|\bambient\b',
     'electronic':r'электрон|electronic','classical':r'классик|classical',
     'hip hop':r'хип.хоп|\bрэп\w*|hip.hop|\brap\b','pop':r'\bпоп(?:а|е|ом)?\b|\bpop\b',
     'soul':r'соул|\bsoul\b','funk':r'фанк|\bfunk\b','lofi':r'лоу.?фай|ло.?фай|lo.?fi',
@@ -46,35 +48,79 @@ class Intent:
 
 def local_intent(prompt,previous=None):
     value=clean(prompt,500).casefold().replace('ё','е')
-    followup=bool(re.search(r'^(?:а |но |теперь |ещ[её]|больше|меньше|поспокойн|чуть|без |с вокалом|more |less |calmer|without |with vocals)',value))
+    same_scope=bool(re.search(r'\b(?:их|они|этого исполнителя|этой группы|в этом же духе|same artist|by them|their songs)\b',value))
+    followup=same_scope or bool(re.search(r'^(?:а |но |теперь |давай |еще|больше|меньше|по\w+ее\b|чуть|немного |без |с вокалом|more |less |calmer|without |with vocals|something |make it )',value))
     base=(previous or Intent()) if followup else Intent()
     if re.search(r'совсем другое|с чистого листа|start over|different style',value):base=Intent()
     for action,pattern in ACTIONS.items():
         if re.search(pattern,value):return replace(base,action=action)
     # Remove explicit exclusions before detecting positive genres/moods.
-    excluded=re.findall(r'(?:\bбез\b|\bне хочу\b|\bкроме\b|\bno\b|\bwithout\b)\s+([^,.;]+)',value)
-    positive=re.sub(r'(?:\bбез\b|\bне хочу\b|\bкроме\b|\bno\b|\bwithout\b)\s+[^,.;]+',' ',value)
+    exclusion=r'(?:\bбез\b|\bне хочу\b|\bне\b|\bкроме\b|\bno\b|\bnot\b|\bwithout\b)\s+([^,.;]+?)(?=,|[.;]|\s+(?:но|а|but)\s+|$)'
+    excluded=re.findall(exclusion,value)
+    positive=re.sub(exclusion,' ',value)
     genres=tuple(key for key,pattern in GENRES.items() if re.search(pattern,positive))
     avoid=tuple(key for key,pattern in GENRES.items() if any(re.search(pattern,part) for part in excluded))
-    mood=next((key for key,pattern in MOOD_WORDS.items() if re.search(pattern,positive)),base.mood)
+    # A last explicit correction wins: "не грустное, а повеселее".
+    matches=[(match.start(),key) for key,pattern in MOOD_WORDS.items() for match in re.finditer(pattern,positive)]
+    explicit_mood=max(matches,default=(-1,''))[1]
+    if not explicit_mood and any(re.search(MOOD_WORDS['melancholy'],part) for part in excluded):explicit_mood='happy'
+    if not explicit_mood and any(re.search(MOOD_WORDS['energy'],part) for part in excluded):explicit_mood='relax'
+    mood=explicit_mood or base.mood
     instrumental=base.instrumental
     if re.search(r'без (?:вокала|слов|голоса)|инструменталь|instrumental|no vocals|without (?:vocals|lyrics)',value):instrumental=True
     elif re.search(r'с вокалом|с голосом|with vocals',value):instrumental=False
     familiarity=.2 if mood=='discover' else .85 if re.search(r'любим|знаком|familiar|favourites|favorites',value) else base.familiarity
-    artists=base.artists
+    artists=()
     similar=re.search(r'(?:как|в стиле|похож[а-я]* на|like|similar to)\s+(.{2,80}?)(?=,|\s+(?:но|только|без|but|without)\b|$)',clean(prompt,500),re.I)
     if similar:artists=(similar.group(1).strip(),)
     stripped=clean(prompt,160).strip(' \"«»')
-    stripped=re.sub(r'^(?:(?:я|мне|хочу|пожалуйста|можно|только|давай|накидай|насыпь|включи|поставь|найди|ищи|послушать|слушать|послушаем|play|find|search for|please|i want|listen to)\s+)+','',stripped,flags=re.I)
+    stripped=re.sub(r'^(?:(?:я|мне|хочу|хочется|нужно|надо|бы|пожалуйста|можно|только|давай|дай|подбери|собери|накидай|насыпь|включи|поставь|найди|ищи|послушать|слушать|послушаем|play|find|search for|please|i want|listen to)\s+)+','',stripped,flags=re.I)
     stripped=re.sub(r'^(?:(?:музык[ауи]|песни|песен|треки|треков|групп[уы]|исполнител[ья]|music by|songs by|tracks by|band|artist)\s+)+','',stripped,flags=re.I).strip(' \"«»')
     stripped=re.sub(r'(?:,?\s+пожалуйста|,?\s+please|\s+без рекомендаций|\s+без других исполнителей)[.!?]*$', '', stripped, flags=re.I).strip()
+    # Keep a named target separate from its musical qualifier. Do not search
+    # for the whole sentence "Beatles, но повеселее" as a song title.
+    target=re.sub(exclusion,' ',stripped,flags=re.I)
+    target=re.sub(r'\b(?:с (?:вокалом|голосом)|with vocals|инструменталь\w*|instrumental)\b',' ',target,flags=re.I)
+    unmasked=target
+    spans=[]
+    for pattern in (*MOOD_WORDS.values(),*GENRES.values()):
+        for match in re.finditer(pattern,target,flags=re.I):
+            start=match.start()-len(re.search(r'\w*$',target[:match.start()]).group())
+            end=match.end()+len(re.match(r'\w*',target[match.end():]).group())
+            spans.append((start,end))
+    for start,end in sorted(spans,reverse=True):target=target[:start]+' '*(end-start)+target[end:]
+    target=re.sub(exclusion,' ',target,flags=re.I)
+    filler=r'\b(?:что[ -]?нибудь|что[ -]?то|какую[ -]?нибудь|чего[ -]?то|музык\w*|песни|песен|треки|треков|немного|побольше|поменьше|чуть|еще|ещё|теперь|пожалуйста|сделай|давай|более|менее|очень|чуточку|лучше|хотелось|хочется|нужн\w*|надо|как|но|а|и|для|меня|мне|на|от|бы|в|же|они|их|этого|исполнителя|этой|группы|этом|духе|звучании|вкусе|моем|моём|something|anything|music|songs|tracks|a|bit|more|less|some|it|make|please|but|and|by|of|them|same|artist|to|for|me)\b'
+    tidy=lambda s:clean(re.sub(filler,' ',s,flags=re.I)).strip(' ,.!?:;—-')
+    # Only a leading name or an explicit "от / by" is an artist qualifier.
+    # Leftover conversational words after a mood are not a second exact search.
+    lead=tidy(unmasked[:min(start for start,_ in spans)]) if spans else tidy(target)
+    by=re.search(r'\b(?:от|by)\s+([^,;]+)',unmasked,re.I)
+    target=tidy(by.group(1)) if by else lead
+    vocal_wish=bool(re.search(r'без (?:вокала|слов|голоса)|инструменталь|instrumental|no vocals|without (?:vocals|lyrics)|с вокалом|с голосом|with vocals',value))
+    qualified_target=target if (explicit_mood or genres or avoid or vocal_wish) and target else ''
+    # A comparative mood changes the station; an explicit name or "их же"
+    # keeps the artist. Plain "ещё" also continues the previous station.
+    continuation=bool(re.fullmatch(r'(?:а )?(?:еще|ещё|more|побольше|продолжай|keep going|another one)[.!? ]*',value))
+    if explicit_mood=='discover' and not same_scope:
+        base=Intent(avoid=base.avoid)
+        if not vocal_wish:instrumental=None
+    if explicit_mood and not same_scope and base.mode in ('artist','lookup','similar'):
+        base=Intent(avoid=base.avoid)
+        if not re.search(r'без (?:вокала|слов|голоса)|instrumental|without vocals',value):instrumental=None
     # A named target must survive generic words such as "music" in the wish.
-    known=bool(genres or avoid or mood!='any' or instrumental is not None)
+    known=bool(genres or avoid or explicit_mood or vocal_wish)
     generic=bool(re.fullmatch(r'(?:музык[ауи]|music|микс|mix|моя волна|в мо[её]м вкусе|что.?нибудь|something)(?: в мо[её]м вкусе)?',stripped,re.I))
-    query=artists[0] if similar else '' if known or generic else stripped
+    query=artists[0] if similar else qualified_target or ('' if known or generic else stripped)
     mode='similar' if similar else 'lookup' if query else 'mix'
-    if followup and previous and not similar and not genres and (known or re.fullmatch(r'ещ[её]|more|побольше|продолжай',stripped,re.I)):
-        query=base.query;mode=base.mode
+    if query and not similar and not qualified_target and re.search(r'что[ -]?(?:нибудь|то)|чего[ -]?то|(?:музык\w*|песни|трек\w*) (?:для|под)|\b(?:music for|music to|something|anything)\b',value):
+        # An unfamiliar occasion/style can still use the source's playlist
+        # search. It must not enter the exact artist/song relevance filter.
+        mode='theme';query=re.sub(r'^(?:что[ -]?(?:нибудь|то)|чего[ -]?то|something|anything)\s*','',stripped,flags=re.I).strip()
+    if previous and not similar and not qualified_target and (continuation or same_scope or
+            followup and not explicit_mood and not genres and (avoid or instrumental is not None)):
+        query=base.query;mode=base.mode;artists=base.artists
+    if mode=='lookup' and not qualified_target and not continuation and not same_scope:base=Intent();mood='any';instrumental=None
     return Intent(mood,genres or base.genres,artists,tuple(dict.fromkeys(base.avoid+avoid)),
                   instrumental,familiarity,'mix',query,mode)
 
@@ -125,8 +171,10 @@ def model_intent(data,fallback,prompt=None):
         avoid=tuple(v for v in avoid if v in fallback.avoid or mentioned(v) and not re.search(r'vocal|lyric|вокал|слов|голос',v,re.I))
         allowed=wish+' '+norm(' '.join(genres+artists))
         if query and any(part not in allowed.split() for part in norm(query).split()):query=''
+    mode=fallback.mode
+    if mood!='any' and fallback.mood=='any' and not query and not artists and data.get('query')=='':mode='mix'
     return Intent(mood,genres or fallback.genres,artists or fallback.artists,
-        tuple(dict.fromkeys(fallback.avoid+avoid)),instrumental,familiarity,'mix',query or fallback.query,fallback.mode)
+        tuple(dict.fromkeys(fallback.avoid+avoid)),instrumental,familiarity,'mix',query or (fallback.query if mode==fallback.mode else ''),mode)
 
 
 def quick_wish(prompt):

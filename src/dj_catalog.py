@@ -9,12 +9,14 @@ from listening_queue import track
 from music_library import youtube_item
 from youtube_search import yt_dlp_executable,js_runtime_args
 
-MOOD_QUERY={'any':'music','relax':'chill acoustic','focus':'ambient study','energy':'energetic rock',
-            'party':'dance funk','melancholy':'melancholy indie','discover':'alternative new music'}
+MOOD_QUERY={'any':'music','relax':'chill','focus':'focus','happy':'feel good','energy':'motivation',
+            'party':'dance party','romance':'romantic','melancholy':'sad','discover':'new music'}
 MOOD_MATCH={'relax':r'chill|calm|relax|soft|ambient|acoustic|lo.?fi|спокой|расслаб',
     'focus':r'focus|study|ambient|instrumental|piano|lo.?fi|концентр|фокус|работ',
-    'energy':r'energy|energetic|workout|power|rock|бодр|энерг|трениров',
+    'happy':r'happy|happiness|cheerful|upbeat|feel.good|positiv|uplift|весел|радост|позитив',
+    'energy':r'energy|energetic|workout|power|motivation|бодр|энерг|трениров',
     'party':r'dance|party|funk|disco|house|dance.?pop|танц|вечерин',
+    'romance':r'romantic|romance|love songs|романт|любов|свидани',
     'melancholy':r'melanchol|sad|dream.?pop|slow|груст|меланхол'}
 INSTRUMENTAL=r'instrumental|no vocals|without vocals|solo piano|без (?:слов|вокала)|инструменталь'
 
@@ -109,6 +111,31 @@ class DJCatalog:
         else:result=self.music.repository.load(source,'search',term=term[:200])
         return {'items':[dict(v,_search_query=term) for v in (result.get('items') or result.get('tracks') or []) if isinstance(v,dict)]}
 
+    def themed(self,source,query,intent):
+        """A mood is a collection of songs, not a literal song-title request."""
+        h=self.host
+        apple=source=='apple-music' and getattr(h,'apple_mode','')=='native'
+        player=h.apple_web if apple else None
+        if apple:result=player.request('search',term=query,types='playlists')
+        else:result=self.music.repository.load(source,'search',term=query[:200])
+        items=result.get('items') or []
+        collections=[v for v in items if isinstance(v,dict) and v.get('kind') in ('playlists','playlist','album','albums')]
+        collections.sort(key=lambda v:context_score(v,intent,{}),reverse=True)
+        tracks=[]
+        for collection in collections[:2]:
+            if self.closed:raise InterruptedError('closed')
+            try:
+                data=player.request('tracks',kind=collection['kind'],id=collection['id']) if apple else self.music.repository.load(source,'tracks',collection=collection)
+                context=' '.join(str(collection.get(k,'') or '') for k in ('title','subtitle','description'))[:1500]
+                tracks.extend(dict(v,_context=context,_dj_mood=intent.mood,_dj_genres=intent.genres)
+                    for v in (data.get('tracks') or data.get('items') or [])[:60] if isinstance(v,dict))
+            except Exception:continue
+        if tracks:return {'items':tracks[:120]}
+        # Existing transports without collection search retain their ordinary
+        # source search. Never mark title-only hits as verified mood metadata.
+        if apple:result=player.request('search',term=query)
+        return result
+
     def collect(self,source,intent,affinity,alive=lambda:True,progress=lambda *_:None):
         if not alive():raise InterruptedError('cancelled')
         started=time.monotonic();deadline=started+self.BUDGET;candidates=[];recent=[];warnings=[]
@@ -116,16 +143,18 @@ class DJCatalog:
         anchor=max(affinity,key=affinity.get) if affinity else ''
         query=requested or ' '.join(intent.genres[:1]) or (anchor if intent.mood=='any' and affinity.get(anchor,0)>0 else MOOD_QUERY[intent.mood])
         if intent.instrumental is True and 'instrumental' not in query.casefold():query+=' instrumental'
-        elif not requested and intent.genres and intent.mood in ('relax','focus','energy','party'):
-            query+=' '+MOOD_QUERY[intent.mood].split()[0]
+        elif not requested and intent.genres and intent.mood in MOOD_MATCH:
+            query+=' '+MOOD_QUERY[intent.mood]
         def search():
             if source=='youtube':return self.youtube(query,lambda:not self.closed)
+            if intent.mode=='theme' or not requested and (intent.mood in MOOD_MATCH or intent.mood=='discover' or intent.genres):
+                return self.themed(source,query,intent)
             return self.music.repository.load(source,'search',term=query[:200])
         # Search takes priority over background enrichment on UI-backed sources.
         specific=intent.mode in ('lookup','artist')
-        key=(source,'specific' if specific else 'search',query)
+        key=(source,'specific' if specific else 'search',query,intent.mood,intent.genres,intent.instrumental)
         search_future=self.cache.get(key,lambda:self.guarded(source,lambda:self.specific(source,intent) if specific else search()),ttl=180)
-        personal_future=None if specific else self.cache.get((source,'personal'),lambda:self.guarded(source,lambda:self.personal(source,intent,affinity)))
+        personal_future=None if specific else self.cache.get((source,'personal',intent.mood,intent.genres,intent.instrumental),lambda:self.guarded(source,lambda:self.personal(source,intent,affinity)))
         pending={f for f in (search_future,personal_future) if f is not None};search_done=False;personal_done=False;first=None
         progress('catalogue')
         while pending and time.monotonic()<deadline:
@@ -144,8 +173,7 @@ class DJCatalog:
             # Give a fast personal feed a short grace period, then play the real
             # search results; late enrichment is cached for the next wish/refill.
             if candidates and search_done and time.monotonic()-first>=.2:break
-            if candidates and personal_done and not requested and not intent.genres and len(candidates)>=8 and (
-                    intent.mood=='any' or any(context_score(v,intent,affinity)>0 for v in candidates)):break
+            if candidates and personal_done and not requested and not intent.genres and len(candidates)>=8 and intent.mood=='any':break
         if pending:warnings.append('pending')
         if not alive():raise InterruptedError('cancelled')
         return candidates,recent,warnings
@@ -188,17 +216,23 @@ def rank(values,source,intent,profile,affinity,exclude=(),limit=14,seed=''):
     for value in values:
         valid=track(value,source)
         if not valid or valid['uri'] in seen:continue
-        seen.add(valid['uri']);info=hints(value);artist=normalized(valid['artist'])
+        info=hints(value);artist=normalized(valid['artist'])
         if requested and not same_artist(valid['artist'],requested):continue
         if intent.mode=='lookup' and not requested:
             terms=set(normalized(intent.query).split());actual=set((normalized(valid['title'])+' '+artist).split())
             if not terms or len(terms&actual)/len(terms)<.75:continue
+        mood_match=intent.mood in MOOD_MATCH and (value.get('_dj_mood')==intent.mood or re.search(MOOD_MATCH[intent.mood],info))
+        # Favourite tracks from a cached personal feed cannot overrule a new
+        # explicit mood. Collection context remains grounded in source metadata.
+        if not direct and value.get('_personal') and intent.mood in MOOD_MATCH and not mood_match:continue
         preference=profile.get(valid['uri']) or by_song.get((artist,normalized(valid['title'])),{})
         if int(preference.get('vote',0))<0:continue
         if any(normalized(word) in normalized(info) for word in intent.avoid):continue
         if intent.instrumental is True and not re.search(INSTRUMENTAL,info):continue
         if source=='youtube' and re.search(r'full album|reaction|podcast|interview|час(?:а|ов)?|\b1 ?hour',info):continue
         score=context_score(value,intent,{})
+        if value.get('_dj_mood')==intent.mood and intent.mood in MOOD_MATCH:score+=18
+        if value.get('_dj_genres') and set(value['_dj_genres'])&set(intent.genres):score+=10
         if intent.query and not intent.artists:
             terms=set(normalized(intent.query).split());title=normalized(valid['title']);description=title+' '+artist
             overlap=len(terms.intersection(description.split()))/max(1,len(terms))
@@ -213,14 +247,15 @@ def rank(values,source,intent,profile,affinity,exclude=(),limit=14,seed=''):
         score+=jitter*(3 if intent.mood=='discover' else 1)
         reason='requested-artist' if requested else 'requested-track' if intent.mode=='lookup' else 'personal' if value.get('_personal') else 'artist' if affinity.get(valid['artist'].casefold(),0)>0 else 'catalogue'
         if intent.instrumental is True:reason='instrumental'
-        elif intent.mood in MOOD_MATCH and re.search(MOOD_MATCH[intent.mood],info):reason='mood'
+        elif mood_match:reason='mood'
         pool.append((score,dict(value,_reason=reason)))
     pool.sort(key=lambda pair:pair[0],reverse=True)
     selected=[];artists={};titles=set()
     for _,value in pool:
+        if value['uri'] in seen:continue
         artist=normalized(value.get('artist',''));title=normalized(value.get('title',''))
         title=re.sub(r'\b(?:remaster(?:ed)?|\d{4})\b','',title).strip()
         if (artist,title) in titles or artists.get(artist,0)>=(limit if direct else 4 if intent.artists else 2):continue
-        artists[artist]=artists.get(artist,0)+1;titles.add((artist,title));selected.append(value)
+        artists[artist]=artists.get(artist,0)+1;titles.add((artist,title));seen.add(value['uri']);selected.append(value)
         if len(selected)>=limit:break
     return selected

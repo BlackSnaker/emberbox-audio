@@ -36,6 +36,7 @@ host=f.FixtureHost()
 with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected network')),patch.object(fullscreen,'LyricsClient',f.FixtureLyrics),patch.object(fullscreen.Artwork,'load',f.image_load):
     stage=fullscreen.FullscreenPlayer(host)
     s=stage.dj;v=stage.dj_view;host.fullscreen=stage
+    real_collect=s.catalog.collect
     s.memory.settings['voice']=False;s.probed=True;s.catalog.collect=collect
     s.brain.interpret=lambda prompt,previous,*_args:(local_intent(prompt,previous),'local')
     stage.music.repository.play=lambda item,alive:plays.append(item['uri']) if alive() else None
@@ -92,6 +93,33 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         tail=[i for _,i in stage.music.book.upcoming('spotify')]
         assert len(tail)>14 and all(i['artist']=='The Beatles' for i in tail[:-1])
         assert tail[-1]['uri']=='spotify:track:Manual','Artist refill lost the user tail'
+        # Real interpreter + catalogue + ranking + asynchronous queue changes:
+        # a mood after an artist releases artist scope and loads playlist songs.
+        queries=[]
+        def load(source,category,term='',collection=None,**_kw):
+            if category=='search':
+                queries.append(term)
+                return {'items':[{'id':term,'kind':'playlist','title':term,'uri':'spotify:playlist:Fixture','href':'/playlist/Fixture'}]}
+            assert collection
+            return {'tracks':[dict(tracks[0],uri='spotify:track:'+collection['id'].replace(' ','')+str(i),
+                artist='Session '+str(i),title='Original '+collection['id']+' recording '+str(i)) for i in range(40)]}
+        s.catalog.collect=real_collect
+        with patch.object(stage.music.repository,'load',side_effect=load),patch.object(s.catalog,'personal',return_value={'tracks':[]}):
+            v.entry.set_text('давай что-нибудь повеселее');v.entry.emit('activate')
+            wait(lambda:not s.busy and s.intents['spotify'].mood=='happy')
+            assert s.intents['spotify'].mode=='mix' and not s.intents['spotify'].artists
+            assert len(s.items)==14 and all(i.get('_dj_mood')=='happy' for i in s.items)
+            assert queries[-1]=='feel good' and 'повеселее' in v.wish.get_text()
+            v.entry.set_text('а теперь поспокойнее');v.send.clicked()
+            wait(lambda:not s.busy and s.intents['spotify'].mood=='relax')
+            assert queries[-1]=='chill' and len(s.items)==14
+            first={i['uri'] for i in s.items}
+            v.entry.set_text('ещё');v.send.clicked();wait(lambda:not s.busy and s.prompt=='ещё')
+            assert len(s.items)==14 and not first.intersection(i['uri'] for i in s.items)
+            assert queries==['feel good','chill'],'Continuation did not reuse the bounded metadata cache'
+        successful=s.intents['spotify'];s.catalog.collect=lambda *_a,**_kw:([],[],[])
+        v.entry.set_text('Unknown recording');v.entry.emit('activate');wait(lambda:not s.busy and s.phase=='empty')
+        assert s.intents['spotify']==successful,'Failed lookup poisoned the conversation context'
         s.stop();assert all(i.get('origin')!='dj' for _,i in stage.music.book.upcoming('spotify'))
         assert any(i['uri']=='spotify:track:Manual' for _,i in stage.music.book.upcoming('spotify'))
         stage.close();assert s.closed and not s.voice.process

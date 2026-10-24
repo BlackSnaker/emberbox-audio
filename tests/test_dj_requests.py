@@ -8,6 +8,8 @@ from dj_catalog import DJCatalog,rank
 from dj_reply import reply,summary
 from listening_queue import QueueBook
 from music_library import MusicService
+from dj_brain import LocalBrain
+from unittest.mock import patch
 
 
 def song(i,artist='The Beatles',**extra):
@@ -15,6 +17,62 @@ def song(i,artist='The Beatles',**extra):
 
 
 class RequestTests(unittest.TestCase):
+    def test_conversational_moods_do_not_become_track_titles(self):
+        previous=Intent(artists=('The Beatles',),query='Beatles',mode='artist')
+        cases={'давай что-нибудь повеселее':'happy','чего-то более позитивного':'happy',
+            'А теперь поживее':'energy','побыстрее':'energy','поспокойнее':'relax',
+            'хочется перед сном':'relax','музыку для работы':'focus','для свидания':'romance',
+            'давай потанцуем':'party','не грустное, а повеселее':'happy',
+            'подними настроение':'happy','что-нибудь другое':'discover','удиви меня':'discover',
+            'давай что-нибудь повеселее, чтобы настроение поднять':'happy',
+            'make it happier':'happy','more upbeat':'happy','something calmer':'relax',
+            'something for a workout':'energy','something else':'discover'}
+        brain=LocalBrain()
+        with patch.object(brain,'models',side_effect=AssertionError('Common wishes started a heavy model')):
+            for prompt,mood in cases.items():
+                with self.subTest(prompt=prompt):
+                    intent,engine=brain.interpret(prompt,previous)
+                    self.assertEqual(intent.mood,mood);self.assertEqual(intent.mode,'mix')
+                    self.assertEqual(intent.query,'');self.assertEqual(intent.artists,());self.assertEqual(engine,'local')
+    def test_named_mood_qualifier_and_explicit_anaphor_keep_the_artist(self):
+        previous=Intent(artists=('The Beatles',),query='Beatles',mode='artist')
+        for prompt in ('Beatles, но повеселее','поставь Beatles повеселее','Хочу повеселее от Beatles'):
+            intent=local_intent(prompt,previous)
+            self.assertEqual(intent.query,'Beatles');self.assertEqual(intent.mode,'lookup');self.assertEqual(intent.mood,'happy')
+        intent=local_intent('их же, но повеселее',previous)
+        self.assertEqual(intent.mode,'artist');self.assertEqual(intent.artists,previous.artists);self.assertEqual(intent.mood,'happy')
+    def test_mood_followup_retains_genre_but_new_name_clears_constraints(self):
+        previous=local_intent('Хочу джаз без металла')
+        intent=local_intent('давай повеселее',previous)
+        self.assertEqual(intent.genres,('jazz',));self.assertIn('metal',intent.avoid)
+        self.assertEqual(local_intent('давай Queen',intent),Intent(query='Queen',mode='lookup'))
+        self.assertEqual(local_intent('что-нибудь другое',intent).genres,())
+    def test_unfamiliar_occasion_uses_theme_search_not_exact_song_filter(self):
+        for prompt in ('музыку для вечерней прогулки','что-нибудь атмосферное','music for a road trip'):
+            with self.subTest(prompt=prompt):
+                intent=local_intent(prompt)
+                self.assertEqual(intent.mode,'theme');self.assertTrue(intent.query)
+    def test_mood_playlist_tracks_win_over_unrelated_favourites(self):
+        calls=[]
+        def request(method,**kw):
+            calls.append((method,kw))
+            if method=='search':
+                self.assertEqual(kw['types'],'playlists');self.assertEqual(kw['term'],'feel good')
+                return {'items':[{'id':'pl.happy','kind':'playlists','title':'Feel Good Hits'}]}
+            return {'tracks':[song(i,'Band '+str(i),title='Real recording '+str(i)) for i in range(1,21)]}
+        host=SimpleNamespace(apple_mode='native',apple_web=SimpleNamespace(request=request))
+        c=DJCatalog(SimpleNamespace(host=host,repository=SimpleNamespace()))
+        c.personal=lambda *_:{'tracks':[song(100,'Favourite',_personal=True)]}
+        try:
+            intent=local_intent('давай что-нибудь повеселее',Intent(artists=('The Beatles',),mode='artist'))
+            values,_,_=c.collect('apple-music',intent,{'favourite':100})
+            selected=rank(values,'apple-music',intent,{},{'favourite':100})
+            self.assertEqual(len(selected),14);self.assertTrue(all(v.get('_dj_mood')=='happy' for v in selected))
+            self.assertEqual(calls[1],('tracks',{'kind':'playlists','id':'pl.happy'}))
+        finally:c.close()
+    def test_personal_duplicate_does_not_hide_matching_collection_metadata(self):
+        values=[song(1,_personal=True),song(1,_context='Feel Good',_dj_mood='happy')]
+        self.assertEqual(len(rank(values,'apple-music',Intent(mood='happy'),{},{})),1)
     def test_named_requests_keep_the_target(self):
         for value in ('Beatles','The Beatles','Битлз','Хочу послушать Beatles','Включи мне музыку Beatles','Beatles, пожалуйста','Только Beatles'):
             with self.subTest(value=value):

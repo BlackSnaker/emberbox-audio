@@ -106,7 +106,7 @@ RAM, distribution, desktop/session, display scale, source and the affected mode.
 
 ## Local Ember DJ
 
-Optional: plan for 4 modern cores, 8 GB total RAM and 2 GB additional storage
+Optional: plan for 4 modern cores, 8 GB total RAM and 3 GB additional storage
 for local models/runtime. Text-based mood matching works without models;
 voice and language AI are prepared in the DJ tab.
 [Setup, checked components and limitations →](DJ.md)
