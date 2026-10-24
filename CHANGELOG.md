@@ -2,6 +2,11 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.13.3 — 2026-10-24
+
+- Interpret the reported Russian “что - нибудь погрустнее” as a melancholy mix. Normalize spacing, Unicode dashes and indefinite pronoun forms consistently across mood, artist and theme parsing; strip conversational openings such as “ну, а можно”. Keep the submitted text visible as typed.
+- Preserve artist hyphens and explicitly quoted song-title searches. Verify the exact reported phrase through playlist loading, ranking, keyboard input and queue replacement, including recovery from an earlier incorrect lookup.
+
 ## 0.13.2 — 2026-10-24
 
 - Understand conversational mood changes: “something happier”, “livelier”, “calmer”, “for work” and “something else”. Generic mood changes release the previous artist; “Beatles, but happier” and “their songs, but happier” keep the named scope. “More” continues it.

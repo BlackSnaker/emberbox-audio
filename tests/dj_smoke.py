@@ -117,6 +117,16 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
             v.entry.set_text('ещё');v.send.clicked();wait(lambda:not s.busy and s.prompt=='ещё')
             assert len(s.items)==14 and not first.intersection(i['uri'] for i in s.items)
             assert queries==['feel good','chill'],'Continuation did not reuse the bounded metadata cache'
+            # Preserve the exact visible text, but interpret the entire phrase
+            # as a mood: the spaced hyphen must not create a literal song query.
+            prompt='что - нибудь погрустнее'
+            v.entry.set_text(prompt);v.entry.emit('activate')
+            wait(lambda:not s.busy and s.intents['spotify'].mood=='melancholy')
+            assert s.intents['spotify'].mode=='mix' and not s.intents['spotify'].query
+            assert queries[-1]=='sad' and len(s.items)==14
+            assert v.entry.get_text()==prompt and prompt in v.wish.get_text()
+            assert 'Точный поиск' not in v.understanding.get_text() and 'Exact search' not in v.understanding.get_text()
+            assert all(i.get('_dj_mood')=='melancholy' for i in s.items)
         successful=s.intents['spotify'];s.catalog.collect=lambda *_a,**_kw:([],[],[])
         v.entry.set_text('Unknown recording');v.entry.emit('activate');wait(lambda:not s.busy and s.phase=='empty')
         assert s.intents['spotify']==successful,'Failed lookup poisoned the conversation context'

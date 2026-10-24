@@ -17,6 +17,10 @@ entrance extend Emberbox's Grunesphism materials.
   direction; “Beatles, but happier” or “their songs, but happier” keeps the artist.
   “More” continues the preceding conditions. Other occasions, such as “music
   for an evening walk”, can use the source's own collection search.
+- Russian wishes tolerate spaced and Unicode hyphens: “что-нибудь погрустнее”
+  and “что - нибудь погрустнее” both request a melancholy mix. Conversational
+  openings are ignored while the original wish remains visible. Use an explicit
+  quoted title to find the song itself: `Найди трек «Что-нибудь»`.
 - The microphone turns on **only when clicked**. Click again or pause to finish;
   capture stops automatically within 15 seconds. The label and indicator show
   when capture is actually active.

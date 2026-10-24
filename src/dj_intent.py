@@ -1,6 +1,12 @@
 """Bounded musical intent; model output can describe a mix, never invent tracks."""
 from dataclasses import dataclass,asdict,replace
-import re
+import re,unicodedata
+
+INDEFINITE_ROOT=r'(?:что|чего|чему|чем|кто|кого|кому|кем|какая|какой|какое|какую|какие|каких|какого|какому|каким|какими|где|куда|когда)'
+INDEFINITE=INDEFINITE_ROOT+r'-(?:нибудь|либо|то)'
+REQUEST_PREFIX=(r'^(?:(?:я|мне|хочу|хочется|нужно|надо|бы|пожалуйста|можно|только|'
+    r'ну|а|так|да|слушай|пожалуй|может(?: быть)?|давай(?:-ка)?|дай|подбери|собери|накидай|насыпь|'
+    r'включи|поставь|найди|ищи|послушать|слушать|послушаем|play|find|search for|please|i want|listen to)(?:\s+|,\s*))+')
 
 MOODS=('any','relax','focus','happy','energy','party','romance','melancholy','discover')
 MOOD_WORDS={
@@ -32,6 +38,27 @@ ACTIONS={
 def clean(value,limit=80):return re.sub(r'\s+',' ',str(value or '')).strip()[:limit]
 
 
+def wish_text(value):
+    """Normalize conversational spelling, without rewriting the displayed wish."""
+    value=unicodedata.normalize('NFKC',str(value or ''))[:2000]
+    value=re.sub('[\u200b\ufeff\u00ad]','',value)
+    # ASR and keyboards produce "что - нибудь", NBSPs and Unicode dashes.
+    # Only join known indefinite pronouns; keep artist/title hyphens intact.
+    return clean(re.sub(r'\b('+INDEFINITE_ROOT+r')[\s\-\u2010-\u2015\u2212]*(нибудь|либо|то)\b',
+        lambda m:m[1]+'-'+m[2],value,flags=re.I),500)
+
+
+def exact_target(prompt):
+    """Explicit title searches may themselves contain conversational words."""
+    value=clean(prompt,500)
+    value=re.sub(REQUEST_PREFIX,'',value,flags=re.I)
+    quoted=re.fullmatch(r'(?:(?:трек|песню|песни|композицию|song|track)(?:\s+под названием)?\s+)?[«"“](.+?)[»"”][.!?]*',value,re.I)
+    if quoted:return clean(quoted[1],160)
+    named=re.fullmatch(r'(?:трек|песню|композицию|song|track)\s+(?:под названием|с названием|called|named)\s+(.+)',value,re.I)
+    if named:return clean(named[1],160)
+    return ''
+
+
 @dataclass(frozen=True)
 class Intent:
     mood:str='any'
@@ -47,7 +74,10 @@ class Intent:
 
 
 def local_intent(prompt,previous=None):
-    value=clean(prompt,500).casefold().replace('ё','е')
+    exact=exact_target(prompt)
+    if exact:return Intent(query=exact,mode='lookup')
+    prompt=wish_text(prompt)
+    value=prompt.casefold().replace('ё','е')
     same_scope=bool(re.search(r'\b(?:их|они|этого исполнителя|этой группы|в этом же духе|same artist|by them|their songs)\b',value))
     followup=same_scope or bool(re.search(r'^(?:а |но |теперь |давай |еще|больше|меньше|по\w+ее\b|чуть|немного |без |с вокалом|more |less |calmer|without |with vocals|something |make it )',value))
     base=(previous or Intent()) if followup else Intent()
@@ -74,7 +104,7 @@ def local_intent(prompt,previous=None):
     similar=re.search(r'(?:как|в стиле|похож[а-я]* на|like|similar to)\s+(.{2,80}?)(?=,|\s+(?:но|только|без|but|without)\b|$)',clean(prompt,500),re.I)
     if similar:artists=(similar.group(1).strip(),)
     stripped=clean(prompt,160).strip(' \"«»')
-    stripped=re.sub(r'^(?:(?:я|мне|хочу|хочется|нужно|надо|бы|пожалуйста|можно|только|давай|дай|подбери|собери|накидай|насыпь|включи|поставь|найди|ищи|послушать|слушать|послушаем|play|find|search for|please|i want|listen to)\s+)+','',stripped,flags=re.I)
+    stripped=re.sub(REQUEST_PREFIX,'',stripped,flags=re.I)
     stripped=re.sub(r'^(?:(?:музык[ауи]|песни|песен|треки|треков|групп[уы]|исполнител[ья]|music by|songs by|tracks by|band|artist)\s+)+','',stripped,flags=re.I).strip(' \"«»')
     stripped=re.sub(r'(?:,?\s+пожалуйста|,?\s+please|\s+без рекомендаций|\s+без других исполнителей)[.!?]*$', '', stripped, flags=re.I).strip()
     # Keep a named target separate from its musical qualifier. Do not search
@@ -90,7 +120,7 @@ def local_intent(prompt,previous=None):
             spans.append((start,end))
     for start,end in sorted(spans,reverse=True):target=target[:start]+' '*(end-start)+target[end:]
     target=re.sub(exclusion,' ',target,flags=re.I)
-    filler=r'\b(?:что[ -]?нибудь|что[ -]?то|какую[ -]?нибудь|чего[ -]?то|музык\w*|песни|песен|треки|треков|немного|побольше|поменьше|чуть|еще|ещё|теперь|пожалуйста|сделай|давай|более|менее|очень|чуточку|лучше|хотелось|хочется|нужн\w*|надо|как|но|а|и|для|меня|мне|на|от|бы|в|же|они|их|этого|исполнителя|этой|группы|этом|духе|звучании|вкусе|моем|моём|something|anything|music|songs|tracks|a|bit|more|less|some|it|make|please|but|and|by|of|them|same|artist|to|for|me)\b'
+    filler=r'\b(?:'+INDEFINITE+r'|музык\w*|песни|песен|треки|треков|немного|побольше|поменьше|чуть|еще|ещё|теперь|пожалуйста|сделай|давай|более|менее|очень|чуточку|лучше|хотелось|хочется|нужн\w*|надо|как|но|а|и|для|меня|мне|на|от|бы|в|же|они|их|этого|исполнителя|этой|группы|этом|духе|звучании|вкусе|моем|моём|something|anything|music|songs|tracks|a|bit|more|less|some|it|make|please|but|and|by|of|them|same|artist|to|for|me)\b'
     tidy=lambda s:clean(re.sub(filler,' ',s,flags=re.I)).strip(' ,.!?:;—-')
     # Only a leading name or an explicit "от / by" is an artist qualifier.
     # Leftover conversational words after a mood are not a second exact search.
@@ -110,13 +140,13 @@ def local_intent(prompt,previous=None):
         if not re.search(r'без (?:вокала|слов|голоса)|instrumental|without vocals',value):instrumental=None
     # A named target must survive generic words such as "music" in the wish.
     known=bool(genres or avoid or explicit_mood or vocal_wish)
-    generic=bool(re.fullmatch(r'(?:музык[ауи]|music|микс|mix|моя волна|в мо[её]м вкусе|что.?нибудь|something)(?: в мо[её]м вкусе)?',stripped,re.I))
+    generic=bool(re.fullmatch(r'(?:музык[ауи]|music|микс|mix|моя волна|в мо[её]м вкусе|'+INDEFINITE+r'|something)(?: в мо[её]м вкусе)?',stripped,re.I))
     query=artists[0] if similar else qualified_target or ('' if known or generic else stripped)
     mode='similar' if similar else 'lookup' if query else 'mix'
-    if query and not similar and not qualified_target and re.search(r'что[ -]?(?:нибудь|то)|чего[ -]?то|(?:музык\w*|песни|трек\w*) (?:для|под)|\b(?:music for|music to|something|anything)\b',value):
+    if query and not similar and not qualified_target and re.search(INDEFINITE+r'|(?:музык\w*|песни|трек\w*) (?:для|под)|\b(?:music for|music to|something|anything)\b',value):
         # An unfamiliar occasion/style can still use the source's playlist
         # search. It must not enter the exact artist/song relevance filter.
-        mode='theme';query=re.sub(r'^(?:что[ -]?(?:нибудь|то)|чего[ -]?то|something|anything)\s*','',stripped,flags=re.I).strip()
+        mode='theme';query=re.sub(r'^(?:'+INDEFINITE+r'|something|anything)\s*','',stripped,flags=re.I).strip()
     if previous and not similar and not qualified_target and (continuation or same_scope or
             followup and not explicit_mood and not genres and (avoid or instrumental is not None)):
         query=base.query;mode=base.mode;artists=base.artists
@@ -179,7 +209,7 @@ def model_intent(data,fallback,prompt=None):
 
 def quick_wish(prompt):
     """Common wishes and direct track/artist searches need no model inference."""
-    value=clean(prompt,500).casefold()
+    value=wish_text(prompt).casefold().replace('ё','е')
     if any(re.search(pattern,value) for pattern in (*MOOD_WORDS.values(),*GENRES.values())):return True
     if any(re.search(pattern,value) for pattern in ACTIONS.values()):return True
     if re.search(r'без вокала|без слов|instrumental|without vocals|как |like |в стиле|найди |включи |поставь |^play |^find ',value):return True

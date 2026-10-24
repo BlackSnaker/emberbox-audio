@@ -17,6 +17,55 @@ def song(i,artist='The Beatles',**extra):
 
 
 class RequestTests(unittest.TestCase):
+    def test_indefinite_pronouns_with_keyboard_and_voice_punctuation(self):
+        contexts=(None,Intent(artists=('The Beatles',),query='Beatles',mode='artist'),
+                  Intent(mood='melancholy',query='что - нибудь',mode='lookup'))
+        separators=('', ' ', '-', ' - ', '--', ' - - ', ' ‐ ', ' ‑ ', ' – ', ' — ', ' − ', '\u00a0-\u202f', '\u200b-\u200b', '\u00ad')
+        for root,tail in (('что',''),('чего',''),('какую',' музыку'),('какая',' музыка'),('какие',' песни')):
+            for suffix in ('нибудь','то','либо'):
+                for separator in separators:
+                    prompt=root+separator+suffix+tail+' погрустнее'
+                    for previous in contexts:
+                        with self.subTest(prompt=prompt,previous=previous):
+                            intent=local_intent(prompt,previous)
+                            self.assertEqual(intent.mood,'melancholy');self.assertEqual(intent.mode,'mix')
+                            self.assertEqual(intent.query,'');self.assertEqual(intent.artists,())
+    def test_request_scaffolding_does_not_become_an_artist(self):
+        for prompt,mood in (('а можно что - нибудь повеселее','happy'),
+                            ('ну, что-нибудь поспокойнее','relax'),
+                            ('Может быть, что—нибудь погрустнее?','melancholy'),
+                            ('Давай-ка какую - нибудь музыку пободрее','energy')):
+            with self.subTest(prompt=prompt):
+                intent=local_intent(prompt)
+                self.assertEqual(intent.mood,mood);self.assertEqual(intent.mode,'mix');self.assertEqual(intent.query,'')
+    def test_real_names_and_explicit_song_titles_keep_their_spelling(self):
+        for name in ('А-Студио','a-ha','blink-182'):
+            self.assertEqual(local_intent(name),Intent(query=name,mode='lookup'))
+        for title in ('Что - нибудь погрустнее','Что-нибудь','Happy','А — Студио'):
+            with self.subTest(title=title):
+                self.assertEqual(local_intent('Найди трек «'+title+'»'),Intent(query=title,mode='lookup'))
+        self.assertEqual(local_intent('песню под названием Что-нибудь'),Intent(query='Что-нибудь',mode='lookup'))
+        intent=local_intent('Beatles, что - нибудь погрустнее')
+        self.assertEqual(intent.query,'Beatles');self.assertEqual(intent.mood,'melancholy')
+    def test_reported_sentence_loads_sad_playlists_not_literal_song_hits(self):
+        calls=[]
+        def request(method,**kw):
+            calls.append((method,kw))
+            if method=='search':
+                self.assertEqual(kw,{'term':'sad','types':'playlists'})
+                return {'items':[{'id':'pl.sad','kind':'playlists','title':'Sad Songs'}]}
+            return {'tracks':[song(i,'Band '+str(i)) for i in range(1,21)]}
+        host=SimpleNamespace(apple_mode='native',apple_web=SimpleNamespace(request=request))
+        c=DJCatalog(SimpleNamespace(host=host,repository=SimpleNamespace()))
+        c.personal=lambda *_:{'tracks':[song(100,'Flëur',title='Настоящее что-нибудь',_personal=True)]}
+        try:
+            intent=local_intent('что - нибудь погрустнее')
+            values,_,_=c.collect('apple-music',intent,{})
+            selected=rank(values,'apple-music',intent,{},{})
+            self.assertEqual(len(selected),14);self.assertTrue(all(v.get('_dj_mood')=='melancholy' for v in selected))
+            self.assertEqual(calls[1],('tracks',{'kind':'playlists','id':'pl.sad'}))
+            self.assertNotIn('Точный поиск',summary(intent));self.assertNotIn('что - нибудь',reply(intent,selected,'Apple Music'))
+        finally:c.close()
     def test_conversational_moods_do_not_become_track_titles(self):
         previous=Intent(artists=('The Beatles',),query='Beatles',mode='artist')
         cases={'давай что-нибудь повеселее':'happy','чего-то более позитивного':'happy',
