@@ -58,6 +58,11 @@ class SettingsMenu:
         caption.set_xalign(0)
         caption.get_style_context().add_class('caption')
         box.pack_start(caption, False, False, 2)
+        if getattr(self,'flow',None):
+            from flow_control import FlowControl
+            box.pack_start(FlowControl(self.flow),False,False,3)
+            note=Gtk.Label(label=self.flow.message);note.set_line_wrap(True);note.set_max_width_chars(30)
+            note.set_xalign(0);note.get_style_context().add_class('caption');box.pack_start(note,False,False,2)
 
         def action(label, callback, style='filter-chip'):
             button = Gtk.Button(label=label)

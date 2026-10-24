@@ -252,8 +252,9 @@ async function emberboxAppleCommand(request) {
   }
   if (request.method === 'transport') {
     const action = params.action;
-    if (!['pause','toggle','next','previous'].includes(action)) throw Error('Invalid request');
+    if (!['pause','resume','toggle','next','previous'].includes(action)) throw Error('Invalid request');
     if (action !== 'pause' && window.__emberboxPlaybackAllowed === false) return {paused:true};
+    if(action==='resume'){await music.play();return {ok:true};}
     if (action === 'pause') await (music.pause ? music.pause() : player.pause());
     else if (action === 'next') {window.__emberboxRestorePosition=0;await (music.skipToNextItem ? music.skipToNextItem() : player.skipToNextItem());}
     else if (action === 'previous') {window.__emberboxRestorePosition=0;await (music.skipToPreviousItem ? music.skipToPreviousItem() : player.skipToPreviousItem());}

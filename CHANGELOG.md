@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.15.0 — 2026-10-24
+
+- Add EmberFlow: an opt-in amber hardware switch shared by the widget, fullscreen console and mini-mode settings, with a short finite animation and private persisted preference.
+- Mix real outgoing and incoming tracks from the Ember queue for up to four seconds. Support native Apple Music and audio-only YouTube; keep source master volume, mute and stream quality separate from the fade.
+- Prepare one extra deck near the end, release it after mixing, retain queue ownership without replaying the incoming track, and cancel on pause, seek, source changes or vocal reduction. Compensate mpv cubic gain and isolate MusicKit logical volume from the envelope.
+- Upgrade the Apple engine to integration 10, with a bounded authorized tail lease and cleanup on disconnect. Verify real Apple queue transitions and pause, real synthetic-audio overlap, source gating, cancellation, geometry and English/Russian controls.
+
 ## 0.14.0 — 2026-10-24
 
 - Route free-form wishes by confidence, not word count or the presence of a single mood keyword. Use a local Qwen3.5 2B model for imagery, scenes and conversational changes; keep fully understood requests immediate.

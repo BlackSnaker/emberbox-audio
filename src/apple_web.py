@@ -21,7 +21,7 @@ class AppleWeb:
     def __init__(self, changed):
         self.changed = changed
         self.bridge = AppleBridge(getattr(self,'socket_filename','apple-player.sock'),
-            ('status','browse','tracks','search','play','transport','seek','show','hide','enable','artist','artistSection','release')+getattr(self,'extra_methods',()))
+            ('status','browse','tracks','search','play','transport','seek','show','hide','enable','artist','artistSection','release','flow')+getattr(self,'extra_methods',()))
         self.pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix='apple-player')
         self.state = {}
         self.enabled = False
@@ -150,7 +150,7 @@ class AppleWeb:
         try:
             self.state = future.result()
             self.error = ''
-            if self.state.get('ready') and self.state.get('integrationVersion',0)<8 and not self.upgrade_attempted:
+            if self.state.get('ready') and self.state.get('integrationVersion',0)<10 and not self.upgrade_attempted:
                 self.upgrade_attempted = self.upgrading = True
                 self.pool.submit(self._upgrade,dict(self.state)).add_done_callback(
                     lambda item:GLib.idle_add(self._upgraded,item))
@@ -180,7 +180,7 @@ class AppleWeb:
             if self.connected:
                 try:
                     current = self.bridge.request('status')
-                    if current.get('ready') and current.get('integrationVersion',0)>=8 and (not state.get('authorized') or current.get('authorized')):
+                    if current.get('ready') and current.get('integrationVersion',0)>=10 and (not state.get('authorized') or current.get('authorized')):
                         break
                 except BridgeUnavailable:pass
             time.sleep(.3)

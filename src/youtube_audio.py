@@ -12,8 +12,9 @@ CLIENT_NAME = 'Emberbox Audio YouTube'
 
 
 class YouTubeAudio:
-    def __init__(self, changed):
+    def __init__(self, changed, *, persistent=True):
         self.changed = changed
+        self.persistent=persistent;self.flow_cancel=None
         self.mpv = None
         self.closed = False
         self.enabled = False
@@ -29,6 +30,7 @@ class YouTubeAudio:
         self.open_request = 0
         self.quality = {}
         try:
+            if not persistent:return
             saved = json.loads(STATE.read_text())
             from youtube_search import video_url
             for item in saved.get('queue', [])[:50]:
@@ -55,6 +57,7 @@ class YouTubeAudio:
                 input_vo_keyboard=False, osc=False, terminal=False, osd_level=0,
                 ao='pulse', volume=100, volume_max=100, mute=False,
                 audio_client_name=CLIENT_NAME,
+                demuxer_max_bytes=16*1024*1024,demuxer_max_back_bytes=1024*1024,
                 ytdl=True, ytdl_format='bestaudio/best',
                 script_opts='ytdl_hook-ytdl_path='+mpv_quoted(yt_dlp_executable()),
                 ytdl_raw_options=ytdl_raw_options())
@@ -81,6 +84,7 @@ class YouTubeAudio:
             return False
 
     def set_enabled(self, enabled):
+        if not enabled and self.flow_cancel:self.flow_cancel()
         self.enabled = enabled
         if not enabled:
             self.paused = True
@@ -89,6 +93,7 @@ class YouTubeAudio:
             self.save()
 
     def play(self, item, queue=None, start=0):
+        if self.flow_cancel:self.flow_cancel()
         from youtube_search import video_url
         parsed = video_url(str(item.get('url', '')))
         if not parsed:
@@ -194,6 +199,7 @@ class YouTubeAudio:
         return False
 
     def toggle(self):
+        if self.flow_cancel:self.flow_cancel()
         if not self.current:
             return
         if not self.loaded or self.failed:
@@ -214,11 +220,13 @@ class YouTubeAudio:
             self.play(self.queue[self.index+direction])
 
     def seek(self, position):
+        if self.flow_cancel:self.flow_cancel()
         if self.mpv and self.loaded and self.duration:
             self.mpv.command_async('seek', max(0.,min(self.duration,float(position))), 'absolute+exact')
 
     def save(self):
         self.save_timer = 0
+        if not self.persistent:return False
         STATE.parent.mkdir(parents=True, exist_ok=True)
         temporary = STATE.with_suffix('.next.json')
         temporary.write_text(json.dumps({'queue':self.queue,'index':self.index,'position':self.position}))

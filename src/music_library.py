@@ -115,6 +115,8 @@ class MusicService:
         self.browse_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-collection')
         self.play_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-queue')
         self.youtube=Search(self._youtube_results);self.youtube_done=None
+        from ember_flow import EmberFlow
+        self.flow=EmberFlow(self,self.book.path.with_name('ember-flow.json'))
         self.timer=GLib.timeout_add(250,self.poll)
 
     def subscribe(self,callback):
@@ -239,6 +241,7 @@ class MusicService:
         self.book.save();self.changed()
 
     def start(self,index=None):
+        self.flow.cancel()
         source=self.host.source
         if source=='youtube' and self.host.youtube_mode!='native':
             self.error=text('Choose the in-player YouTube source to play this queue.','Выбери встроенный YouTube в меню источников для воспроизведения очереди.')
@@ -291,6 +294,7 @@ class MusicService:
             if session:h.monitor.call(session,'Pause')
 
     def stop(self,pause_pending=False):
+        self.flow.cancel()
         if self.loading and pause_pending:self.pause_after.add(self.play_generation)
         self.play_generation+=1;self.loading=False;self.book.active=None;self.error='';self.watch.reset();self.changed()
 
@@ -301,6 +305,8 @@ class MusicService:
         if self.closed:return False
         if self.source!=self.host.source:self.source_changed()
         source=self.host.source
+        self.flow.tick(snapshot(self.host))
+        if self.flow.busy:return True
         if self.book.active==source and not self.loading:
             item=self.book.current(source);result=self.watch.observe(item,snapshot(self.host)) if item else None
             if result=='next':self.step(1)
@@ -310,6 +316,6 @@ class MusicService:
         return True
 
     def close(self):
-        self.closed=True;self.play_generation+=1;self.cancel_browse()
+        self.closed=True;self.flow.close();self.play_generation+=1;self.cancel_browse()
         GLib.source_remove(self.timer);self.youtube.close();self.listeners.clear()
         self.browse_pool.shutdown(wait=False,cancel_futures=True);self.play_pool.shutdown(wait=False,cancel_futures=True)

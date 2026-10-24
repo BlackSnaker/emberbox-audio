@@ -12,7 +12,7 @@ import struct
 def pack(source,destination):
     source,destination = Path(source),Path(destination)
     files,data,offset = {},[],0
-    for name in ('package.json','main.cjs','page.js','yandex.js','media_quality.cjs'):
+    for name in ('package.json','main.cjs','page.js','yandex.js','media_quality.cjs','flow.cjs'):
         raw = (source/name).read_bytes()
         block_size = 4*1024*1024
         files[name] = {'size':len(raw),'offset':str(offset),'integrity':{

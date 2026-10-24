@@ -18,6 +18,13 @@ Free-form moods and scenes use a local model; follow-ups can refine the previous
 set. Direct commands remain immediate.
 
 
+## EmberFlow — one song flows into the next
+
+A tactile amber switch blends the tail of one track into the opening of the next.
+Up to four seconds of real overlap for **in-player Apple Music and YouTube**,
+following your Ember queue. A briefly staged second deck keeps the transition
+local and avoids neural processing. [Controls and source support →](docs/FLOW.md)
+
 ## Your music, a little warmer.
 
 A warm desktop companion for **Spotify, Apple Music, YouTube and Yandex Music**, with audio-reactive gas-discharge tubes and controls that feel like a small piece of hi-fi equipment.

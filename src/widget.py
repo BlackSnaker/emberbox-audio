@@ -48,6 +48,7 @@ from widget_settings import SettingsMenu, settings_button, window_button
 from widget_control import WidgetControl
 from widget_morph import WidgetMorph
 from music_library import MusicService
+from flow_control import FlowControl,CSS as FLOW_CSS
 import widget_restart
 from youtube_audio import YouTubeAudio
 from youtube_panel import YouTubePanel
@@ -193,7 +194,7 @@ def stamp(microseconds):
 class Widget:
     def __init__(self):
         provider = Gtk.CssProvider()
-        provider.load_from_data(CSS+QUALITY_CSS)
+        provider.load_from_data(CSS+QUALITY_CSS+FLOW_CSS)
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -488,6 +489,10 @@ class Widget:
         self.drawer.connect('notify::child-revealed', lambda *_args: self.reflow())
 
         self.music=MusicService(self)
+        self.flow_control=FlowControl(self.music.flow)
+        self.time_row.pack_start(self.flow_control,False,False,0)
+        self.settings.flow=self.music.flow
+        neon_caption.set_no_show_all(True);neon_caption.hide()
         self.music_message='';self.music.subscribe(self.on_music_changed)
         self.panel.play_tracks=lambda item,items:self.play_list_track('spotify',item,items)
         self.apple_panel.play_tracks=lambda item,items:self.play_list_track('apple-music',item,items)

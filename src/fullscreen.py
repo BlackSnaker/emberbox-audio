@@ -23,6 +23,7 @@ from artist_catalog import artist_ref
 from artist_view import ArtistView,CSS as ARTIST_CSS
 from dj_service import DJService
 from dj_view import DJView,CSS as DJ_CSS
+from flow_control import FlowControl,CSS as FLOW_CSS
 
 
 CSS = b'''
@@ -166,7 +167,7 @@ class FullscreenPlayer:
         self.window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self.window.connect('delete-event',lambda *_args:(self.dismiss(),True)[1])
         self.window.connect('key-press-event',self.on_key)
-        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS+KARAOKE_CSS+ARTIST_CSS+DJ_CSS)
+        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS+KARAOKE_CSS+ARTIST_CSS+DJ_CSS+FLOW_CSS)
         Gtk.StyleContext.add_provider_for_screen(self.window.get_screen(),provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+5)
         self.provider=provider
         overlay=Gtk.Overlay();overlay.add(Gtk.Box());self.window.add(overlay)
@@ -287,6 +288,8 @@ class FullscreenPlayer:
         spectrum_box.pack_start(self.equalizer,False,False,0)
         caption=label(text('●  LIVE SOUND','●  ЖИВОЙ ЗВУК'),'stage-overline');caption.set_halign(Gtk.Align.CENTER)
         spectrum_box.pack_start(caption,False,False,0)
+        self.flow_control=FlowControl(self.music.flow);self.flow_control.set_halign(Gtk.Align.CENTER)
+        spectrum_box.pack_start(self.flow_control,False,False,0)
         console.pack_start(spectrum_box,True,True,0)
         transport=Gtk.Box(spacing=17);transport.set_valign(Gtk.Align.CENTER)
         self.previous_button=self.button('⏮',lambda:self.action('previous'),'stage-transport')

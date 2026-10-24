@@ -7,6 +7,7 @@ const path = require('node:path');
 const http = require('node:http');
 const net = require('node:net');
 const {attach:attachMediaQuality}=require(path.join(__dirname,'media_quality.cjs'));
+const {FlowDecks}=require('./flow.cjs');let flow=null;
 const yandex = process.env.EMBERBOX_WEB_SERVICE === 'yandex';
 const service = yandex ? {title:'Yandex Music',origin:'https://music.yandex.ru/',
   url:'https://music.yandex.ru/',command:'emberboxYandexCommand',page:'yandex.js',error:'YANDEX_REQUEST_FAILED'} :
@@ -109,7 +110,15 @@ function yandexRoute(route) {
   }catch{}
   return '';
 }
-async function command(win, request, navigations=0) {
+async function command(win,request){
+ if(request.method==='flow'){if(!flow)throw Error('FLOW_UNAVAILABLE');return flow.command(request.params||{});}
+ if(flow&&(['play','seek'].includes(request.method)||request.method==='enable'&&request.params?.enabled!==true||
+   request.method==='transport'))await flow.cancel();
+ const result=await pageRequest(flow?.current||win,request);
+ if(flow&&request.method==='status')return await flow.status()||result;
+ return result;
+}
+async function pageRequest(win, request, navigations=0) {
   const params=request.params||{};
   if(request.method==='show'){win.show();win.focus();record({windowVisible:true});return {shown:true};}
   if(request.method==='hide'){win.hide();record({windowVisible:false});return {hidden:true};}
@@ -117,7 +126,7 @@ async function command(win, request, navigations=0) {
     enabled=params.enabled===true;
     if(win.webContents.getURL().startsWith(service.origin)) {
       await win.webContents.executeJavaScript('window.__emberboxPlaybackAllowed='+JSON.stringify(enabled));
-      if(!enabled) await command(win,{method:'transport',params:{action:'pause'}}).catch(()=>{});
+      if(!enabled) await pageRequest(win,{method:'transport',params:{action:'pause'}}).catch(()=>{});
     }
     return {enabled};
   }
@@ -129,7 +138,7 @@ async function command(win, request, navigations=0) {
   const reasons=['CONTENT_EQUIVALENT','CONTENT_UNAVAILABLE','CONTENT_UNSUPPORTED','DEVICE_LIMIT','GEO_BLOCK',
     'INVALID_ARGUMENTS','MEDIA_LICENSE','MEDIA_KEY','MEDIA_PLAYBACK','NETWORK_ERROR','SUBSCRIPTION_ERROR','TypeError','ReferenceError','Error',
     'TOKEN_EXPIRED','UNAUTHORIZED_ERROR','UNSUPPORTED_ERROR','USER_INTERACTION_REQUIRED','WIDEVINE_CDM_EXPIRED',
-    'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND','REGION_UNAVAILABLE','SUBSCRIPTION_REQUIRED','ADAPTER_UNAVAILABLE','YANDEX_REQUEST_FAILED'];
+    'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND','REGION_UNAVAILABLE','SUBSCRIPTION_REQUIRED','ADAPTER_UNAVAILABLE','YANDEX_REQUEST_FAILED','FLOW_UNAVAILABLE','FLOW_CANCELLED','FLOW_NOT_READY'];
   const source='(async()=>{window.__emberboxPlaybackAllowed='+JSON.stringify(enabled)+';'+pageCommand+
     ';try{return await '+service.command+'('+JSON.stringify(request)+');}catch(e){'+
     (yandex?'if(e.emberboxRoute)return {__emberboxNavigate:e.emberboxRoute};':'')+
@@ -142,7 +151,7 @@ async function command(win, request, navigations=0) {
     const route=yandexRoute(result.__emberboxNavigate);
     if(!route||navigations>=1)throw Error('ADAPTER_UNAVAILABLE');
     await win.loadURL(new URL(route,service.origin).href);
-    return command(win,request,navigations+1);
+    return pageRequest(win,request,navigations+1);
   }
   if(result?.__emberboxError){
     diagnostic((yandex?'yandex-api-':'apple-api-')+result.stage+'-'+result.hint);
@@ -152,7 +161,8 @@ async function command(win, request, navigations=0) {
     playing:!!result.playing,position:Number(result.position)||0,duration:Number(result.duration)||0,
     hasTrack:!!result.title,windowVisible:win.isVisible()});
   if(request.method==='status') {
-    result.integrationVersion=yandex?5:8;
+    result.integrationVersion=yandex?5:10;
+    if(!yandex)result.emberFlow=true;
     result.audioQuality=win.emberboxQuality?.snapshot(String(result.id||result.title||''))||{};
     record({audioQuality:result.audioQuality,maximumQualityRequested:result.qualityPreference?.applied===true});
     if(yandex)record({capabilities:Object.fromEntries(['player','wave','navigation','metadata','store','legacy'].map(key=>[key,result.capabilities?.[key]===true]))});
@@ -181,14 +191,14 @@ function connectBridge(win) {
         const allowed=['CONTENT_EQUIVALENT','CONTENT_UNAVAILABLE','CONTENT_UNSUPPORTED','DEVICE_LIMIT','GEO_BLOCK',
           'INVALID_ARGUMENTS','MEDIA_LICENSE','MEDIA_KEY','MEDIA_PLAYBACK','NETWORK_ERROR','SUBSCRIPTION_ERROR','TypeError','ReferenceError','Error',
           'TOKEN_EXPIRED','UNAUTHORIZED_ERROR','UNSUPPORTED_ERROR','USER_INTERACTION_REQUIRED','WIDEVINE_CDM_EXPIRED',
-          'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND','REGION_UNAVAILABLE','SUBSCRIPTION_REQUIRED','ADAPTER_UNAVAILABLE','YANDEX_REQUEST_FAILED'];
+          'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND','REGION_UNAVAILABLE','SUBSCRIPTION_REQUIRED','ADAPTER_UNAVAILABLE','YANDEX_REQUEST_FAILED','FLOW_UNAVAILABLE','FLOW_CANCELLED','FLOW_NOT_READY'];
         const code=allowed.includes(value)?value:value.includes('Sign in to Apple Music')?'SIGN_IN_REQUIRED':
           value.includes('MusicKit is not ready')?'NOT_READY':value==='TIMEOUT'?'TIMEOUT':service.error;
         if(!socket.destroyed)socket.write(JSON.stringify({id:request.id,error:code})+'\n');
       }).finally(()=>clearTimeout(timer));
     }
   });
-  socket.on('close',()=>{if(!app.isQuitting)setTimeout(()=>connectBridge(win),700).unref();});
+  socket.on('close',()=>{if(flow)flow.cancel().catch(()=>{});if(!app.isQuitting)setTimeout(()=>connectBridge(win),700).unref();});
 }
 const PROBE = `<!doctype html><meta charset="utf-8"><title>Emberbox local EME probe</title><script>
 (async()=>{const audio=document.createElement('audio');const result={
@@ -228,6 +238,7 @@ app.whenReady().then(async()=>{
   } else {
     const seconds=Number(process.env.EMBERBOX_APPLE_SMOKE_SECONDS||0);
     const win=makeWindow(!seconds && process.env.EMBERBOX_APPLE_HIDE!=='1');
+    if(!yandex)flow=new FlowDecks(win,makeWindow,pageRequest,service.url);
     connectBridge(win);
     if(seconds) setTimeout(()=>{process.stdout.write(JSON.stringify(state)+'\n');app.quit();},seconds*1000);
     await win.loadURL(service.url);
