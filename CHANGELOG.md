@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.16.3 — 2026-10-25
+
+- Read Apple website `audioTraits` alongside catalogue `audioVariants`, including Atmos/surround aliases. Isolate song changes, keep optional lookups asynchronous and upgrade the adapter to integration 14.
+- Keep the playing badge tied to decoder evidence; AAC, FLAC or ordinary PCM cannot become Dolby Atmos through a variant label.
+- Add an isolated native streaming JOC/binaural developer probe and bilingual engineering notes. Verify the enhanced Apple manifest and clear-fixture decoder separately. Apple Music Atmos playback remains unfinished and is not enabled.
+
 ## 0.16.2 — 2026-10-24
 
 - Enlarge EmberFlow's glass lamp from 38×18 to 48×24 with a clearer, rounded filament. Gradually shift its emission from dull red through amber to warm gold, with cooler ends and restrained glass reflections.

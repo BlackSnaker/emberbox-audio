@@ -23,20 +23,26 @@ async function emberboxAppleCommand(request) {
     const queue = music?.queue || player?.queue;
     const current = music?.nowPlayingItem || player?.nowPlayingItem || queue?.currentItem || queue?.items?.[queue.position || 0];
     const a = current?.attributes || current || {};
+    // The website currently supplies audioTraits (atmos/surround), while the
+    // public catalogue also uses audioVariants (dolby-atmos/dolby-audio).
+    // These are catalogue availability only, never decoder evidence.
     const variantNames=['dolby-atmos','dolby-audio','hi-res-lossless','lossless','lossy-stereo'];
-    const variants=value=>Array.isArray(value)?[...new Set(value.filter(v=>variantNames.includes(v)))]:[];
-    const directVariants=variants(a.audioVariants);
+    const aliases={atmos:'dolby-atmos',surround:'dolby-audio'};
+    const variants=attributes=>[...new Set(['audioVariants','audioTraits'].flatMap(key=>
+      (Array.isArray(attributes?.[key])?attributes[key].slice(0,32):[])
+        .filter(v=>typeof v==='string').map(v=>aliases[v]||v).filter(v=>variantNames.includes(v))))];
+    const directVariants=variants(a);
     const catalogId=String(a.playParams?.catalogId||current?.id||'');
     const cache=window.__emberboxAudioVariants||(window.__emberboxAudioVariants={});
     if(cache.id!==catalogId){cache.id=catalogId;cache.values=[];cache.requested=false;}
     // Extended catalogue attributes are optional. Fetch once per song, without
     // delaying the status/transport response or exposing account credentials.
-    const storefront=String(music?.storefrontId||'');
+    const storefront=String(music?.storefrontId||'us');
     if(!directVariants.length&&!cache.requested&&music?.isAuthorized&&typeof music?.api?.music==='function'&&
        /^\d{1,20}$/.test(catalogId)&&/^[a-z]{2}$/.test(storefront)) {
       cache.requested=true;
       Promise.resolve().then(()=>music.api.music(`/v1/catalog/${storefront}/songs/${catalogId}`,{extend:'audioVariants'}))
-        .then(result=>{if(cache.id===catalogId)cache.values=variants((result?.data?.data||result?.data||[])[0]?.attributes?.audioVariants);})
+        .then(result=>{if(cache.id===catalogId)cache.values=variants((result?.data?.data||result?.data||[])[0]?.attributes);})
         .catch(()=>{});
     }
     const metadata = navigator.mediaSession?.metadata;

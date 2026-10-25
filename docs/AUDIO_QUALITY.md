@@ -20,7 +20,7 @@ The detail panel distinguishes **maximum requested** from the **format actually 
 - **AAC, Opus, Vorbis, MP3:** the decoder's codec and sample rate, when reported.
 - **Lossless:** a confirmed ALAC, FLAC or PCM stream. **Hi‑Res Lossless** appears when that stream's reported sample rate exceeds 48 kHz.
 - Details include sample rate, channel count and approximate measured bitrate when the engine provides them. A float32 decoder output does not establish a recording's original bit depth, so Emberbox does not infer one.
-- **Available in the catalogue** is a separate section for Apple Music's optional song `audioVariants`. It can include Dolby Atmos, Hi‑Res Lossless and Lossless even when current playback uses AAC. These catalogue labels never become the playing-format badge.
+- **Available in the catalogue** reads both Apple Music's song `audioVariants` and the website's `audioTraits`, including `atmos` and `surround`. It can include Dolby Atmos, Hi‑Res Lossless and Lossless even when current playback uses AAC. These catalogue labels never become the playing-format badge.
 
 ## Source support
 
@@ -31,7 +31,7 @@ The detail panel distinguishes **maximum requested** from the **format actually 
 | Built-in YouTube | libmpv codec, decoded sample rate/channels and measured packet bitrate | Not reported |
 | Spotify / external browsers / Firefox companion | These connections do not currently report the decoded stream format | Not reported |
 
-If data are absent, **Quality → Not reported** explains this; subscription level, quality preferences and device mixer rate are never used as substitutes. Browser playback does not acquire Lossless or Atmos support from a badge. E-AC-3 or multichannel audio alone does not confirm Dolby Atmos; the current web adapters do not verify an Atmos stream.
+If data are absent, **Quality → Not reported** explains this; subscription level, quality preferences and device mixer rate are never used as substitutes. Browser playback does not acquire Lossless or Atmos support from a badge. E-AC-3 or multichannel audio alone does not confirm Dolby Atmos; the current web adapters do not verify an Atmos stream. [Native JOC prototype and remaining Apple playback work →](ATMOS_PROTOTYPE.md)
 
 The badge describes the stream **before system audio processing**. Resampling, Bluetooth, spatial processing and output hardware can alter what reaches the listener. It does not certify a bit-perfect output path.
 

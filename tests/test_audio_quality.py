@@ -22,6 +22,13 @@ class QualityTests(unittest.TestCase):
     def test_eac3_and_multichannel_do_not_imply_atmos(self):
         q=describe({'audioQuality':{'codec':'eac3','channels':6,'sampleRate':48000,'evidence':'decoder'}})
         self.assertEqual(q['name'],'Dolby Digital Plus')
+        for codec in ('aac','pcm','flac'):
+            q=describe({'audioQuality':{'codec':codec,'variant':'dolby-atmos','evidence':'decoder'}})
+            self.assertNotEqual(q['name'],'Dolby Atmos')
+        q=describe({'audioQuality':{'codec':'eac3','variant':'dolby-atmos','evidence':'catalogue'}})
+        self.assertFalse(q['known'])
+        q=describe({'audioQuality':{'codec':'eac3','variant':'dolby-atmos','evidence':'decoder'}})
+        self.assertEqual(q['name'],'Dolby Atmos')
     def test_maximum_preference_cannot_invent_quality(self):
         q=describe({'qualityPreference':{'mode':'maximum','applied':True}})
         self.assertFalse(q['known']);self.assertNotEqual(q['policy'],'')

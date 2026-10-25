@@ -27,7 +27,8 @@ def describe(state):
     lossless=known and codec in ('flac','alac','pcm')
     name=(('Hi‑Res Lossless' if rate>48000 else 'Lossless') if lossless else CODECS.get(codec,''))
     # Multichannel and E-AC-3 alone do not confirm Dolby Atmos/JOC.
-    if known and value.get('variant')=='dolby-atmos':name='Dolby Atmos'
+    if codec=='eac3' and value.get('variant')=='dolby-atmos' and value.get('evidence') in ('decoder','mpv'):
+        name='Dolby Atmos'
     details=[CODECS[codec]] if known else []
     if known and depth and lossless:details.append(f'{depth} '+text('bit','бит'))
     if known and rate:
