@@ -60,6 +60,7 @@ runtime = Path(os.environ.get('XDG_RUNTIME_DIR', tempfile.gettempdir()))/f'ember
 runtime.mkdir(parents=True, exist_ok=True, mode=0o700)
 env = dict(os.environ, EMBERBOX_WEB_SERVICE=args.service, EMBERBOX_APPLE_PROFILE=str(profile),
            EMBERBOX_SPATIAL_RUNTIME=str(CACHE_DIR/'apple-spatial/runtime.json'),
+           EMBERBOX_FAIRPLAY_RUNTIME=str(CACHE_DIR/'apple-fairplay/runtime.json'),
            EMBERBOX_SPATIAL_CONFIG=str(CONFIG_DIR/'apple-spatial.json'),
            EMBERBOX_SPATIAL_PYTHON=sys.executable,
            EMBERBOX_SPATIAL_WORKER=str(Path(__file__).resolve().parent/'spatial_worker.py'),

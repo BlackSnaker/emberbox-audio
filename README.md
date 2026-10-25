@@ -6,16 +6,13 @@
   <p><a href="#get-started">Get started</a> · <a href="#system-requirements">System requirements</a> · <a href="docs/DESIGN.md">Grunesphism</a> · <a href="README.ru.md">Русский</a> · <a href="https://github.com/BlackSnaker/emberbox-video">Emberbox Video</a></p>
 </div>
 
-## 25 October · Space between songs
+## 25 October · Every detail, in the flow
 
-**Apple Music Atmos meets incandescent EmberFlow in beta 0.17.0.** Real JOC assets,
-spatial headphone rendering and smooth track overlap through one audio output.
-The Atmos badge appears after actual decoder confirmation.
+**Native Apple Lossless and Hi-Res join Atmos in beta 0.18.0.** Ember now selects Atmos when available, then the highest available ALAC for ordinary songs. The playing badge comes from the decoder, including original bit depth and sample rate.
 
-Enable **Settings → Dolby Atmos · headphones · beta**, then the existing
-**EmberFlow** switch and Ember queue. Prepare optional components with
-`./install.sh --apple-atmos`. Uses OpenJOC's independent renderer; beat alignment
-is not available in this path yet. [Setup, capabilities and limitations →](docs/ATMOS_PROTOTYPE.md)
+Connect through **Settings → Connect Apple Lossless…**. The private native session survives restarts. EmberFlow mixes the formats through one 192 kHz output clock, with warm, sample-smooth overlap. No Android VM or additional AI model.
+
+Optional setup: `./install.sh --apple-lossless`. Independent OpenJOC headphone rendering; native beat alignment remains unavailable. [Setup, checks and supported formats →](docs/ATMOS_PROTOTYPE.md)
 
 ---
 

@@ -44,6 +44,8 @@ pinned OpenJOC decoder with SHA-256 verification and download progress. Enable i
 separately in player settings; requires Linux x86_64, glibc ≥ 2.34 and installed
 compatible Widevine. [Headphone Atmos and EmberFlow →](ATMOS_PROTOTYPE.md)
 
+`./install.sh --apple-lossless` also prepares native ALAC / Hi-Res support, checks its build/linking dependencies and reuses verified downloads. Connect its separate Apple session through **Settings → Connect Apple Lossless…**. The native session is saved privately; the player selects Atmos, then the highest available ALAC for ordinary tracks. [Native formats and setup →](ATMOS_PROTOTYPE.md)
+
 ## What it prepares
 
 | Component | Purpose |

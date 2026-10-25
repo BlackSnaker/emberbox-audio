@@ -1,138 +1,116 @@
-# Apple Music Atmos · native headphone playback
+# Apple Music · native Atmos and Lossless
 
 **English** · [Русский](ATMOS_PROTOTYPE.ru.md)
 
-**Emberbox 0.17.0 adds an experimental Apple Music E-AC-3 JOC playback path.**
-It requests the enhanced asset within your signed-in session, uses your installed
-Widevine CDM and renders spatial audio with OpenJOC. Output is binaural float32
-PCM at 48 kHz, two channels for ordinary headphones.
+Emberbox 0.18 adds an optional native **ALAC / Hi-Res Lossless** path alongside
+its JOC headphone renderer. With native Lossless connected, automatic selection
+prefers **Atmos → highest available ALAC → standard playback**. Availability
+still depends on the recording, account and territory.
 
-This is OpenJOC's independent renderer, not a Dolby-certified engine or Apple's
-app renderer. Atmos bitstream output to an AV receiver and head tracking are not
-implemented. Atmos does not mean Lossless.
+| Playing format | Evidence and processing |
+| --- | --- |
+| Dolby Atmos | Licensed E-AC-3, actual JOC/OAMD confirmation by OpenJOC, binaural stereo rendering |
+| Lossless | Successfully decoded ALAC, original bit depth and sample rate from its configuration |
+| Hi-Res Lossless | Decoded ALAC above 48 kHz, up to 24-bit / 192 kHz |
+| AAC fallback | Standard Apple Music playback when the optional path cannot start |
 
-## Enable it
+The badge describes the **source being decoded**. Upsampling cannot create an
+Atmos or Hi-Res badge. Catalogue variants appear separately in quality details.
 
-1. Connect Apple Music through **Settings → Accounts** and play a song available
-   in Atmos in your catalogue.
-2. Enable **Dolby Atmos · headphones · beta** in player settings. First-use setup
-   prepares the optional components in the background.
-3. Wait for **Preparing Atmos…** to finish. **Dolby Atmos · 48** appears only after
-   the actual decoder confirms JOC.
+## Connect
 
-Prepare components and provision missing system dependencies beforehand with:
+1. Connect the Apple Music library through **Settings → Accounts**.
+2. For native ALAC, choose **Settings → Connect Apple Lossless…**. Setup runs in
+   a background process. This native engine needs its own Apple sign-in and,
+   when requested, a verification code. Enter them only in that window.
+3. Enable **Apple · Atmos / Lossless · beta**. The native sign-in action enables
+   it after successful connection. Without native sign-in, the Atmos path and
+   standard web playback remain available.
+4. Play a song. Open its quality badge to see original bit depth/rate and the
+   native output rate. The saved native session survives player restarts.
+
+Pre-install components and provision missing system dependencies:
 
 ```sh
-./install.sh --apple-atmos
+./install.sh --apple-atmos     # JOC headphone renderer
+./install.sh --apple-lossless  # also prepare the separate ALAC engine
 ```
 
-`./install.sh --check --apple-atmos` only inspects and displays a plan. Requirements:
-Linux x86_64, glibc ≥ 2.34, a compatible installed Widevine CDM, a C++17 compiler,
-NumPy, libmpv/python-mpv, FFmpeg and a PulseAudio protocol server, usually
-PipeWire-Pulse. The OpenJOC archive is about 100 MB; allow another 250 MB of free
-space for the archive, library and updates. Existing components are reused.
-Emberbox does not distribute the proprietary DRM module.
+`./install.sh --check --apple-lossless` only inspects and shows a plan. Neither
+command signs into an account. An Apple Music subscription is required.
 
-## Spatial EmberFlow
+## EmberFlow and output
 
-Enable the existing incandescent **EmberFlow** switch and add the next song to
-Ember's queue. Atmos uses the same control.
+The existing incandescent **EmberFlow** switch and Ember queue control both
+native formats. At most two producer processes feed one bounded PCM mixer.
+Each input holds up to four seconds plus bounded transport/decoder buffers.
+Mixing uses one sample clock, smooth complementary gain envelopes and up to
+an eight-second overlap. Artwork and queue handover follow the audible output.
 
-- An authorized decoder and a small buffer prepare the next track ahead of time.
-  At most two decoders exist simultaneously.
-- Each track receives its own spatial render. Their outputs mix into **one
-  float32 stream with a shared output clock**, using sample-based gain curves
-  rather than interface volume steps.
-- Up to eight seconds of intro reveal, foreground handover and fading ambience.
-  Complementary gains preserve peak headroom.
-- Queue and artwork promotion follow the audible output clock. The outgoing
-  decoder is released after the mix.
-- Transitions to ordinary AAC songs use decoding and high-quality conversion to
-  the common 48 kHz rate. The badge follows the incoming format; AAC never gains
-  an Atmos label.
-- **Beat alignment is not available in this path yet.** Tempo and pitch remain
-  unchanged. Ordinary Apple Music playback keeps its existing beat alignment.
+The original Atmos-only session uses a 48 kHz output clock. When native Lossless
+is connected, both decks share **192 kHz**, so a 96/192 kHz source is not forced
+through a 48 kHz mixer during overlap. Lower-rate material is converted with a
+streaming FFmpeg resampler. This does not increase its original quality.
+**Beat alignment is unavailable in the native path**; tempo and pitch stay
+unchanged. Ordinary MusicKit playback keeps its existing Beats mode.
 
-No additional neural model is required. Preparation and overlap temporarily add
-CPU and memory use. Buffers are bounded; unavailable licensing, network or decoder
-support returns to ordinary playback rather than looping requests.
-[Queue and EmberFlow controls →](FLOW.md)
+OpenJOC is an independent renderer, without Dolby certification or Apple's app
+renderer. Output is two-channel PCM for headphones; Atmos bitstream output to
+an AV receiver and head tracking are not implemented. The sound server, Bluetooth
+or output device may resample or otherwise process audio. The source badge does
+not certify an unchanged signal all the way to the headphones.
 
-## Quality evidence and fallback
+Pause, seek, source changes and cancellation control the entire native path.
+Expired authentication, unavailable licences, network or decoder errors restore
+ordinary playback instead of repeatedly retrying the same song.
 
-A catalogue Atmos label cannot change the playing-format badge. Real EC-3 access
-units, successful processing by the installed CDM, in-band JOC/OAMD confirmation
-and valid PCM are required. Device mixer rate is not substituted for stream data.
+## Components and resources
 
-Unavailable spatial playback restores ordinary Apple Music playback, with the
-attempt's reason in quality details. A failed track is not retried indefinitely.
-Disabling the option restores the ordinary engine at the current position. Pause,
-seek and source changes control the entire native path.
+Linux x86_64, glibc ≥ 2.34, NumPy, FFmpeg, libmpv/python-mpv and a PulseAudio
+protocol server, normally PipeWire-Pulse, are required. Atmos also uses a compatible
+installed Widevine module and a C++17 compiler. Lossless setup checks GCC/G++,
+make, git, OpenSSL and libcurl linking dependencies.
 
-## Lossless and Hi-Res: a separate source limitation
+Optional downloads are approximately **100 MB for OpenJOC + 75 MB for native
+Lossless dependencies**. Allow about **500 MB free disk space** for preparation
+and updates, and **512 MB extra RAM headroom** for native decoding and overlap.
+These are resource allowances, not measured minimum hardware requirements.
+No Android VM or new neural model runs. Existing verified downloads are reused.
+The minimum CPU for real-time rendering still needs testing on other machines.
 
-**Full Apple Music ALAC/Hi-Res playback is not supported yet.** Ordinary tracks
-request the highest supported MusicKit HIGH setting (AAC). Catalogue Lossless
-and Hi-Res labels are never presented as evidence of the playing stream.
+The Lossless adapter builds locally from the MIT-licensed
+[Adam source](https://github.com/silentone12725/apple-music-linux/tree/f2d66c3aa6a0cd78b41def391b2a08ed4af110e7)
+at a pinned revision, with Ember's compatibility patch. The patch fixes the Linux
+`login` symbol collision, forwards Apple dialogs to the user and bounds native
+subscription-state access. Loader and Android library downloads are SHA-256
+verified. Proprietary DRM libraries are fetched locally and are not bundled here.
 
-An authorized-session check on 25 October 2026 covered ordinary/enhanced web
-profiles and the catalogue `extendedAssetUrls.enhancedHls`. The extended HLS
-included ALAC: two checked recordings exposed FairPlay only; a third also had
-Widevine declarations. An isolated test decoded the third recording's opening
-fragment as 24-bit / 48 kHz ALAC, but Apple's server rejected the continuation
-license with `status: -1002`. Checking all declared licenses before playback
-confirmed that rejection. This describes the checked recordings/session, not
-a guarantee about the entire catalogue.
+## Account and data
 
-The isolated decoder also preserved exact 24-bit samples from our own synthetic
-ALAC fixtures at 44.1 and 96 kHz. An ALAC decoder therefore does not by itself
-provide access to Apple's complete stream. Partial experimental playback is
-excluded from the shipped player to avoid stopping a song after a few seconds.
+Signed media URLs and browser tokens stay inside the authorized Apple page.
+The optional native engine keeps its **separate account session in a private
+Ember profile**, with access restricted to the current user. Password and
+verification-code input travels through private process pipes and is not logged
+or saved by the sign-in UI. Apple dialogs require the person's selection.
 
-[Apple documents Lossless in its supported applications](https://support.apple.com/en-us/118295)
-and [FairPlay as protected playback on Apple platforms](https://developer.apple.com/streaming/fps/).
-[Cider also documents the MusicKit.js Lossless limitation](https://cider.sh/learn-more).
-Emberbox's native path provides verified JOC playback; a separate FairPlay
-backend is not implemented in it yet.
+Native code handles opaque licensed contexts; Ember provides no content-key
+export protocol. Encrypted fragments and decoded audio pass through memory and
+pipes. Audio/PCM files are not written to disk; native audio workers disable core
+dumps. Subscription, device and territory restrictions continue to apply.
 
-This is a limitation of the current connection, not proof that Linux Lossless
-is impossible. [Adam](https://github.com/silentone12725/apple-music-linux) advertises
-ALAC up to 192 kHz through Android FairPlay with separate authentication. A source
-audit confirmed a different sign-in mechanism and Android library dependencies.
-That route needs its own integration, complete-track validation and EmberFlow
-checks; support in Ember is not confirmed yet.
+## Verification and beta status
 
-## Account, licensing and data
+Checks include a full 16-bit / 44.1 kHz ALAC recording, real 24-bit / 48 kHz and
+24-bit / 96 kHz source sections, native seeking, and mixed-format output-clock
+handover. Synthetic ALAC fixtures preserve exact 24-bit samples at 44.1, 96 and
+192 kHz. Automated checks cover source selection, rotated licences, encrypted
+sample bounds, quality evidence, mixer cancellation and ordinary-playback recovery.
+Real account checks do not run in public CI.
 
-Account tokens and signed media addresses remain inside the signed-in
-`music.apple.com` page. Native processes receive opaque licence messages and
-encrypted fragments through a private local channel. Your installed CDM performs
-licensed decryption through its public API; there is no key export interface.
-Audio files and PCM are not written to disk; audio-process core dumps are disabled.
-Subscription, device and territory restrictions continue to apply.
+This remains an experimental integration: private Apple interfaces and native
+library compatibility can change. [OpenJOC 0.20.1](https://github.com/chyinan/OpenJOC/releases/tag/v0.20.1)
+is downloaded with pinned SHA-256
+`a031c473f3036700f66c81337ed73db8734a86b5086989e219e6bd0e1babe72c`.
+Its full Apache-2.0 licence and Adam's MIT notice are saved beside their runtimes.
 
-## Verification and beta limitations
-
-Development-machine checks include a real licensed Apple JOC stream, pause/resume,
-mid-song startup and seeking, song changes and AAC recovery. Six-second Atmos →
-Atmos and Atmos → AAC transitions confirmed concurrent decoders, outgoing release
-and continued incoming playback. Automated tests cover
-multiple encrypted CMAF sample descriptions, byte ranges and IVs, bounded buffers,
-continuous mixing and transition cancellation. Real account checks do not run in
-public CI.
-
-This is an early implementation for testing on other computers. Apple's private
-website interfaces and Widevine requirements can change. This feature does not
-add multichannel speaker output, ALAC/Hi-Res support or Dolby certification.
-
-[OpenJOC 0.20.1](https://github.com/chyinan/OpenJOC/releases/tag/v0.20.1) is an
-independent experimental Apache-2.0 decoder. Downloads pin SHA-256:
-
-```text
-a031c473f3036700f66c81337ed73db8734a86b5086989e219e6bd0e1babe72c
-```
-
-Its licence is saved beside the decoder library. Chromium's public CDM API headers
-are included with their BSD licence. [Third-party components →](THIRD_PARTY.md)
-
-[Audio quality](AUDIO_QUALITY.md) · [System requirements](REQUIREMENTS.md)
+[Audio quality](AUDIO_QUALITY.md) · [Requirements](REQUIREMENTS.md) · [Third-party components](THIRD_PARTY.md)

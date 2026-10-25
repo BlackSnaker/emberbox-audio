@@ -55,5 +55,16 @@ p.loadDeck=async(r,deck,prepared)=>{deck.context=prepared.contextId;deck.child=c
  const rejection=assert.rejects(cancelled,/FLOW_CANCELLED/);await p.flow(r,{operation:'cancel'});await rejection;
  assert.equal(commands.at(-1).keep,0);assert.equal(r.active.metadata.id,'123');
  await assert.rejects(p.intercept(win,{method:'spatial',params:{enabled:'true'}}),/INVALID_ARGUMENTS/);
+ await p.stop(false);
+ const profile=path.join(root,'native-profile');fs.mkdirSync(profile);fs.writeFileSync(path.join(profile,'session-ready'),'fixture');
+ process.env.EMBERBOX_FAIRPLAY_RUNTIME=path.join(root,'fairplay.json');
+ fs.writeFileSync(process.env.EMBERBOX_FAIRPLAY_RUNTIME,JSON.stringify({schema:1,library:path.join(root,'host'),librarySha256:'a'.repeat(64),profile}));
+ const ordinary={...metadata,id:'789',catalogId:'789',availableFormats:['lossless']};
+ await p.configure(true);p.merge(win,ordinary);r=p.session;assert(r,'Signed-in native Lossless should also start for ordinary tracks');
+ assert.equal(r.rate,192000);
+ const alac={codec:'alac',evidence:'decoder',sampleRate:96000,bitDepth:24,channels:2,outputSampleRate:192000};
+ p.message(r,r.active,{type:'quality',audioQuality:{...alac,evidence:'catalog'}});assert.equal(r.active.quality,null);
+ p.message(r,r.active,{type:'quality',audioQuality:{...alac,outputSampleRate:48000}});assert.equal(r.active.quality,null);
+ p.message(r,r.active,{type:'quality',audioQuality:alac});assert.deepEqual(r.active.quality,alac);
  console.log('PASS spatial lifecycle and native Flow: quality evidence, output-clock promotion, release, cancellation, pause, seek, fallback and stale recovery');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{p.stop(false);fs.rmSync(root,{recursive:true,force:true});});

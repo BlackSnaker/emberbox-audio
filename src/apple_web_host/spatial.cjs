@@ -11,9 +11,14 @@ async function sourceRequest(win,params){
  const result=await win.webContents.executeJavaScript('(async()=>{'+source+';try{return {result:await emberboxSpatialSource('+JSON.stringify(params)+')}}catch(e){return {error:'+JSON.stringify([...errors])+'.includes(e.message)?e.message:"SPATIAL_SOURCE_UNSUPPORTED",appleStatus:Number.isInteger(e.appleStatus)?e.appleStatus:null}}})()');
  if(result.error){const error=Error(result.error);if(Number.isInteger(result.appleStatus))error.appleStatus=result.appleStatus;throw error;}return result.result;
 }
+function fairplayRuntime(){
+ try{const r=JSON.parse(fs.readFileSync(process.env.EMBERBOX_FAIRPLAY_RUNTIME,'utf8'));
+  return r.schema===1&&typeof r.library==='string'&&typeof r.librarySha256==='string'&&/^[a-f0-9]{64}$/.test(r.librarySha256)&&typeof r.profile==='string'&&fs.statSync(r.library).isFile()&&fs.statSync(path.join(r.profile,'session-ready')).isFile()?r:null;
+ }catch{return null;}
+}
 function runtime(){
  try{const value=JSON.parse(fs.readFileSync(process.env.EMBERBOX_SPATIAL_RUNTIME,'utf8'));
-  return value.schema===1&&['host','decoder'].every(k=>typeof value[k]==='string'&&fs.statSync(value[k]).isFile())?value:null;
+  return value.schema===1&&['host','decoder'].every(k=>typeof value[k]==='string'&&fs.statSync(value[k]).isFile())?{...value,fairplay:fairplayRuntime()}:null;
  }catch{return null;}
 }
 class SpatialPlayback {
@@ -22,7 +27,7 @@ class SpatialPlayback {
   this.blocked=new Set();this.error='';this.revision=0;this.generation=0;
   try{this.enabled=JSON.parse(fs.readFileSync(process.env.EMBERBOX_SPATIAL_CONFIG,'utf8')).enabled===true;}catch{this.enabled=false;}
  }
- info(){const r=this.session;return {enabled:this.enabled,available:!!runtime(),phase:r?.state.phase||'idle',error:this.error,
+ info(){const r=this.session;return {enabled:this.enabled,available:!!runtime(),losslessAvailable:!!fairplayRuntime(),phase:r?.state.phase||'idle',error:this.error,
   flow:r&&(r.transition||!r.standby&&r.decks.filter(Boolean).length>1)?'mixing':r?.standby?.ready?'ready':r?.standby?'preparing':'idle',flowError:this.flowError||'',workerExit:this.workerExit||null,fragment:this.fragmentDebug||null,mix:this.mixDebug||null};}
  async configure(enabled){
   if(typeof enabled!=='boolean')throw Error('INVALID_ARGUMENTS');
@@ -39,7 +44,7 @@ class SpatialPlayback {
   // A paused MusicKit queue may retain the previous nowPlayingItem. The native
   // output owns its metadata until an explicit command or new web playback.
   if(r&&state.playing&&!this.matches(r.active.metadata,state)){this.stop(false).catch(()=>{});r=null;}
-  if(!r&&this.enabled&&state.playing&&state.authorized&&id&&state.availableFormats?.includes('dolby-atmos')&&!this.blocked.has(id)&&runtime()){
+  if(!r&&this.enabled&&state.playing&&state.authorized&&id&&(state.availableFormats?.includes('dolby-atmos')||fairplayRuntime())&&!this.blocked.has(id)&&runtime()){
    this.begin(win,state);r=this.session;
   }
   return {...state,...(r?{...r.active.metadata,position:r.state.position,
@@ -48,7 +53,8 @@ class SpatialPlayback {
  }
  begin(win,metadata,position=metadata.position,paused=false){
   const deck={metadata:{...metadata},slot:0,generation:++this.generation,quality:null,ready:false,context:null,child:null};
-  const r={win,active:deck,decks:[deck,null],standby:null,mixer:null,paused,
+  const nativeRuntime=runtime();
+  const r={win,nativeRuntime,rate:nativeRuntime?.fairplay?192000:48000,active:deck,decks:[deck,null],standby:null,mixer:null,paused,
    state:{phase:'preparing',position:Number(position)||0,playing:!paused},lastAdvance:Date.now(),flowRevision:0};
   this.session=r;this.error='';this.workerHint='';this.workerExit=null;this.fragmentDebug=null;
   this.blocked.add(String(metadata.id));if(this.blocked.size>32)this.blocked.delete(this.blocked.values().next().value);
@@ -56,8 +62,8 @@ class SpatialPlayback {
   r.watchdog=setTimeout(()=>{if(this.session===r&&!r.active.quality)this.failed(r,'SPATIAL_START_TIMEOUT');},25000);
   this.load(r).catch(e=>this.failed(r,errors.has(e.message)?e.message:'SPATIAL_PLAYBACK_FAILED'));
  }
- spawn(file,stdio){return spawn(process.env.EMBERBOX_SPATIAL_PYTHON,[file],{stdio,
-  env:{...process.env,PYTHONUNBUFFERED:'1',PYTHONFAULTHANDLER:'1',RAYON_NUM_THREADS:'2',OMP_NUM_THREADS:'1'}});}
+ spawn(file,stdio,rate=48000){return spawn(process.env.EMBERBOX_SPATIAL_PYTHON,[file],{stdio,
+  env:{...process.env,PYTHONUNBUFFERED:'1',PYTHONFAULTHANDLER:'1',EMBERBOX_SPATIAL_RATE:String(rate),RAYON_NUM_THREADS:'2',OMP_NUM_THREADS:'1'}});}
  wire(child,message,failed){
   child.stdin.on('error',()=>{});child.on('error',()=>failed('SPATIAL_WORKER_UNAVAILABLE'));
   child.stderr.on('data',chunk=>{const text=chunk.toString('utf8');
@@ -74,21 +80,21 @@ class SpatialPlayback {
  async load(r){
   await this.cancelFlow();if(this.session!==r)return;
   await this.page(r.win,{method:'transport',params:{action:'pause'}});if(this.session!==r)return;
-  const mixer=r.mixer=this.spawn(path.join(path.dirname(process.env.EMBERBOX_SPATIAL_WORKER),'spatial_mixer.py'),['pipe','pipe','pipe','pipe','pipe']);
+  const mixer=r.mixer=this.spawn(path.join(path.dirname(process.env.EMBERBOX_SPATIAL_WORKER),'spatial_mixer.py'),['pipe','pipe','pipe','pipe','pipe'],r.rate);
   for(const input of mixer.stdio.slice(3))input.on('error',()=>{});
   this.wire(mixer,v=>this.mixerMessage(r,v),code=>this.failed(r,code));
   this.send(mixer,{type:'pause',paused:r.paused});
   const metadata=r.active.metadata,id=/^\d{1,20}$/.test(String(metadata.catalogId||''))?metadata.catalogId:metadata.id;
-  await this.loadDeck(r,r.active,await this.source(r.win,{action:'prepare',id,kind:String(id).startsWith('i.')?'library-songs':'songs',allowStereo:true}),r.state.position);
+  await this.loadDeck(r,r.active,await this.source(r.win,{action:'prepare',id,kind:String(id).startsWith('i.')?'library-songs':'songs',allowStereo:true,fairplay:!!r.nativeRuntime?.fairplay}),r.state.position);
  }
  async loadDeck(r,deck,prepared,position=0){
   deck.context=prepared.contextId;
   if(this.session!==r||!r.decks.includes(deck)){this.source(r.win,{action:'close',contextId:deck.context}).catch(()=>{});return;}
   this.send(r.mixer,{type:'slot',slot:deck.slot,generation:deck.generation,position});
-  const child=deck.child=this.spawn(process.env.EMBERBOX_SPATIAL_WORKER,['pipe','pipe','pipe','pipe']);
+  const child=deck.child=this.spawn(process.env.EMBERBOX_SPATIAL_WORKER,['pipe','pipe','pipe','pipe'],r.rate);
   this.wire(child,v=>this.message(r,deck,v),code=>this.deckFailed(r,deck,code));
   child.stdio[3].pipe(r.mixer.stdio[3+deck.slot],{end:false});
-  this.send(child,{type:'start',runtime:runtime(),cdm:process.env.EMBERBOX_WIDEVINE,prepared,position,pcm:true,generation:deck.generation});
+  this.send(child,{type:'start',runtime:r.nativeRuntime,outputRate:r.rate,cdm:process.env.EMBERBOX_WIDEVINE,prepared,position,pcm:true,generation:deck.generation});
  }
  message(r,deck,value){
   if(this.session!==r||!r.decks.includes(deck))return;
@@ -105,11 +111,14 @@ class SpatialPlayback {
    });
   }else if(value.type==='quality'){
    const q=value.audioQuality;
-   if(q?.codec==='eac3'&&q.variant==='dolby-atmos'&&q.evidence==='decoder'&&q.renderer==='openjoc-binaural'&&q.sampleRate===48000&&q.channels===2){
-    deck.quality={codec:'eac3',variant:'dolby-atmos',evidence:'decoder',renderer:'openjoc-binaural',sampleRate:48000,channels:2};
+   if(q?.codec==='eac3'&&q.variant==='dolby-atmos'&&q.evidence==='decoder'&&q.renderer==='openjoc-binaural'&&q.sampleRate===48000&&q.channels===2&&(q.outputSampleRate===undefined||q.outputSampleRate===r.rate)){
+    deck.quality={codec:'eac3',variant:'dolby-atmos',evidence:'decoder',renderer:'openjoc-binaural',sampleRate:48000,channels:2,...(r.rate!==48000?{outputSampleRate:r.rate}:{})};
     if(deck===r.active){clearTimeout(r.watchdog);r.lastAdvance=Date.now();}
-   }else if(q?.codec==='aac'&&q.evidence==='decoder'&&[44100,48000,32000,24000].includes(q.sampleRate)&&q.outputSampleRate===48000&&q.channels===2){
-    deck.quality={codec:'aac',evidence:'decoder',sampleRate:q.sampleRate,channels:2,outputSampleRate:48000};
+   }else if(q?.codec==='aac'&&q.evidence==='decoder'&&[44100,48000,32000,24000].includes(q.sampleRate)&&q.outputSampleRate===r.rate&&q.channels===2){
+    deck.quality={codec:'aac',evidence:'decoder',sampleRate:q.sampleRate,channels:2,outputSampleRate:r.rate};
+    if(deck===r.active){clearTimeout(r.watchdog);r.lastAdvance=Date.now();}
+   }else if(q?.codec==='alac'&&q.evidence==='decoder'&&[44100,48000,88200,96000,176400,192000].includes(q.sampleRate)&&[16,20,24].includes(q.bitDepth)&&q.outputSampleRate===r.rate&&q.channels===2&&r.nativeRuntime?.fairplay){
+    deck.quality={codec:'alac',evidence:'decoder',sampleRate:q.sampleRate,bitDepth:q.bitDepth,channels:2,outputSampleRate:r.rate};
     if(deck===r.active){clearTimeout(r.watchdog);r.lastAdvance=Date.now();}
    }
   }else if(value.type==='decoded-end'){
@@ -165,7 +174,7 @@ class SpatialPlayback {
    if(!r.mixer||!r.active.quality||r.paused||r.state.phase!=='playing')throw Error('FLOW_NOT_READY');
    if(!['songs','library-songs'].includes(p.kind)||!/^\w[\w.-]{0,199}$/.test(String(p.id))||typeof p.key!=='string'||p.key.length>80)throw Error('INVALID_ARGUMENTS');
    await this.flow(r,{operation:'cancel'});const revision=r.flowRevision;
-   const prepared=await this.source(r.win,{action:'prepare',id:p.id,kind:p.kind,allowStereo:true});
+   const prepared=await this.source(r.win,{action:'prepare',id:p.id,kind:p.kind,allowStereo:true,fairplay:!!r.nativeRuntime?.fairplay});
    if(this.session!==r||revision!==r.flowRevision){this.source(r.win,{action:'close',contextId:prepared.contextId}).catch(()=>{});throw Error('FLOW_CANCELLED');}
    const freeUntil=Date.now()+1200;while(r.decks[1-r.active.slot]&&Date.now()<freeUntil)await new Promise(resolve=>setTimeout(resolve,30));
    if(r.decks[1-r.active.slot]){this.source(r.win,{action:'close',contextId:prepared.contextId}).catch(()=>{});throw Error('FLOW_NOT_READY');}
@@ -208,7 +217,7 @@ class SpatialPlayback {
   if(restore)await this.restore(r,revision);
  }
  async intercept(win,request){
-  if(request.method==='spatial'&&request.params?.operation==='formats')return this.source(win,{action:'inspect',id:request.params.id,kind:request.params.kind,enhanced:request.params.enhanced,extended:request.params.extended,encryption:request.params.encryption});
+  if(request.method==='spatial'&&request.params?.operation==='formats')return this.source(win,{action:'inspect',id:request.params.id,kind:request.params.kind,enhanced:request.params.enhanced,extended:request.params.extended,encryption:request.params.encryption,fairplayMetadata:request.params.fairplayMetadata});
   if(['play','transport','seek','enable','spatial'].includes(request.method))this.revision++;
   if(request.method==='spatial')return this.configure(request.params?.enabled);
   const r=this.session;if(!r)return null;

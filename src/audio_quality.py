@@ -55,10 +55,12 @@ def describe(state):
         policy=text('Choose the highest quality in the source app settings.','Выбери максимальное качество в настройках приложения-источника.')
     spatial=state.get('spatial') if isinstance(state.get('spatial'),dict) else {}
     if spatial.get('enabled') and spatial.get('phase')=='preparing':
-        badge=text('Preparing Atmos…','Готовим Atmos…');known=False;name=''
-        details=[text('Preparing the spatial stream','Подготовка пространственного потока')]
+        badge=text('Preparing audio…','Готовим звук…') if spatial.get('losslessAvailable') else text('Preparing Atmos…','Готовим Atmos…');known=False;name=''
+        details=[text('Preparing the best available stream','Подготовка лучшего доступного потока')]
     elif spatial.get('enabled') and spatial.get('error'):
-        reason=text('Apple device limit reached.','Достигнут лимит устройств Apple.') if spatial['error']=='DEVICE_LIMIT' else text('Spatial playback is unavailable for this attempt.','Пространственное воспроизведение в этой попытке недоступно.')
+        reason=(text('Apple device limit reached.','Достигнут лимит устройств Apple.') if spatial['error']=='DEVICE_LIMIT'
+            else text('Reconnect Apple Lossless in player settings.','Переподключи Apple Lossless в настройках плеера.') if spatial['error']=='SPATIAL_FAIRPLAY_SIGN_IN_REQUIRED'
+            else text('Native playback is unavailable for this attempt.','Нативное воспроизведение в этой попытке недоступно.'))
         policy=reason+' '+text('Standard playback restored.','Восстановлено обычное воспроизведение.')
     return {'badge':badge,'known':known,'name':name,'details':' · '.join(details),'available':available,'policy':policy}
 

@@ -1,0 +1,169 @@
+diff --git a/drm/native/drm_lib.c b/drm/native/drm_lib.c
+index a61480b..9190d3e 100644
+--- a/drm/native/drm_lib.c
++++ b/drm/native/drm_lib.c
+@@ -163,9 +163,9 @@ int drm_lib_init(const drm_lib_config_t *cfg)
+     }
+ 
+     /* Login if credentials supplied */
+-    extern uint8_t login(struct shared_ptr ctx);
++    extern uint8_t ember_native_account_login(struct shared_ptr ctx);
+     if (cfg->username && cfg->password) {
+-        if (!login(reqCtx)) {
++        if (!ember_native_account_login(reqCtx)) {
+             fprintf(stderr, "[drm_lib] login failed\n");
+             g_init_result = -1;
+             pthread_mutex_unlock(&g_init_mutex);
+@@ -267,8 +267,8 @@ int drm_lib_login(const char *username, const char *password)
+     amPassword = pw_buf;
+     amPasswordLen = strlen(pw_buf);
+ 
+-    extern uint8_t login(struct shared_ptr ctx);
+-    if (!login(reqCtx)) {
++    extern uint8_t ember_native_account_login(struct shared_ptr ctx);
++    if (!ember_native_account_login(reqCtx)) {
+         fprintf(stderr, "[drm_lib] login failed\n");
+         return -1;
+     }
+diff --git a/drm/native/hybris_stubs.c b/drm/native/hybris_stubs.c
+index a2befa0..c0436c1 100644
+--- a/drm/native/hybris_stubs.c
++++ b/drm/native/hybris_stubs.c
+@@ -311,6 +311,12 @@ void _ZNSt6__ndk110shared_ptrIN17storeservicescore16AuthenticateFlowEE11make_sha
+     fn(out,ctx);
+ }
+ 
++void _ZN17storeservicescore16AuthenticateFlow14setUseExistingEb(void *obj, unsigned char value) {
++    static void (*fn)(void*,unsigned char) = NULL;
++    if (!fn) fn = sym("_ZN17storeservicescore16AuthenticateFlow14setUseExistingEb");
++    fn(obj,value);
++}
++
+ void _ZN17storeservicescore16AuthenticateFlow3runEv(void *obj) {
+     static void (*fn)(void*) = NULL;
+     if (!fn) fn = sym("_ZN17storeservicescore16AuthenticateFlow3runEv");
+diff --git a/drm/native/import.h b/drm/native/import.h
+index 85b7d11..3c63e53 100644
+--- a/drm/native/import.h
++++ b/drm/native/import.h
+@@ -105,6 +105,7 @@ extern void
+ _ZNSt6__ndk110shared_ptrIN17storeservicescore16AuthenticateFlowEE11make_sharedIJRNS0_INS1_14RequestContextEEEEEES3_DpOT_(
+ 	struct shared_ptr *, struct shared_ptr *);
+ extern void _ZN17storeservicescore16AuthenticateFlow3runEv(void *);
++extern void _ZN17storeservicescore16AuthenticateFlow14setUseExistingEb(void *, unsigned char);
+ extern struct shared_ptr *_ZNK17storeservicescore16AuthenticateFlow8responseEv(void *);
+ extern int _ZNK17storeservicescore20AuthenticateResponse12responseTypeEv(void *);
+ 
+diff --git a/drm/native/main.c b/drm/native/main.c
+index b28afb5..67cab86 100644
+--- a/drm/native/main.c
++++ b/drm/native/main.c
+@@ -224,30 +224,31 @@ static void dialogHandler(long j, struct shared_ptr *protoDialogPtr,
+ 
+     struct std_vector *butVec =
+         _ZNK17storeservicescore14ProtocolDialog7buttonsEv(protoDialogPtr->obj);
+-    if (strcmp("Sign In", title) == 0) {
+-        for (struct shared_ptr *b = butVec->begin; b != butVec->end; ++b) {
+-            if (strcmp("Use Existing Apple ID",
+-                       std_string_data(
+-                           _ZNK17storeservicescore14ProtocolButton5titleEv(
+-                               b->obj))) == 0) {
+-                _ZN17storeservicescore22ProtocolDialogResponse17setSelectedButtonERKNSt6__ndk110shared_ptrINS_14ProtocolButtonEEE(
+-                    diagResp.obj, b);
+-                break;
+-            }
+-        }
+-    } else {
+-        // Auto-dismiss: select the first button ("Not Now" for concurrent-stream dialogs, etc.).
+-        // Without a selected button handleProtocolDialogResponse dereferences NULL → SIGSEGV.
+-        struct shared_ptr *first_btn = butVec->begin;
+-        if (first_btn != (struct shared_ptr *)butVec->end) {
+-            DRM_DEBUG("[.] dialogHandler: auto-dismissing '%s'\n",
+-                    std_string_data(
+-                        _ZNK17storeservicescore14ProtocolButton5titleEv(
+-                            first_btn->obj)));
+-            _ZN17storeservicescore22ProtocolDialogResponse17setSelectedButtonERKNSt6__ndk110shared_ptrINS_14ProtocolButtonEEE(
+-                diagResp.obj, first_btn);
+-        }
+-    }
++    /* Ember research: every Apple dialog is answered by the person in GTK. */
++    if (!g_drm_auth_cb) return;
++    const char *message = std_string_data(_ZNK17storeservicescore14ProtocolDialog7messageEv(protoDialogPtr->obj));
++    cJSON *payload = cJSON_CreateObject();
++    cJSON_AddStringToObject(payload,"title",title ? title : "Apple");
++    cJSON_AddStringToObject(payload,"message",message ? message : "");
++    cJSON *buttons = cJSON_AddArrayToObject(payload,"buttons");
++    int count = 0;
++    for (struct shared_ptr *b = butVec->begin; b != butVec->end && count < 8; ++b,++count) {
++        const char *name = std_string_data(_ZNK17storeservicescore14ProtocolButton5titleEv(b->obj));
++        cJSON_AddItemToArray(buttons,cJSON_CreateString(name ? name : "Continue"));
++    }
++    char *json = cJSON_PrintUnformatted(payload);
++    cJSON_Delete(payload);
++    if (!json || strlen(json) > 30000) {free(json);return;}
++    char *kind = malloc(strlen(json)+8);
++    if (!kind) {free(json);return;}
++    strcpy(kind,"dialog:");strcat(kind,json);free(json);
++    char reply[16] = {0};
++    g_drm_auth_cb(kind,reply,sizeof(reply),g_drm_auth_ud);free(kind);
++    char *end = NULL;long index = strtol(reply,&end,10);
++    if (!*reply || !end || *end || index < 0 || index >= count) return;
++    struct shared_ptr *chosen = ((struct shared_ptr *)butVec->begin)+index;
++    _ZN17storeservicescore22ProtocolDialogResponse17setSelectedButtonERKNSt6__ndk110shared_ptrINS_14ProtocolButtonEEE(diagResp.obj,chosen);
++
+     _ZN20androidstoreservices28AndroidPresentationInterface28handleProtocolDialogResponseERKlRKNSt6__ndk110shared_ptrIN17storeservicescore22ProtocolDialogResponseEEE(
+         apInf.obj, &j, &diagResp);
+ }
+@@ -265,6 +266,11 @@ static void credentialHandler(struct shared_ptr *credReqHandler,
+             credReqHandler->obj)),
+         need2FA ? "true" : "false");
+ 
++    if (g_drm_auth_cb) {
++        char allow[2] = {0};g_drm_auth_cb("credentials-requested",allow,sizeof(allow),g_drm_auth_ud);
++        if (allow[0] != '1') return;
++    }
++    if (!amUsername || !amPassword) return;
+     if (amPasswordLen && strlen(amPassword) > amPasswordLen)
+         amPassword[amPasswordLen] = '\0';
+     int passLen = strlen(amPassword);
+@@ -466,7 +472,7 @@ extern int   is_recovery_active(void);
+ /* Returns current RecoveryState as int: 0=Running 1=Scheduled 2=Refreshing 3=Failed */
+ extern int   get_recovery_state(void);
+ 
+-uint8_t login(struct shared_ptr reqCtx) {
++uint8_t ember_native_account_login(struct shared_ptr reqCtx) {
+     DRM_DEBUG("[+] logging in...\n");
+     if (file_exists(strcat_b(args_info.base_dir_arg, "/STOREFRONT_ID"))) {
+         remove(strcat_b(args_info.base_dir_arg, "/STOREFRONT_ID"));
+@@ -477,11 +483,11 @@ uint8_t login(struct shared_ptr reqCtx) {
+     struct shared_ptr flow;
+     _ZNSt6__ndk110shared_ptrIN17storeservicescore16AuthenticateFlowEE11make_sharedIJRNS0_INS1_14RequestContextEEEEEES3_DpOT_(
+         &flow, &reqCtx);
++    _ZN17storeservicescore16AuthenticateFlow14setUseExistingEb(flow.obj,1);
+     _ZN17storeservicescore16AuthenticateFlow3runEv(flow.obj);
+     struct shared_ptr *resp =
+         _ZNK17storeservicescore16AuthenticateFlow8responseEv(flow.obj);
+-    if (resp == NULL || resp->obj == NULL)
+-        return 0;
++    if (resp == NULL || resp->obj == NULL) {fprintf(stderr,"[ember] authentication response absent\n");return 0;}
+     const int respType =
+         _ZNK17storeservicescore20AuthenticateResponse12responseTypeEv(
+             resp->obj);
+@@ -1953,7 +1959,7 @@ int offline_available() {
+     }
+     struct std_vector fairplay_status = _ZN17storeservicescore8FairPlay21getSubscriptionStatusEv(fairplay->obj);
+     char *begin_ptr = (char*)fairplay_status.begin;
+-    if (!begin_ptr) {
++    if (!begin_ptr || (char*)fairplay_status.end-begin_ptr<32) {
+         fprintf(stderr, "[drm] offline_available: subscription status vector is empty\n"); fflush(stderr);
+         free(fairplay);
+         return 0;
+@@ -1988,7 +1994,7 @@ int main(int argc, char *argv[]) {
+         amUsername = strtok(args_info.login_arg, ":");
+         amPassword = strtok(NULL, ":");
+     }
+-    if (args_info.login_given && !login(reqCtx)) {
++    if (args_info.login_given && !ember_native_account_login(reqCtx)) {
+         fprintf(stderr, "[!] login failed\n");
+         write_drm_state("FAILED");
+         return EXIT_FAILURE;

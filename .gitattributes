@@ -1,0 +1,2 @@
+# Unified-diff context preserves the upstream source whitespace.
+src/fairplay_native/*.patch -whitespace

@@ -48,6 +48,35 @@ class AppleWeb:
         self.spatial_preparing=True;self.changed()
         self.pool.submit(prepare).add_done_callback(lambda future:GLib.idle_add(self._spatial_prepared,future))
 
+    def connect_lossless(self):
+        if self.closed or getattr(self,'lossless_connecting',False):return
+        self.lossless_connecting=True
+        self.pool.submit(self._connect_lossless).add_done_callback(lambda future:GLib.idle_add(self._lossless_connected,future))
+
+    def _connect_lossless(self):
+        enabled=self.state.get('spatial',{}).get('enabled') is True
+        self.request('spatial',enabled=False)
+        result=1
+        try:
+            if self.closed:return result
+            process=self.lossless_process=subprocess.Popen([sys.executable,str(Path(__file__).with_name('fairplay_signin.py'))],
+                stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            if self.closed:process.terminate()
+            result=process.wait()
+            return result
+        finally:
+            self.lossless_process=None
+            if not self.closed:self.request('spatial',enabled=enabled or result==0)
+
+    def _lossless_connected(self,future):
+        self.lossless_connecting=False
+        if self.closed:return False
+        try:
+            if future.result()==0:self.error=''
+        except Exception:self.error=text('Could not connect Apple Lossless. See the audio-quality guide.',
+            'Не удалось подключить Apple Lossless. См. руководство по качеству звука.')
+        self.changed();return False
+
     def _spatial_prepared(self,future):
         self.spatial_preparing=False
         if not self.closed:
@@ -167,7 +196,7 @@ class AppleWeb:
         try:
             self.state = future.result()
             self.error = ''
-            if self.state.get('ready') and self.state.get('integrationVersion',0)<15 and not self.upgrade_attempted:
+            if self.state.get('ready') and self.state.get('integrationVersion',0)<16 and not self.upgrade_attempted:
                 self.upgrade_attempted = self.upgrading = True
                 self.pool.submit(self._upgrade,dict(self.state)).add_done_callback(
                     lambda item:GLib.idle_add(self._upgraded,item))
@@ -197,7 +226,7 @@ class AppleWeb:
             if self.connected:
                 try:
                     current = self.bridge.request('status')
-                    if current.get('ready') and current.get('integrationVersion',0)>=15 and (not state.get('authorized') or current.get('authorized')):
+                    if current.get('ready') and current.get('integrationVersion',0)>=16 and (not state.get('authorized') or current.get('authorized')):
                         break
                 except BridgeUnavailable:pass
             time.sleep(.3)
@@ -222,6 +251,8 @@ class AppleWeb:
 
     def close(self):
         self.closed = True
+        signin=getattr(self,'lossless_process',None)
+        if signin and signin.poll() is None:signin.terminate()
         GLib.source_remove(self.timer)
         self.bridge.close()
         self.pool.shutdown(wait=False,cancel_futures=True)

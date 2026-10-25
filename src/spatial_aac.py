@@ -10,11 +10,11 @@ def configuration(asc):
     return rate,RATES[rate]
 
 class Aac:
-    def __init__(self,asc,output,stopping):
+    def __init__(self,asc,output,stopping,output_rate=48000):
         self.rate_index,self.rate=configuration(asc);self.output=output;self.stopping=stopping;self.error=None
         self.process=subprocess.Popen(['ffmpeg','-nostdin','-hide_banner','-loglevel','error','-threads','1',
             '-probesize','32','-analyzeduration','0','-f','aac','-i','pipe:0','-threads','1',
-            '-af','aresample=48000:filter_size=64:phase_shift=10','-ac','2','-ar','48000','-f','f32le','pipe:1'],
+            '-af',f'aresample={output_rate}:filter_size=64:phase_shift=10','-ac','2','-ar',str(output_rate),'-f','f32le','pipe:1'],
             stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
         self.thread=threading.Thread(target=self.read,daemon=True);self.thread.start()
     def read(self):
@@ -44,3 +44,18 @@ class Aac:
         for stream in (self.process.stdin,self.process.stdout):
             try:stream.close()
             except OSError:pass
+
+
+class PcmResampler(Aac):
+    """A bounded streaming pipe when native decks need one common clock."""
+    def __init__(self,rate,output_rate,output,stopping):
+        self.output=output;self.stopping=stopping;self.error=None
+        self.process=subprocess.Popen(['ffmpeg','-nostdin','-hide_banner','-loglevel','error','-threads','1',
+            '-f','f32le','-ac','2','-ar',str(rate),'-i','pipe:0','-threads','1',
+            '-af',f'aresample={output_rate}:filter_size=64:phase_shift=10','-ac','2','-ar',str(output_rate),
+            '-f','f32le','pipe:1'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
+        self.thread=threading.Thread(target=self.read,daemon=True);self.thread.start()
+
+    def write(self,data,samples=None):
+        if self.error:raise self.error
+        self.process.stdin.write(data);self.process.stdin.flush()

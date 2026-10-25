@@ -51,22 +51,25 @@ def audio_specific_config(data,start,end,depth=0):
 def initialization(data,end):
     trex={};descriptions=[]
     def entry(kind,p,q):
-        codec='eac3' if kind==b'ec-3' else 'aac' if kind==b'mp4a' else None;scheme=None;configs=[];asc=None
-        if kind not in (b'enca',b'ec-3',b'mp4a'):return None
+        codec={b'ec-3':'eac3',b'mp4a':'aac',b'alac':'alac'}.get(kind);scheme=None;configs=[];asc=None;cookie=None
+        if kind not in (b'enca',b'ec-3',b'mp4a',b'alac'):return None
         version=uint(data,p+8,2,q)
         if version not in (0,1,2):return None
         def walk(start,limit,depth=0):
-            nonlocal codec,scheme,asc
+            nonlocal codec,scheme,asc,cookie
             if depth>6:raise ValueError('CMAF nesting limit')
             for kind,_,p,q in boxes(data,start,limit):
                 if kind in (b'sinf',b'schi',b'wave'):walk(p,q,depth+1)
-                elif kind==b'frma':codec={b'ec-3':'eac3',b'mp4a':'aac'}.get(bytes(data[p:p+4]))
+                elif kind==b'frma':codec={b'ec-3':'eac3',b'mp4a':'aac',b'alac':'alac'}.get(bytes(data[p:p+4]))
                 elif kind==b'schm':scheme=bytes(data[p+4:p+8])
                 elif kind==b'esds':asc=audio_specific_config(data,p+4,q)
+                elif kind==b'alac':
+                    if q-p!=28:raise ValueError('Invalid ALAC configuration')
+                    cookie=bytes(data[p-8:q])
                 elif kind==b'tenc':configs.append(encryption(data,p,q))
         walk(p+{0:28,1:44,2:64}[version],q)
         if not codec or len(configs)!=1 or scheme not in (b'cbcs',b'cenc'):return None
-        return {**configs[0],'codec':codec,'asc':asc,'scheme':2 if scheme==b'cbcs' else 1}
+        return {**configs[0],'codec':codec,'asc':asc,'cookie':cookie,'scheme':2 if scheme==b'cbcs' else 1}
     def walk(start,limit,depth=0):
         if depth>12:raise ValueError('CMAF nesting limit')
         for kind,_,p,q in boxes(data,start,limit):
@@ -100,7 +103,7 @@ def sample_crypto(data,p,end,config,subsamples):
 
 
 def samples(data,init_size,original_offset):
-    if not 0<init_size<len(data)<=8*1024*1024:raise ValueError('CMAF bounds')
+    if not 0<init_size<len(data)<=18*1024*1024:raise ValueError('CMAF bounds')
     defaults,descriptions=initialization(data,init_size);produced=0
     for kind,moof,p,end in boxes(data,init_size,len(data)):
         if kind!=b'moof':continue
@@ -119,24 +122,25 @@ def samples(data,init_size,original_offset):
             default_crypto=descriptions[description-1]
             if flags&8:default['duration']=uint(data,at,4,hend);at+=4
             if flags&16:default['size']=uint(data,at,4,hend);at+=4
-            sizes=[];positions=[];next_pos=None
+            sizes=[];positions=[];durations=[];next_pos=None
             for kind,_,r,rend in children:
                 if kind!=b'trun':continue
                 f=uint(data,r,4,rend)&0xffffff;count=uint(data,r+4,4,rend);at=r+8
-                if count>1000 or len(sizes)+count>1000:raise ValueError('CMAF sample limit')
+                if count>2048 or len(sizes)+count>2048:raise ValueError('CMAF sample limit')
                 if f&1:
                     offset=uint(data,at,4,rend);offset=offset-(1<<32) if offset&(1<<31) else offset;at+=4
                     next_pos=moof+(base-original_moof)+offset
                 if f&4:at+=4
                 if next_pos is None:raise ValueError('Missing CMAF data offset')
                 for _ in range(count):
+                    duration=uint(data,at,4,rend) if f&256 else default.get('duration',0)
                     if f&256:at+=4
                     size=uint(data,at,4,rend) if f&512 else default.get('size',0)
                     if f&512:at+=4
                     if f&1024:at+=4
                     if f&2048:at+=4
                     if at>rend or not 0<size<=1048576 or not init_size<=next_pos<=len(data)-size:raise ValueError('Invalid CMAF sample range')
-                    sizes.append(size);positions.append(next_pos);next_pos+=size
+                    sizes.append(size);durations.append(duration);positions.append(next_pos);next_pos+=size
             if not sizes:continue
             config=copy.copy(default_crypto)
             # Key rotation via HLS uses the declared playlist KID when tenc KID
@@ -170,9 +174,9 @@ def samples(data,init_size,original_offset):
                 elif config['iv_size']==0:
                     crypto=[{**config,'pairs':[]} for _ in sizes]
                 else:raise ValueError('Missing sample encryption info')
-            for at,size,value in zip(positions,sizes,crypto):
+            for at,size,duration,value in zip(positions,sizes,durations,crypto):
                 if value['pairs'] and sum(a+b for a,b in value['pairs'])!=size:raise ValueError('Invalid encrypted subsample sizes')
                 produced+=1
-                if produced>1000:raise ValueError('CMAF sample limit')
-                yield bytes(data[at:at+size]),value
+                if produced>2048:raise ValueError('CMAF sample limit')
+                yield bytes(data[at:at+size]),{**value,'duration':duration}
     if not produced:raise ValueError('No CMAF audio samples')

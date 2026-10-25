@@ -3,10 +3,16 @@
 import collections,json,os,resource,struct,sys,threading,time
 import numpy as np
 from spatial_mix import RATE,BLOCK,BUFFER,blend,curve
+# A session uses one rate for both decks; ordinary Atmos stays at 48 kHz.
+RATE=int(os.environ.get('EMBERBOX_SPATIAL_RATE',RATE))
+if RATE not in (48000,192000):raise RuntimeError('SPATIAL_PCM_FORMAT')
+BLOCK=RATE//50;BUFFER=RATE*4
 resource.setrlimit(resource.RLIMIT_CORE,(0,0))
 # PR_SET_DUMPABLE also prevents system crash handlers from retaining audio.
 import ctypes
 if ctypes.CDLL(None).prctl(4,0,0,0,0)!=0:raise RuntimeError('SPATIAL_DUMP_PROTECTION')
+if ctypes.CDLL(None).prctl(1,15,0,0,0)!=0:raise RuntimeError('SPATIAL_PARENT_PROTECTION')
+if os.getppid()==1:os._exit(1)
 
 class Slot:
     def __init__(self,generation,origin):
@@ -166,7 +172,7 @@ def main():
     player=mixer.player=mpv.MPV(config=False,idle=True,keep_open=True,vid='no',vo='null',audio_display='no',
         force_window=False,input_default_bindings=False,input_vo_keyboard=False,osc=False,
         terminal=False,osd_level=0,ao='pulse',volume=100,volume_max=100,mute=False,
-        audio_client_name='Emberbox Audio · Apple Atmos',demuxer='rawaudio',
+        audio_client_name='Emberbox Audio · Apple Music',demuxer='rawaudio',
         demuxer_rawaudio_format='floatle',demuxer_rawaudio_rate=RATE,demuxer_rawaudio_channels='stereo',
         cache=False,demuxer_readahead_secs=.2,demuxer_max_bytes=131072,demuxer_max_back_bytes=0,audio_buffer=.1)
     read_fd,write_fd=os.pipe();player.pause=mixer.paused;player.play('fd://'+str(read_fd))

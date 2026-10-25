@@ -130,6 +130,24 @@ def prepare_spatial(ui,python,source):
     ui.item(ui.text('Decoder verified; enable it in player settings','Декодер проверен; включи его в настройках плеера'))
 
 
+def prepare_lossless(ui,python,source):
+    ui.note('Apple Lossless · beta · about 75 MB download','Apple Lossless · бета · загрузка около 75 МБ')
+    translations={
+        'Verifying the optional Lossless sources':'Проверка исходников Lossless',
+        'Downloading and verifying the optional native libraries':'Загрузка и проверка нативных библиотек',
+        'Building the isolated Lossless adapter':'Сборка отдельного движка Lossless',
+        'Lossless adapter ready; sign in from the player settings':'Движок Lossless готов; вход через настройки плеера',
+    }
+    with subprocess.Popen([python,'-B',str(source/'fairplay_setup.py')],stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT,text=True) as process:
+        timer=threading.Timer(420,process.kill);timer.daemon=True;timer.start();last=''
+        try:
+            for line in process.stdout:
+                last=line.strip().removeprefix('● ');ui.note(last,translations.get(last,last))
+            if process.wait()!=0:raise RuntimeError('Apple Lossless setup: '+last[:500])
+        finally:timer.cancel()
+
+
 def source_summary(ui,python,target,setup=True):
     spotify=bool(shutil.which('spotify'))
     if not spotify and shutil.which('flatpak'):
@@ -182,6 +200,7 @@ def main(argv=None):
     shortcut_options.add_argument('--no-desktop-shortcut',dest='desktop_shortcut',action='store_false',help='Remove the managed desktop shortcut')
     parser.add_argument('--bin-dir',type=Path,default=Path.home()/'.local/bin')
     parser.add_argument('--apple-atmos',action='store_true',help='Prepare the optional Apple Atmos headphone decoder (Linux x86_64, about 100 MB download)')
+    parser.add_argument('--apple-lossless',action='store_true',help='Prepare optional native Apple Lossless / Hi-Res support and Atmos (Linux x86_64)')
     parser.add_argument('--no-systemd',action='store_true',help='Use a direct desktop launcher')
     parser.add_argument('--skip-check',action='store_true',help='Packaging only: skip dependency installation and validation')
     parser.add_argument('--no-deps',action='store_true',help='Require existing dependencies; never install packages')
@@ -259,7 +278,7 @@ def main(argv=None):
     plan=None
     fresh_runtime=None
     if not args.skip_check:
-        report=dependencies.inspect(selected,spatial=args.apple_atmos)
+        report=dependencies.inspect(selected,spatial=args.apple_atmos or args.apple_lossless,lossless=args.apple_lossless)
         ui.item(report.distribution.name)
         env=os.environ
         ui.note('Desktop: '+env.get('XDG_CURRENT_DESKTOP','not detected')+' · '+env.get('XDG_SESSION_TYPE','not detected'),
@@ -269,7 +288,7 @@ def main(argv=None):
         # Never repair Python packages underneath the working installed player.
         # A fresh environment is committed by switching the manifest interpreter.
         if previous and any(key in dependencies.PURE for key in report.missing):
-            report=dependencies.inspect(spatial=args.apple_atmos)
+            report=dependencies.inspect(spatial=args.apple_atmos or args.apple_lossless,lossless=args.apple_lossless)
             runtime=target/('runtime-'+version+'-'+uuid.uuid4().hex[:8])
             fresh_runtime=runtime
         plan=dependencies.build_plan(report,venv_dir=runtime,yes=args.yes)
@@ -317,8 +336,10 @@ def main(argv=None):
             stage=Path(directory)
             ui.step(3,'Install the player','Установка плеера')
             stage_payload(stage)
-            if args.apple_atmos and not args.skip_check:
+            if (args.apple_atmos or args.apple_lossless) and not args.skip_check:
                 prepare_spatial(ui,selected,stage/'src')
+            if args.apple_lossless and not args.skip_check:
+                prepare_lossless(ui,selected,stage/'src')
             if not args.skip_check:
                 check_env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1')
                 checked=subprocess.run([selected,'-B','-c','import sys;sys.path.insert(0,sys.argv[1]);import widget',str(stage/'src')],

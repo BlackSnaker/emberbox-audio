@@ -130,3 +130,7 @@ Optional: plan for 4 modern cores, 8 GB total RAM and 3 GB additional storage
 for local models/runtime. Text-based mood matching works without models;
 voice and language AI are prepared in the DJ tab.
 [Setup, checked components and limitations →](DJ.md)
+
+## Optional Apple Lossless / Hi-Res
+
+`./install.sh --apple-lossless` also prepares the native ALAC adapter and checks GCC/G++, make, git, OpenSSL and libcurl linking dependencies. The extra download is about 75 MB beyond OpenJOC. Allow about 500 MB total free disk space for preparation/updates and 512 MB additional RAM headroom for the native path and overlap. These are resource allowances, not measured minimum hardware. No Android VM or new AI model runs. A separate Apple sign-in is available from player settings. Lossless sessions use a common 192 kHz mixer for mixed-format EmberFlow. [Details →](ATMOS_PROTOTYPE.md)

@@ -21,6 +21,7 @@ import shlex
 import shutil
 import subprocess
 import sys
+import tempfile
 
 
 LABELS = {
@@ -32,6 +33,7 @@ LABELS = {
     'libmpv': 'libmpv', 'python_mpv': 'python-mpv', 'yt_dlp': 'yt-dlp',
     'ejs': 'YouTube JavaScript challenge scripts', 'js_runtime': 'Deno ≥ 2.3 / Node ≥ 22',
     'ffmpeg': 'FFmpeg', 'cxx': 'C++17 compiler · Apple Atmos',
+    'fairplay_build':'Native Apple Lossless build tools',
 }
 PURE = {'numpy': 'numpy>=1.24', 'pillow': 'Pillow>=10',
         'websocket': 'websocket-client>=1.6', 'python_mpv': 'python-mpv',
@@ -55,6 +57,12 @@ PACKAGES = {
 }
 for _family,_compiler in {'arch':'gcc','debian':'g++','fedora':'gcc-c++','opensuse':'gcc-c++'}.items():
     PACKAGES[_family]['cxx']=(_compiler,)
+for _family,_packages in {
+    'arch':('gcc','make','git','openssl','curl'),
+    'debian':('build-essential','git','libssl-dev','libcurl4-openssl-dev'),
+    'fedora':('gcc','gcc-c++','make','git','openssl-devel','libcurl-devel'),
+    'opensuse':('gcc','gcc-c++','make','git','libopenssl-devel','libcurl-devel'),
+}.items():PACKAGES[_family]['fairplay_build']=_packages
 
 BOOTSTRAP = {'arch': ('python-pip',), 'debian': ('python3-venv',),
              'fedora': ('python3-pip',), 'opensuse': ('python3-pip',)}
@@ -101,6 +109,7 @@ class Report:
     immutable_paths: tuple = ()
     apt_indexes: bool | None = True
     spatial: bool = False
+    lossless: bool = False
 
     @property
     def missing(self):
@@ -305,7 +314,7 @@ def apt_indexes_available(directory='/var/lib/apt/lists'):
         return None
 
 
-def inspect(python=None, *, youtube=True, spatial=False, os_release='/etc/os-release', environ=None, immutable_paths=None):
+def inspect(python=None, *, youtube=True, spatial=False, lossless=False, os_release='/etc/os-release', environ=None, immutable_paths=None):
     env = dict(os.environ if environ is None else environ)
     selected = str(python or ('/usr/bin/python3' if Path('/usr/bin/python3').is_file() else sys.executable))
     distribution = detect_distribution(os_release, immutable_paths)
@@ -324,13 +333,23 @@ def inspect(python=None, *, youtube=True, spatial=False, os_release='/etc/os-rel
     if spatial:
         checks['cxx']=any(shutil.which(name,path=path) for name in ('c++','g++','clang++'))
         checks.update({key:bool(probe['checks'].get(key)) for key in ('libmpv','python_mpv')})
+    if lossless:
+        checks['fairplay_build']=all(shutil.which(name,path=path) for name in ('gcc','g++','make','git'))
+        if checks['fairplay_build']:
+            try:
+                with tempfile.TemporaryDirectory(prefix='emberbox-link-check-') as directory:
+                    result=subprocess.run([shutil.which('g++',path=path),'-shared','-fPIC','-x','c++','-',
+                        '-o',str(Path(directory)/'check.so'),'-Wl,--no-as-needed','-lcrypto','-lssl','-lcurl'],
+                        input='int ember_link_check=0;',capture_output=True,text=True,timeout=8)
+                    checks['fairplay_build']=result.returncode==0
+            except (OSError,subprocess.SubprocessError):checks['fairplay_build']=False
     checks['ffmpeg'] = bool(shutil.which('ffmpeg', path=path))
     kept_env = {key: env[key] for key in ('PATH', 'XDG_SESSION_TYPE', 'WAYLAND_DISPLAY') if key in env}
     markers = tuple(immutable_paths) if immutable_paths is not None else ('/run/ostree-booted', '/usr/share/ublue-os/image-info.json')
     return Report(selected, distribution, checks, versions, dict(probe.get('details', {})), wayland, youtube,
                   bool(probe.get('venv')), bool(probe.get('ensurepip')), _installed(distribution.family),
                   str(os_release), kept_env, markers,
-                  apt_indexes_available() if distribution.family=='debian' else None,spatial)
+                  apt_indexes_available() if distribution.family=='debian' else None,spatial,lossless)
 
 
 def package_command(family, packages, *, yes=False, sudo=True):
@@ -414,7 +433,7 @@ def provision(plan, *, yes=False, runner=None, progress=None):
         for command in plan.system_commands[:-1]:
             _run(command,run,progress)
         _run(package_command(plan.report.distribution.family, plan.packages, yes=yes, sudo=plan.sudo), run, progress)
-    report = inspect(plan.report.python, youtube=plan.report.youtube, spatial=plan.report.spatial, os_release=plan.report.os_release,
+    report = inspect(plan.report.python, youtube=plan.report.youtube, spatial=plan.report.spatial, lossless=plan.report.lossless, os_release=plan.report.os_release,
                      environ=plan.report.environ, immutable_paths=plan.report.immutable_paths)
     if report.ready:return ProvisionResult(report.python, report)
     native = [key for key in report.missing if key not in PURE]
@@ -447,7 +466,7 @@ def provision(plan, *, yes=False, runner=None, progress=None):
     if not prefix or Path(prefix).absolute() != directory or prefix == base:
         raise DependencyError('Refusing pip outside the isolated Emberbox runtime.')
     _run((runtime, '-I', '-m', 'pip', '--isolated', 'install', '--disable-pip-version-check', '--only-binary=:all:', *requirements), run, progress)
-    final = inspect(runtime, youtube=report.youtube, spatial=report.spatial, os_release=report.os_release,
+    final = inspect(runtime, youtube=report.youtube, spatial=report.spatial, lossless=report.lossless, os_release=report.os_release,
                     environ=report.environ, immutable_paths=report.immutable_paths)
     if not final.ready:
         raise DependencyError('Dependency verification failed: '+', '.join(LABELS.get(key,key) for key in final.missing))

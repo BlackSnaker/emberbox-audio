@@ -25,7 +25,7 @@ async function emberboxSpatialSource(params) {
  function range(value,fallback=0){
   const m=/^(\d+)(?:@(\d+))?$/.exec(value||'');if(!m)throw Error('SPATIAL_SOURCE_UNSUPPORTED');
   const length=Number(m[1]),start=m[2]?Number(m[2]):fallback;
-  if(!Number.isSafeInteger(start)||!Number.isSafeInteger(length)||!Number.isSafeInteger(start+length)||length<1||length>4194304)throw Error('SPATIAL_SOURCE_LIMIT');
+  if(!Number.isSafeInteger(start)||!Number.isSafeInteger(length)||!Number.isSafeInteger(start+length)||length<1||length>16777216)throw Error('SPATIAL_SOURCE_LIMIT');
   return {start,length};
  }
  if(params.action==='prepare'||params.action==='inspect') {
@@ -50,10 +50,26 @@ async function emberboxSpatialSource(params) {
    if(typeof url!=='string')throw Error('SPATIAL_NO_ATMOS_ASSET');asset.assetURL=safeUrl(url).href;
   }
   const lines=new TextDecoder().decode(await bytes(asset.assetURL)).split(/\r?\n/).map(s=>s.trim()),variants=[],offered=[];
+  let lossless=null;
   for(let i=0;i<lines.length;i++)if(lines[i].startsWith('#EXT-X-STREAM-INF:')){
    const a=attr(lines[i].slice(18));
    offered.push({codecs:String(a.CODECS||'').split(',').filter(v=>['ec-3','ac-3','alac','flac','mp4a.40.2','mp4a.40.5','mp4a.40.29'].includes(v)),bandwidth:Number(a.BANDWIDTH)||0,sampleRate:Number(a['SAMPLE-RATE'])||0});
    if(((a.CODECS||'').split(',').includes('ec-3')||params.allowStereo===true&&(a.CODECS||'').includes('mp4a.40.2'))&&lines[i+1]&&!lines[i+1].startsWith('#'))variants.push({a,uri:lines[i+1]});
+  }
+  // Atmos keeps priority. A signed-in native FairPlay session can fetch ALAC
+  // when the web asset has no spatial stream. No signed media URL leaves here.
+  if(params.action==='prepare'&&params.fairplay===true&&!variants.some(v=>v.a.CODECS.includes('ec-3'))){
+   const url=current.attributes?.extendedAssetUrls?.enhancedHls;
+   if(typeof url==='string'){
+    const base=safeUrl(url).href,master=new TextDecoder().decode(await bytes(base)).split(/\r?\n/).map(s=>s.trim()),candidates=[];
+    for(let i=0;i<master.length;i++)if(master[i].startsWith('#EXT-X-STREAM-INF:')){
+     const a=attr(master[i].slice(18));if(a.CODECS==='alac'&&master[i+1]&&!master[i+1].startsWith('#'))candidates.push({a,uri:master[i+1]});
+    }
+    for(const v of candidates.sort((a,b)=>Number(b.a.BANDWIDTH)-Number(a.a.BANDWIDTH)).slice(0,4)){
+     const leaf=new URL(v.uri,base).href,list=new TextDecoder().decode(await bytes(leaf)).split(/\r?\n/).map(s=>s.trim());
+     if(list.some(s=>s.startsWith('#EXT-X-KEY:')&&attr(s.slice(11)).KEYFORMAT==='com.apple.streamingkeydelivery')){lossless={...v,leaf,list};break;}
+    }
+   }
   }
   if(params.action==='inspect'){
    const protection=[];
@@ -65,22 +81,31 @@ async function emberboxSpatialSource(params) {
       const keys=list.split(/\r?\n/).filter(s=>s.startsWith('#EXT-X-KEY:')).map(s=>attr(s.slice(11)));
       protection.push({codecs:codecs.filter(v=>['alac','flac'].includes(v)),widevine:keys.some(widevine),fairplay:keys.some(a=>a.KEYFORMAT==='com.apple.streamingkeydelivery'),
        methods:[...new Set(keys.map(a=>a.METHOD).filter(v=>['SAMPLE-AES','SAMPLE-AES-CTR','NONE','AES-128'].includes(v)))],
-       widevineInitBytes:keys.filter(widevine).slice(0,16).map(a=>a.URI?.includes('base64,')?decode(a.URI.split('base64,')[1]).length:0)});
+       widevineInitBytes:keys.filter(widevine).slice(0,16).map(a=>a.URI?.includes('base64,')?decode(a.URI.split('base64,')[1]).length:0),
+       ...(params.fairplayMetadata===true?{licenseUris:[...new Set(keys.filter(a=>a.KEYFORMAT==='com.apple.streamingkeydelivery').map(a=>a.URI).filter(v=>typeof v==='string'&&v.length<=512&&/^skd:\/\/itunes\.apple\.com\/[A-Za-z0-9/_=.-]+$/.test(v)))].slice(0,16)}:{})});
      }
     }
    }
    return {enhanced:params.enhanced!==false,extended:params.extended===true,variants:offered.slice(0,128),protection};
   }
-  if(!variants.length)throw Error('SPATIAL_NO_ATMOS_ASSET');
-  const selected=variants.sort((a,b)=>Number(b.a.CODECS.includes('ec-3'))-Number(a.a.CODECS.includes('ec-3'))||Number(b.a.BANDWIDTH)-Number(a.a.BANDWIDTH))[0];
-  let leaf=new URL(selected.uri,asset.assetURL).href;
+  if(!lossless&&!variants.length)throw Error('SPATIAL_NO_ATMOS_ASSET');
+  const selected=lossless||variants.sort((a,b)=>Number(b.a.CODECS.includes('ec-3'))-Number(a.a.CODECS.includes('ec-3'))||Number(b.a.BANDWIDTH)-Number(a.a.BANDWIDTH))[0];
+  let leaf=lossless?.leaf||new URL(selected.uri,asset.assetURL).href;
   const audio=lines.filter(s=>s.startsWith('#EXT-X-MEDIA:')).map(s=>attr(s.slice(13))).find(a=>a.TYPE==='AUDIO'&&a['GROUP-ID']===selected.a.AUDIO&&a.URI&&/JOC/.test(a.CHANNELS||''));
-  if(audio)leaf=new URL(audio.URI,asset.assetURL).href;
-  const media=new TextDecoder().decode(await bytes(leaf)).split(/\r?\n/).map(s=>s.trim());
+  if(audio&&!lossless)leaf=new URL(audio.URI,asset.assetURL).href;
+  const media=lossless?.list||new TextDecoder().decode(await bytes(leaf)).split(/\r?\n/).map(s=>s.trim());
   const licences=[],segments=[];let map=null,slice=null,end=0,previous='',duration=0,start=0,keyIndex=-1;
   for(const line of media){
    if(line.startsWith('#EXT-X-KEY:')){
-    const a=attr(line.slice(11));if(!widevine(a))continue;
+    const a=attr(line.slice(11));
+    if(lossless){
+     if(a.KEYFORMAT!=='com.apple.streamingkeydelivery')continue;
+     if(a.METHOD!=='SAMPLE-AES'||typeof a.URI!=='string'||a.URI.length>512||!/^skd:\/\/itunes\.apple\.com\/[A-Za-z0-9/_=.-]+$/.test(a.URI))throw Error('SPATIAL_SOURCE_UNSUPPORTED');
+     keyIndex=licences.findIndex(v=>v.keyuri===a.URI);
+     if(keyIndex<0){if(licences.length>=16)throw Error('SPATIAL_SOURCE_LIMIT');keyIndex=licences.length;licences.push({keyuri:a.URI});}
+     continue;
+    }
+    if(!widevine(a))continue;
     const keyuri=canonical(a.URI);keyIndex=licences.findIndex(v=>v.keyuri===keyuri);
     if(keyIndex<0){
      const raw=a.URI.includes('base64,')?decode(a.URI.split('base64,')[1]):new TextEncoder().encode(a.URI);let pssh=raw;
@@ -98,14 +123,14 @@ async function emberboxSpatialSource(params) {
    }
   }
   if(!segments.length)throw Error('SPATIAL_SOURCE_UNSUPPORTED');
-  const certificate=await bytes(asset.keyCertURL,131072),item=Object.create(current),contextId=crypto.randomUUID();
+  const certificate=lossless?new Uint8Array():await bytes(asset.keyCertURL,131072),item=Object.create(current),contextId=crypto.randomUUID();
   Object.defineProperty(item,'keyURLs',{value:{'hls-key-server-url':asset.keyServerURL,'widevine-cert-url':asset.keyCertURL}});
   contexts.set(contextId,{item,asset,licences,segments,cache:null});
   const a=current.attributes||{},art=a.artwork?.url||'';
   const names={'atmos':'dolby-atmos','surround':'dolby-audio','hiResLossless':'hi-res-lossless'};
   const formats=[...new Set([...(Array.isArray(a.audioVariants)?a.audioVariants:[]),...(Array.isArray(a.audioTraits)?a.audioTraits:[])].map(v=>names[v]||v).filter(v=>['dolby-atmos','dolby-audio','hi-res-lossless','lossless','lossy-stereo'].includes(v)))];
-  const metadata={id:String(params.id||current.id),catalogId:String(current.catalogId||current.id),title:String(a.name||''),artist:String(a.artistName||''),album:String(a.albumName||''),duration:Number(a.durationInMillis||0)/1000,image:art.replace('{w}','1200').replace('{h}','1200'),availableFormats:formats.length?formats:selected.a.CODECS.includes('ec-3')?['dolby-atmos']:['lossy-stereo'],authorized:true,ready:true};
-  return {metadata,codec:selected.a.CODECS.includes('ec-3')?'eac3':'aac',contextId,certificate:encode(certificate),licences:licences.map(v=>({pssh:v.pssh})),segments:segments.map(({start,duration,keyIndex})=>({start,duration,keyIndex}))};
+  const metadata={id:String(params.id||current.id),catalogId:String(current.catalogId||current.id),title:String(a.name||''),artist:String(a.artistName||''),album:String(a.albumName||''),duration:Number(a.durationInMillis||0)/1000,image:art.replace('{w}','1200').replace('{h}','1200'),availableFormats:formats.length?formats:lossless?['lossless']:selected.a.CODECS.includes('ec-3')?['dolby-atmos']:['lossy-stereo'],authorized:true,ready:true};
+  return {metadata,codec:lossless?'alac':selected.a.CODECS.includes('ec-3')?'eac3':'aac',drm:lossless?'fairplay':'widevine',contextId,certificate:encode(certificate),licences:licences.map(v=>lossless?{uri:v.keyuri}:{pssh:v.pssh}),segments:segments.map(({start,duration,keyIndex})=>({start,duration,keyIndex}))};
  }
  const ctx=contexts.get(params.contextId);if(!ctx)throw Error('SPATIAL_STALE_CONTEXT');
  if(params.action==='license'){
@@ -120,9 +145,9 @@ async function emberboxSpatialSource(params) {
  }
  if(params.action==='segment'){
   const index=Number(params.index),offset=Number(params.offset||0),segment=ctx.segments[index];
-  if(!Number.isInteger(index)||!segment||!Number.isSafeInteger(offset)||offset<0||offset>8388608)throw Error('INVALID_ARGUMENTS');
+  if(!Number.isInteger(index)||!segment||!Number.isSafeInteger(offset)||offset<0||offset>18874368)throw Error('INVALID_ARGUMENTS');
   if(ctx.cache?.index!==index){
-   const init=await bytes(segment.map.url,1048576,segment.map.range),body=await bytes(segment.url,4194304,segment.range);
+   const init=await bytes(segment.map.url,1048576,segment.map.range),body=await bytes(segment.url,16777216,segment.range);
    const data=new Uint8Array(init.length+body.length);data.set(init);data.set(body,init.length);ctx.cache={index,data,bodyKind:new TextDecoder().decode(body.subarray(4,8)).replace(/[^a-z0-9 ]/gi,'?'),initBytes:init.length,originalOffset:new URL(segment.map.url).origin+new URL(segment.map.url).pathname===new URL(segment.url).origin+new URL(segment.url).pathname?(segment.range?.start||0):0};
   }
   const data=ctx.cache.data;if(offset>=data.length)throw Error('INVALID_ARGUMENTS');

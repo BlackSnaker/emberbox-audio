@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.18.0 — 2026-10-25
+
+- Optional native Apple ALAC / Hi-Res playback with separate private sign-in, saved sessions and automatic Atmos → ALAC → standard selection. Decoder-confirmed source bit depth/rate.
+- One 192 kHz output clock for mixed Lossless / Hi-Res / Atmos EmberFlow; original format badges remain separate from output conversion. Pause, seek and bounded fallback.
+- Pinned native-source build, verified library downloads, `--apple-lossless` dependency provisioning and an account window in player settings. Fix the native Linux login symbol collision. Integration 16.
+- Verify real 16/44.1 and 24/96 playback, six-second mixed-format overlap, exact synthetic 24-bit ALAC samples up to 192 kHz, and bilingual setup/quality documentation. Native beat alignment remains unavailable.
+
 ## 0.17.0 — 2026-10-25
 
 - Experimental playback of real Apple Music E-AC-3 JOC assets through installed Widevine and OpenJOC: spatial float32 headphone output at 48 kHz. The Atmos badge requires decoder confirmation.
