@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="560" viewBox="0 0 1440 560" role="img" aria-labelledby="title desc">
+<title id="title">Closer to the music. — Ember 0.18</title><desc id="desc">Original Ember illustration: amber tubes and spatial sound orbits. Dedicated to Ray Dolby.</desc>
+<defs>
+<linearGradient id="base" x2="1" y2="1"><stop stop-color="#2d3025"/><stop offset=".55" stop-color="#1c251d"/><stop offset="1" stop-color="#101811"/></linearGradient>
+<radialGradient id="air" cx=".82" cy=".46" r=".54"><stop stop-color="#d69b3d" stop-opacity=".18"/><stop offset="1" stop-color="#d69b3d" stop-opacity="0"/></radialGradient>
+<radialGradient id="halo"><stop stop-color="#f3a348" stop-opacity=".22"/><stop offset=".55" stop-color="#ba7d35" stop-opacity=".08"/><stop offset="1" stop-color="#ba7d35" stop-opacity="0"/></radialGradient>
+<linearGradient id="glass" x2=".85" y2="1"><stop stop-color="#b8b294" stop-opacity=".19"/><stop offset=".25" stop-color="#292d20" stop-opacity=".2"/><stop offset=".7" stop-color="#0b140e" stop-opacity=".7"/><stop offset="1" stop-color="#7b7150" stop-opacity=".2"/></linearGradient>
+<linearGradient id="metal" x2=".25" y2="1"><stop stop-color="#e8d7a4" stop-opacity=".4"/><stop offset=".43" stop-color="#68654b" stop-opacity=".22"/><stop offset="1" stop-color="#e8d7a4" stop-opacity=".08"/></linearGradient>
+<linearGradient id="fire" x2="0" y2="1"><stop stop-color="#fff0b8"/><stop offset=".35" stop-color="#ffc15e"/><stop offset="1" stop-color="#f67820"/></linearGradient>
+<linearGradient id="pill" x2=".4" y2="1"><stop stop-color="#f0e5bd" stop-opacity=".1"/><stop offset="1" stop-color="#e0c485" stop-opacity=".025"/></linearGradient>
+<filter id="glow" x="-180%" y="-30%" width="460%" height="160%"><feGaussianBlur stdDeviation="5"/></filter>
+</defs>
+<g font-family="DejaVu Sans, sans-serif">
+<rect width="1440" height="560" rx="32" fill="url(#base)"/>
+<rect width="1440" height="560" rx="32" fill="url(#air)"/>
+<rect x="1" y="1" width="1438" height="558" rx="31" fill="none" stroke="#e5d9b6" stroke-opacity=".1"/>
+<circle cx="74" cy="61" r="4" fill="#e5b452"/>
+<text x="92" y="66" font-size="12" letter-spacing="3.4" fill="#cdb780">EMBER / THE SOUND UPDATE</text>
+<text x="68" y="180" font-size="82" font-weight="700" letter-spacing="-2.7" fill="#fbf1c7">Closer to</text>
+<text x="68" y="269" font-size="82" font-weight="700" letter-spacing="-2.7" fill="#e8bf66">the music.</text>
+<text x="73" y="321" font-size="22" fill="#c5b99d">More space. Every detail. One warm flow.</text>
+<rect x="72" y="355" width="182" height="43" rx="21.5" fill="url(#pill)" stroke="#f0deb3" stroke-opacity=".17"/>
+<text x="163.0" y="382" text-anchor="middle" font-size="15" fill="#e8dbb7">Dolby Atmos</text>
+<rect x="266" y="355" width="140" height="43" rx="21.5" fill="url(#pill)" stroke="#f0deb3" stroke-opacity=".17"/>
+<text x="336.0" y="382" text-anchor="middle" font-size="15" fill="#e8dbb7">Lossless</text>
+<rect x="418" y="355" width="220" height="43" rx="21.5" fill="url(#pill)" stroke="#f0deb3" stroke-opacity=".17"/>
+<text x="528.0" y="382" text-anchor="middle" font-size="15" fill="#e8dbb7">Hi-Res Lossless</text>
+<path d="M73 439H822" stroke="#e6d3a1" stroke-opacity=".15"/>
+<text x="73" y="474" font-size="13" letter-spacing="2.5" fill="#d3c39a">DEDICATED TO RAY DOLBY</text>
+<text x="822" y="474" text-anchor="end" font-size="13" letter-spacing="2" fill="#b3aa91">1933—2013</text>
+<text x="73" y="524" font-size="11" letter-spacing="2.3" fill="#9d967f">25.10.2026</text>
+<text x="822" y="524" text-anchor="end" font-size="11" letter-spacing="2.3" fill="#bca56c">v0.18.0 · BETA</text>
+<circle cx="1157" cy="268" r="246" fill="url(#halo)"/>
+<circle cx="1157" cy="268" r="178" fill="#0c150e" fill-opacity=".18" stroke="#c5b177" stroke-opacity=".12"/>
+<circle cx="1157" cy="268" r="169" fill="none" stroke="#c5b177" stroke-opacity=".055"/>
+<ellipse cx="1157" cy="268" rx="223" ry="103" fill="none" stroke="#e0b765" stroke-opacity=".23" transform="rotate(-28 1157 268)"/>
+<ellipse cx="1157" cy="268" rx="223" ry="103" fill="none" stroke="#e0b765" stroke-opacity=".13" transform="rotate(28 1157 268)"/>
+<ellipse cx="1157" cy="268" rx="234" ry="51" fill="none" stroke="#e0b765" stroke-opacity=".09"/>
+<rect x="1005" y="157" width="304" height="225" rx="57" fill="#0c140d" fill-opacity=".18"/>
+<rect x="1011" y="151" width="292" height="225" rx="53" fill="url(#glass)" stroke="url(#metal)"/>
+<path d="M1061 159H1249" fill="none" stroke="#fcf0cc" stroke-opacity=".12" stroke-linecap="round"/>
+
+<rect x="1033" y="185" width="23" height="155" rx="11.5" fill="#101810" stroke="#b3a578" stroke-opacity=".38"/>
+<rect x="1035" y="187" width="19" height="151" rx="9.5" fill="url(#glass)"/>
+<path d="M1038 195V320" stroke="#efe6c2" stroke-opacity=".16" stroke-linecap="round"/>
+<rect x="1040" y="276" width="9" height="53" rx="4.5" fill="#ff941e" opacity=".9" filter="url(#glow)"/>
+<rect x="1041" y="276" width="7" height="53" rx="3.5" fill="url(#fire)"/>
+<path d="M1044.5 281V324" stroke="#fff2cb" stroke-width="1.5" stroke-opacity=".8" stroke-linecap="round"/>
+<rect x="1061" y="185" width="23" height="155" rx="11.5" fill="#101810" stroke="#b3a578" stroke-opacity=".38"/>
+<rect x="1063" y="187" width="19" height="151" rx="9.5" fill="url(#glass)"/>
+<path d="M1066 195V320" stroke="#efe6c2" stroke-opacity=".16" stroke-linecap="round"/>
+<rect x="1068" y="252" width="9" height="77" rx="4.5" fill="#ff941e" opacity=".9" filter="url(#glow)"/>
+<rect x="1069" y="252" width="7" height="77" rx="3.5" fill="url(#fire)"/>
+<path d="M1072.5 257V324" stroke="#fff2cb" stroke-width="1.5" stroke-opacity=".8" stroke-linecap="round"/>
+<rect x="1089" y="185" width="23" height="155" rx="11.5" fill="#101810" stroke="#b3a578" stroke-opacity=".38"/>
+<rect x="1091" y="187" width="19" height="151" rx="9.5" fill="url(#glass)"/>
+<path d="M1094 195V320" stroke="#efe6c2" stroke-opacity=".16" stroke-linecap="round"/>
+<rect x="1096" y="217" width="9" height="112" rx="4.5" fill="#ff941e" opacity=".9" filter="url(#glow)"/>
+<rect x="1097" y="217" width="7" height="112" rx="3.5" fill="url(#fire)"/>
+<path d="M1100.5 222V324" stroke="#fff2cb" stroke-width="1.5" stroke-opacity=".8" stroke-linecap="round"/>
+<rect x="1117" y="185" width="23" height="155" rx="11.5" fill="#101810" stroke="#b3a578" stroke-opacity=".38"/>
+<rect x="1119" y="187" width="19" height="151" rx="9.5" fill="url(#glass)"/>
+<path d="M1122 195V320" stroke="#efe6c2" stroke-opacity=".16" stroke-linecap="round"/>
+<rect x="1124" y="191" width="9" height="138" rx="4.5" fill="#ff941e" opacity=".9" filter="url(#glow)"/>
+<rect x="1125" y="191" width="7" height="138" rx="3.5" fill="url(#fire)"/>
+<path d="M1128.5 196V324" stroke="#fff2cb" stroke-width="1.5" stroke-opacity=".8" stroke-linecap="round"/>
+<rect x="1145" y="185" width="23" height="155" rx="11.5" fill="#101810" stroke="#b3a578" stroke-opacity=".38"/>
+<rect x="1147" y="187" width="19" height="151" rx="9.5" fill="url(#glass)"/>
+<path d="M1150 195V320" stroke="#efe6c2" stroke-opacity=".16" stroke-linecap="round"/>
+<rect x="1152" y="174" width="9" height="155" rx="4.5" fill="#ff941e" opacity=".9" filter="url(#glow)"/>
+<rect x="1153" y="174" width="7" height="155" rx="3.5" fill="url(#fire)"/>
+<path d="M1156.5 179V324" stroke="#fff2cb" stroke-width="1.5" stroke-opacity=".8" stroke-linecap="round"/>
+<rect x="1173" y="185" width="23" height="155" rx="11.5" fill="#101810" stroke="#b3a578" stroke-opacity=".38"/>
+<rect x="1175" y="187" width="19" height="151" rx="9.5" fill="url(#glass)"/>
+<path d="M1178 195V320" stroke="#efe6c2" stroke-opacity=".16" stroke-linecap="round"/>
+<rect x="1180" y="208" width="9" height="121" rx="4.5" fill="#ff941e" opacity=".9" filter="url(#glow)"/>
+<rect x="1181" y="208" width="7" height="121" rx="3.5" fill="url(#fire)"/>
+<path d="M1184.5 213V324" stroke="#fff2cb" stroke-width="1.5" stroke-opacity=".8" stroke-linecap="round"/>
+<rect x="1201" y="185" width="23" height="155" rx="11.5" fill="#101810" stroke="#b3a578" stroke-opacity=".38"/>
+<rect x="1203" y="187" width="19" height="151" rx="9.5" fill="url(#glass)"/>
+<path d="M1206 195V320" stroke="#efe6c2" stroke-opacity=".16" stroke-linecap="round"/>
+<rect x="1208" y="233" width="9" height="96" rx="4.5" fill="#ff941e" opacity=".9" filter="url(#glow)"/>
+<rect x="1209" y="233" width="7" height="96" rx="3.5" fill="url(#fire)"/>
+<path d="M1212.5 238V324" stroke="#fff2cb" stroke-width="1.5" stroke-opacity=".8" stroke-linecap="round"/>
+<rect x="1229" y="185" width="23" height="155" rx="11.5" fill="#101810" stroke="#b3a578" stroke-opacity=".38"/>
+<rect x="1231" y="187" width="19" height="151" rx="9.5" fill="url(#glass)"/>
+<path d="M1234 195V320" stroke="#efe6c2" stroke-opacity=".16" stroke-linecap="round"/>
+<rect x="1236" y="259" width="9" height="70" rx="4.5" fill="#ff941e" opacity=".9" filter="url(#glow)"/>
+<rect x="1237" y="259" width="7" height="70" rx="3.5" fill="url(#fire)"/>
+<path d="M1240.5 264V324" stroke="#fff2cb" stroke-width="1.5" stroke-opacity=".8" stroke-linecap="round"/>
+<rect x="1257" y="185" width="23" height="155" rx="11.5" fill="#101810" stroke="#b3a578" stroke-opacity=".38"/>
+<rect x="1259" y="187" width="19" height="151" rx="9.5" fill="url(#glass)"/>
+<path d="M1262 195V320" stroke="#efe6c2" stroke-opacity=".16" stroke-linecap="round"/>
+<rect x="1264" y="283" width="9" height="46" rx="4.5" fill="#ff941e" opacity=".9" filter="url(#glow)"/>
+<rect x="1265" y="283" width="7" height="46" rx="3.5" fill="url(#fire)"/>
+<path d="M1268.5 288V324" stroke="#fff2cb" stroke-width="1.5" stroke-opacity=".8" stroke-linecap="round"/>
+<circle cx="974" cy="165" r="3" fill="#e5c275"/>
+<circle cx="1342" cy="355" r="2.5" fill="#c18f40"/>
+<circle cx="1258" cy="85" r="2" fill="#b7a47b"/>
+<text x="1157" y="424" text-anchor="middle" font-size="11" letter-spacing="3" fill="#b9ac85">SPACE / DETAIL / FLOW</text>
+<text x="1157" y="488" text-anchor="middle" font-size="16" letter-spacing="7" font-weight="700" fill="#e4d7ae">E M B E R</text>
+</g></svg>

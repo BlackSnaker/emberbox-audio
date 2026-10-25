@@ -6,13 +6,56 @@
   <p><a href="#get-started">Get started</a> · <a href="#system-requirements">System requirements</a> · <a href="docs/DESIGN.md">Grunesphism</a> · <a href="README.ru.md">Русский</a> · <a href="https://github.com/BlackSnaker/emberbox-video">Emberbox Video</a></p>
 </div>
 
-## 25 October · Every detail, in the flow
+<a id="the-sound-update"></a>
 
-**Native Apple Lossless and Hi-Res join Atmos in beta 0.18.0.** Ember now selects Atmos when available, then the highest available ALAC for ordinary songs. The playing badge comes from the decoder, including original bit depth and sample rate.
+## 25 October 2026 · Closer to the music
 
-Connect through **Settings → Connect Apple Lossless…**. The private native session survives restarts. EmberFlow mixes the formats through one 192 kHz output clock, with warm, sample-smooth overlap. No Android VM or additional AI model.
+![Closer to the music. Dolby Atmos, Lossless and Hi-Res Lossless in Ember. Dedicated to Ray Dolby, 1933–2013.](assets/updates/2026-10-25.en.png)
 
-Optional setup: `./install.sh --apple-lossless`. Independent OpenJOC headphone rendering; native beat alignment remains unavailable. [Setup, checks and supported formats →](docs/ATMOS_PROTOTYPE.md)
+[Читать на русском →](README.ru.md#the-sound-update)
+
+**Dolby Atmos, Lossless and Hi‑Res Lossless are now in Ember.**
+
+A quiet breath before the first line. A piano note lingering in the room.
+The space between instruments. Sometimes those small details make a song
+you know by heart feel new again. Those moments keep me working on Ember.
+
+### Dedicated to Ray Dolby
+
+Ray Dolby (1933–2013), the founder of Dolby Laboratories, helped transform
+recorded music and cinema sound. His work brought engineering and artistic
+possibility together.
+[Explore his life and inventions →](https://www.dolby.com/en-gb/about/leadership/ray-dolby/)
+
+His journey inspires me to keep building Ember: to look deeper, care about
+small details, and keep searching when a solution still feels far away.
+This update is my thank-you to someone whose ideas help us hear more.
+
+### New sound. The same warm glow.
+
+- **Dolby Atmos in Apple Music.** Native playback of real Atmos recordings,
+  with spatial rendering for headphones.
+- **Lossless and Hi‑Res Lossless.** For recordings without Atmos, Ember selects
+  the best available ALAC and reports the source's original bit depth and rate.
+- **EmberFlow across formats.** Lossless, Hi‑Res and Atmos can flow into each
+  other with up to eight seconds of overlap. Artwork and queue handover follow
+  the transition at the audio output.
+- **Quality you can see.** The badge beneath the artwork shows the
+  decoder-confirmed format. Click for details behind familiar frosted glass;
+  the control stays available while paused, too.
+
+**Start listening:** update Ember, choose
+**Settings → Connect Apple Lossless…**, complete the separate sign-in and enable
+**Apple · Atmos / Lossless · beta**. Your session survives player restarts.
+To prepare the components from a terminal, use `./install.sh --apple-lossless`.
+
+*Beta 0.18.0 · An Apple Music subscription is required; format availability
+depends on the recording and territory. Spatial playback uses the independent
+OpenJOC headphone renderer, without Dolby certification.*
+
+**Thank you, Ray. For the inspiration to make sound better.**
+
+[Connect and explore →](docs/ATMOS_PROTOTYPE.md) · [Install or update →](docs/INSTALL.md) · [All changes →](CHANGELOG.md)
 
 ---
 
