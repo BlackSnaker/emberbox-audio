@@ -4,6 +4,9 @@ import collections,json,os,resource,struct,sys,threading,time
 import numpy as np
 from spatial_mix import RATE,BLOCK,BUFFER,blend,curve
 resource.setrlimit(resource.RLIMIT_CORE,(0,0))
+# PR_SET_DUMPABLE also prevents system crash handlers from retaining audio.
+import ctypes
+if ctypes.CDLL(None).prctl(4,0,0,0,0)!=0:raise RuntimeError('SPATIAL_DUMP_PROTECTION')
 
 class Slot:
     def __init__(self,generation,origin):

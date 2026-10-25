@@ -18,6 +18,9 @@ from spatial_demux import samples
 from spatial_aac import Aac,configuration
 
 resource.setrlimit(resource.RLIMIT_CORE,(0,0))
+# PR_SET_DUMPABLE also prevents system crash handlers from retaining audio.
+import ctypes
+if ctypes.CDLL(None).prctl(4,0,0,0,0)!=0:raise RuntimeError('SPATIAL_DUMP_PROTECTION')
 
 lock=threading.Lock();pending={};stopping=threading.Event();bootstrap=queue.Queue(1)
 verified=False;rendered_format=None
