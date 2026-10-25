@@ -2,10 +2,22 @@ from pathlib import Path
 import sys,unittest
 from types import SimpleNamespace
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
-from audio_quality import describe,current
+from audio_quality import describe,current,has_track
 
 
 class QualityTests(unittest.TestCase):
+    def test_selected_paused_song_does_not_need_a_duration_for_quality(self):
+        host=SimpleNamespace(source='apple-music',apple_mode='native',length=0,playing=False,
+            apple_web=SimpleNamespace(state={'id':'123','title':'Paused song','duration':0}))
+        self.assertTrue(has_track(host))
+        self.assertFalse(current(host)['known'])
+        host.apple_web.state={'id':'-1'};self.assertFalse(has_track(host))
+        host.apple_web.state={'title':'Restoring song'};self.assertTrue(has_track(host))
+        host.apple_web.state={};self.assertFalse(has_track(host))
+        host.source='spotify';host.session=None;self.assertFalse(has_track(host))
+        host.session=SimpleNamespace(metadata={'xesam:title':'Live song'})
+        self.assertTrue(has_track(host))
+
     def test_catalogue_never_becomes_playback_evidence(self):
         value=describe({'availableFormats':['dolby-atmos','hi-res-lossless','lossless'],
                         'audioQuality':{'codec':'flac','sampleRate':192000}})

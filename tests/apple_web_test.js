@@ -25,6 +25,16 @@ const call = (method,params={})=>context.emberboxAppleCommand({method,params});
   let result = await call('status');
   assert.equal(result.title,'Fixture');assert.equal(result.playing,false);
   assert.equal(music.bitrate,256);assert.equal(result.qualityPreference.applied,true);
+  // A paused queue restore has a real song before MusicKit populates its
+  // nowPlayingItem or duration. The placeholder must not mask that song.
+  music.nowPlayingItem={id:'-1'};music.queue={position:0,items:[resource]};
+  music.currentPlaybackDuration=0;
+  result=await call('status');
+  assert.equal(result.id,'i.fixture');assert.equal(result.title,'Fixture');assert.equal(result.duration,180);
+  assert.equal(result.playing,false);assert.equal(result.audioQuality,undefined);
+  music.nowPlayingItem={};
+  assert.equal((await call('status')).id,'i.fixture');
+  music.nowPlayingItem=resource;delete music.queue;music.currentPlaybackDuration=180;
   music.bitrate=512;
   await call('status');assert.equal(music.bitrate,512,'A future higher quality must not be lowered');
   resource.attributes.playParams.catalogId='12345';resource.attributes.url='https://music.apple.com/us/album/fixture/45678?i=12345';
@@ -87,6 +97,26 @@ const call = (method,params={})=>context.emberboxAppleCommand({method,params});
   await call('transport',{action:'pause'});assert.equal(calls.at(-1),'pause');
   await call('transport',{action:'toggle'});assert.equal(calls.at(-1),'play');
   await call('seek',{position:25});assert.equal(calls.at(-1).seek,25);
+  const savedApi=music.api.music;
+  const savedQueue=music.setQueue;
+  let restoreMetadata;
+  music.setQueue=async()=>{music.nowPlayingItem={id:'-1'};music.currentPlaybackDuration=0;};
+  music.api.music=async()=>await new Promise(resolve=>{restoreMetadata=resolve;});
+  await call('play',{kind:'library-songs',id:'i.fixture',position:42,paused:true});
+  result=await call('status');
+  assert.equal(result.id,'i.fixture');assert.equal(result.playing,false);assert.equal(result.position,42);
+  assert.equal(result.audioQuality,undefined,'Restored catalogue metadata is not decoder evidence');
+  restoreMetadata({data:{data:[resource]}});await new Promise(resolve=>setTimeout(resolve,0));
+  result=await call('status');assert.equal(result.title,'Fixture');assert.equal(result.duration,180);
+  // A late metadata request for a previous paused queue cannot replace the new song.
+  await call('play',{kind:'library-songs',id:'i.old',paused:true});
+  const oldRestore=restoreMetadata;
+  await call('play',{kind:'library-songs',id:'i.new',paused:true});
+  oldRestore({data:{data:[resource]}});await new Promise(resolve=>setTimeout(resolve,0));
+  assert.equal((await call('status')).id,'i.new');
+  restoreMetadata({data:{data:[]}});
+  music.api.music=savedApi;music.setQueue=savedQueue;music.nowPlayingItem=resource;music.currentPlaybackDuration=180;
+  context.window.__emberboxRestoredTrack=null;context.window.__emberboxRestorePosition=0;
   // The DJ sees typed catalogue resources; account and relationship secrets stay inside MusicKit.
   const originalApi=music.api.music;
   music.api.music=async(path,query)=>{

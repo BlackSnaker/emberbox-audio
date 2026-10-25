@@ -4,7 +4,7 @@ import random
 from PIL import Image,ImageFilter,ImageDraw
 from gi.repository import Gtk,Gdk,GdkPixbuf,GLib
 from source_picker import text
-from audio_quality import current
+from audio_quality import current,has_track
 
 CSS=b'''
 button.ember-quality { background-image: linear-gradient(165deg,rgba(239,232,205,.20),rgba(185,194,170,.10) 48%,rgba(132,143,123,.16));
@@ -111,7 +111,9 @@ class QualityBadge(Gtk.Button):
 
     def update(self,host):
         model=current(host)
-        self.set_visible(bool(getattr(host,'length',0)))
+        # Restored/paused queues and live streams may have no duration yet.
+        self.set_visible(has_track(host) or model['known'])
+        if not self.get_visible() and self.popover:self.popover.popdown()
         if model==self.model:return
         self.model=model;self.set_label('≋  '+model['badge'])
         if self.popover:self.populate()

@@ -21,7 +21,17 @@ async function emberboxAppleCommand(request) {
   if (request.method === 'status') {
     const player = music?.player || music;
     const queue = music?.queue || player?.queue;
-    const current = music?.nowPlayingItem || player?.nowPlayingItem || queue?.currentItem || queue?.items?.[queue.position || 0];
+    // MusicKit can leave a truthy placeholder in nowPlayingItem after a
+    // paused queue restore. Prefer a real queued song over that placeholder.
+    const restored=window.__emberboxRestoredTrack;
+    const fallback=restored&&restored.music===music?restored.resource:null;
+    const candidates=[...(music?.isPlaying!==true?[fallback]:[]),music?.nowPlayingItem,player?.nowPlayingItem,
+      queue?.currentItem,queue?.items?.[queue?.position || 0],fallback];
+    const current = candidates.find(value=>{
+      const a=value?.attributes||value;
+      const id=String(value?.id||a?.playParams?.id||'');
+      return a&&id!=='-1'&&(id||a.name||a.title);
+    });
     const a = current?.attributes || current || {};
     // The website currently supplies audioTraits (atmos/surround), while the
     // public catalogue also uses audioVariants (dolby-atmos/dolby-audio).
@@ -45,7 +55,7 @@ async function emberboxAppleCommand(request) {
         .then(result=>{if(cache.id===catalogId)cache.values=variants((result?.data?.data||result?.data||[])[0]?.attributes);})
         .catch(()=>{});
     }
-    const metadata = navigator.mediaSession?.metadata;
+    const metadata = current===fallback ? null : navigator.mediaSession?.metadata;
     const audio = Array.from(document.querySelectorAll('audio,video')).find(m => !m.paused)
       || document.querySelector('audio,video');
     const position = Number(music?.currentPlaybackTime ?? player?.currentPlaybackTime ?? audio?.currentTime ?? 0);
@@ -262,8 +272,8 @@ async function emberboxAppleCommand(request) {
     if (action !== 'pause' && window.__emberboxPlaybackAllowed === false) return {paused:true};
     if(action==='resume'){await music.play();return {ok:true};}
     if (action === 'pause') await (music.pause ? music.pause() : player.pause());
-    else if (action === 'next') {window.__emberboxRestorePosition=0;await (music.skipToNextItem ? music.skipToNextItem() : player.skipToNextItem());}
-    else if (action === 'previous') {window.__emberboxRestorePosition=0;await (music.skipToPreviousItem ? music.skipToPreviousItem() : player.skipToPreviousItem());}
+    else if (action === 'next') {window.__emberboxRestoredTrack=null;window.__emberboxRestorePosition=0;await (music.skipToNextItem ? music.skipToNextItem() : player.skipToNextItem());}
+    else if (action === 'previous') {window.__emberboxRestoredTrack=null;window.__emberboxRestorePosition=0;await (music.skipToPreviousItem ? music.skipToPreviousItem() : player.skipToPreviousItem());}
     else {
       const status = await emberboxAppleCommand({method:'status'});
       await (status.playing ? (music.pause ? music.pause() : player.pause()) : (music.play ? music.play() : player.play()));
@@ -329,11 +339,24 @@ async function emberboxAppleCommand(request) {
     try {
       music.storefrontId = undefined;
       stage = 'queue';
+      window.__emberboxRestoredTrack=null;
       const ids = Array.isArray(params.queue) ? params.queue.filter(value => typeof value === 'string' && safeId.test(value)).slice(0,100) : [];
       await music.setQueue(['library-songs','songs'].includes(kind) && ids.includes(id)
         ? {songs:ids,startWith:ids.indexOf(id)} : {[queueKind]:id});
       window.__emberboxRestorePosition=Number.isFinite(params.position)&&params.position>0?params.position:0;
-      if(params.paused===true)return {paused:true};
+      if(params.paused===true){
+        await (music.pause ? music.pause() : player.pause());
+        // setQueue may not hydrate any MusicKit items until play(). Keep the
+        // requested song visible without starting audio or blocking status.
+        const restored={music,resource:{id,attributes:{}}};
+        window.__emberboxRestoredTrack=restored;
+        if(['songs','library-songs'].includes(kind))Promise.resolve().then(()=>api(
+          kind==='library-songs'?`/v1/me/library/songs/${id}`:`/v1/catalog/${storefront()}/songs/${id}`))
+          .then(result=>{const resource=(Array.isArray(result)?result:result.data||[])[0];
+            if(window.__emberboxRestoredTrack===restored&&resource?.attributes)restored.resource=resource;})
+          .catch(()=>{});
+        return {paused:true};
+      }
       if (window.__emberboxPlaybackAllowed === false) return {paused:true};
       stage = 'start';
       await music.play();

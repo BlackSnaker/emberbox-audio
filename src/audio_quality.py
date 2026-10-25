@@ -78,3 +78,20 @@ def current(host):
                          'qualityPreference':{'mode':'maximum','applied':True}})
     # MPRIS and the optional browser companion do not report decoded quality.
     return describe({'qualityPreference':{'mode':'external'}})
+
+
+def has_track(host):
+    """A pending duration must not hide quality for an already selected song."""
+    if getattr(host,'length',0) or getattr(host,'playing',False):return True
+    source=getattr(host,'source','')
+    if source=='apple-music' and getattr(host,'apple_mode','')=='native':
+        state=getattr(getattr(host,'apple_web',None),'state',{}) or {}
+    elif source=='yandex-music':
+        state=getattr(getattr(host,'yandex_web',None),'state',{}) or {}
+    elif source=='youtube' and getattr(host,'youtube_mode','')=='native':
+        audio=getattr(host,'youtube',None)
+        return bool(getattr(audio,'current',None) or getattr(audio,'loaded',False))
+    else:
+        state=getattr(getattr(host,'session',None),'metadata',{}) or {}
+        return bool(state.get('xesam:title'))
+    return bool(state.get('title') or str(state.get('id') or '') not in ('','-1'))

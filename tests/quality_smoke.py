@@ -18,6 +18,15 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         stage.open();f.wait_transition(stage)
         assert stage.quality.get_mapped() and 'AAC' in stage.quality.get_label()
         assert not stage.quality.get_has_tooltip()
+        duration=host.length;host.length=0;host.playing=False
+        host.apple_web.state.update(id='123',title='Paused fixture')
+        stage.update();f.settle(.1)
+        assert stage.quality.get_mapped() and 'AAC' in stage.quality.get_label(), 'Zero duration hid a confirmed format'
+        host.apple_web.state['audioQuality']={}
+        stage.update();f.settle(.1)
+        assert stage.quality.get_mapped() and not stage.quality.model['known'], 'Paused restore hid the quality control'
+        host.apple_web.state['audioQuality']={'codec':'aac','sampleRate':44100,'channels':2,'evidence':'decoder'}
+        host.length=duration;stage.update()
         stage.quality.clicked();f.settle(.3)
         assert stage.quality.popover.get_visible()
         assert 'Atmos' not in stage.quality.get_label()
@@ -38,5 +47,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         stage.quality.popover.popdown()
         stage.window.unfullscreen();stage.window.resize(1024,600);f.settle(.3)
         f.assert_controls_fit(stage)
+        host.length=0;host.session=None;stage.update();f.settle(.1)
+        assert not stage.quality.get_visible(), 'An idle source must not retain another track quality badge'
         print('PASS actual quality badge, click-only details, catalogue separation, source changes and compact fullscreen layout')
     finally:stage.close();host.window.destroy()
