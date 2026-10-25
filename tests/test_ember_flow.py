@@ -27,6 +27,19 @@ class FlowTests(unittest.TestCase):
         self.patch=patch('flow_youtube.YouTubeDecks',return_value=self.decks);self.patch.start();self.addCleanup(self.patch.stop)
     def state(self,position=154,letter='A',playing=True):
         return dict(song(letter),position=position,duration=180,valid=True,playing=playing)
+    def test_spatial_apple_keeps_flow_without_claiming_beat_alignment(self):
+        self.host.source='apple-music';self.host.apple_web.state={'emberFlow':True,'emberBeatSync':False}
+        self.assertTrue(self.flow.supported);self.assertFalse(self.flow.beats_supported)
+        self.assertTrue(self.flow.beat_sync,'Keep the ordinary-mode preference')
+        values=[dict(song(x),uri='apple:songs:'+str(i),id=str(i)) for i,x in enumerate('ABC',100)]
+        self.music.book.replace('apple-music',values);self.music.book.select('apple-music',0)
+        deck=Mock();deck.ready=True;deck.failed=False;deck.result.return_value=None
+        self.flow.enabled=True
+        with patch('flow_apple.AppleDecks',return_value=deck):
+            self.flow.tick(dict(values[0],position=154,duration=180,valid=True,playing=True))
+            self.assertFalse(deck.beat_sync)
+            self.now=16.;self.flow.tick(dict(values[0],position=170,duration=180,valid=True,playing=True))
+            deck.transition.assert_called_once()
     def test_off_and_unsupported_sources_do_not_prepare_players(self):
         self.flow.tick(self.state());self.decks.prepare.assert_not_called()
         self.flow.enabled=True;self.host.source='apple-music'

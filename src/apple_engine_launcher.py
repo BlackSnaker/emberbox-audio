@@ -11,8 +11,10 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 from asar_pack import pack
+from paths import CACHE_DIR,CONFIG_DIR
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--service', choices=('apple','yandex'), default='apple')
@@ -57,6 +59,10 @@ widevine.mkdir(exist_ok=True)
 runtime = Path(os.environ.get('XDG_RUNTIME_DIR', tempfile.gettempdir()))/f'emberbox-{args.service}-web'
 runtime.mkdir(parents=True, exist_ok=True, mode=0o700)
 env = dict(os.environ, EMBERBOX_WEB_SERVICE=args.service, EMBERBOX_APPLE_PROFILE=str(profile),
+           EMBERBOX_SPATIAL_RUNTIME=str(CACHE_DIR/'apple-spatial/runtime.json'),
+           EMBERBOX_SPATIAL_CONFIG=str(CONFIG_DIR/'apple-spatial.json'),
+           EMBERBOX_SPATIAL_PYTHON=sys.executable,
+           EMBERBOX_SPATIAL_WORKER=str(Path(__file__).resolve().parent/'spatial_worker.py'),
            EMBERBOX_APPLE_SOCKET=str(args.socket) if args.socket else '',
            EMBERBOX_APPLE_HIDE='0' if args.visible else '1',
            EMBERBOX_WIDEVINE=str(cdm), EMBERBOX_WIDEVINE_VERSION=manifest['version'],

@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import uuid
 
 sys.dont_write_bytecode=True
@@ -104,6 +105,31 @@ def stage_payload(stage):
     for name in ('README.md','README.ru.md','LICENSE','VERSION'):shutil.copy2(ROOT/name,stage/name)
 
 
+def prepare_spatial(ui,python,source):
+    """Show bounded optional setup progress without blocking GTK or hiding downloads."""
+    ui.note('Apple Atmos · headphones · beta · about 100 MB download',
+            'Apple Atmos · наушники · бета · загрузка около 100 МБ')
+    messages={
+        'Building the native audio adapter':'Сборка нативного аудиоадаптера',
+        'Downloading the spatial decoder':'Загрузка пространственного декодера',
+        'Verifying the spatial decoder':'Проверка пространственного декодера',
+        'Spatial audio runtime ready':'Пространственный декодер готов',
+    }
+    with subprocess.Popen([python,'-B',str(source/'spatial_setup.py')],stdout=subprocess.PIPE,
+                          stderr=subprocess.STDOUT,text=True) as process:
+        timer=threading.Timer(180,process.kill);timer.daemon=True;timer.start();last=''
+        try:
+            for line in process.stdout:
+                last=line.strip().removeprefix('● ')
+                translated=messages.get(last,last)
+                match=re.fullmatch(r'Downloading the spatial decoder: (\d+) MB',last)
+                if match:translated='Загрузка пространственного декодера: '+match[1]+' МБ'
+                ui.note(last,translated)
+            if process.wait()!=0:raise RuntimeError('Apple spatial setup: '+last[:500])
+        finally:timer.cancel()
+    ui.item(ui.text('Decoder verified; enable it in player settings','Декодер проверен; включи его в настройках плеера'))
+
+
 def source_summary(ui,python,target,setup=True):
     spotify=bool(shutil.which('spotify'))
     if not spotify and shutil.which('flatpak'):
@@ -155,6 +181,7 @@ def main(argv=None):
     shortcut_options.add_argument('--desktop-shortcut',dest='desktop_shortcut',action='store_true',default=None,help='Add a launcher to the XDG desktop folder (default on KDE)')
     shortcut_options.add_argument('--no-desktop-shortcut',dest='desktop_shortcut',action='store_false',help='Remove the managed desktop shortcut')
     parser.add_argument('--bin-dir',type=Path,default=Path.home()/'.local/bin')
+    parser.add_argument('--apple-atmos',action='store_true',help='Prepare the optional Apple Atmos headphone decoder (Linux x86_64, about 100 MB download)')
     parser.add_argument('--no-systemd',action='store_true',help='Use a direct desktop launcher')
     parser.add_argument('--skip-check',action='store_true',help='Packaging only: skip dependency installation and validation')
     parser.add_argument('--no-deps',action='store_true',help='Require existing dependencies; never install packages')
@@ -232,7 +259,7 @@ def main(argv=None):
     plan=None
     fresh_runtime=None
     if not args.skip_check:
-        report=dependencies.inspect(selected)
+        report=dependencies.inspect(selected,spatial=args.apple_atmos)
         ui.item(report.distribution.name)
         env=os.environ
         ui.note('Desktop: '+env.get('XDG_CURRENT_DESKTOP','not detected')+' · '+env.get('XDG_SESSION_TYPE','not detected'),
@@ -242,7 +269,7 @@ def main(argv=None):
         # Never repair Python packages underneath the working installed player.
         # A fresh environment is committed by switching the manifest interpreter.
         if previous and any(key in dependencies.PURE for key in report.missing):
-            report=dependencies.inspect()
+            report=dependencies.inspect(spatial=args.apple_atmos)
             runtime=target/('runtime-'+version+'-'+uuid.uuid4().hex[:8])
             fresh_runtime=runtime
         plan=dependencies.build_plan(report,venv_dir=runtime,yes=args.yes)
@@ -290,6 +317,8 @@ def main(argv=None):
             stage=Path(directory)
             ui.step(3,'Install the player','Установка плеера')
             stage_payload(stage)
+            if args.apple_atmos and not args.skip_check:
+                prepare_spatial(ui,selected,stage/'src')
             if not args.skip_check:
                 check_env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1')
                 checked=subprocess.run([selected,'-B','-c','import sys;sys.path.insert(0,sys.argv[1]);import widget',str(stage/'src')],

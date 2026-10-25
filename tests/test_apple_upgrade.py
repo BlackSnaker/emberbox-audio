@@ -10,8 +10,8 @@ class AppleUpgrade(TestCase):
     def test_restore_waits_for_the_authorized_new_engine(self):
         app=AppleWeb.__new__(AppleWeb)
         app.closed=False;app.enabled=True;app._start_engine=Mock()
-        states=[{'ready':True,'authorized':False,'integrationVersion':14},
-                {'ready':True,'authorized':True,'integrationVersion':14}]
+        states=[{'ready':True,'authorized':False,'integrationVersion':15},
+                {'ready':True,'authorized':True,'integrationVersion':15}]
         observed=[]
         def request(method,**params):
             if method=='status':observed.append(states.pop(0));return observed[-1]
@@ -24,3 +24,13 @@ class AppleUpgrade(TestCase):
             app._upgrade({'id':'123','authorized':True,'playing':False,'position':42})
         app.bridge.request.assert_any_call('play',kind='songs',id='123',position=42,paused=True)
         app._start_engine.assert_called_once()
+
+    def test_library_track_keeps_its_kind_during_upgrade(self):
+        for catalog in ('','123'):
+            app=AppleWeb.__new__(AppleWeb)
+            app.closed=False;app.enabled=True;app._start_engine=Mock()
+            app.bridge=Mock(connected=True)
+            app.bridge.request.side_effect=lambda method,**params:{'ready':True,'authorized':True,'integrationVersion':15} if method=='status' else {}
+            with patch('apple_web.subprocess.run'),patch('apple_web.time.sleep'):
+                app._upgrade({'id':'i.library','catalogId':catalog,'authorized':True,'playing':True,'position':12})
+            app.bridge.request.assert_any_call('play',kind='songs' if catalog else 'library-songs',id=catalog or 'i.library',position=12,paused=False)

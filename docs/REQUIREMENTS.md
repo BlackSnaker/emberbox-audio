@@ -70,6 +70,17 @@ seconds. Observations stay in memory and playback uses its original engine. The
 outgoing YouTube detector shares the lamp worker, estimating BPM at most once a
 second. Turning Beats off stops this analysis and intro decoding.
 
+## Optional Apple Music Atmos
+
+Spatial playback requires **Linux x86_64, glibc ≥ 2.34**, compatible Widevine and
+a C++17 compiler. `./install.sh --apple-atmos` checks components and prepares the
+decoder: about 100 MB download; allow another 250 MB of free space. Output is
+48 kHz for headphones. EmberFlow temporarily adds a second decoder; mixer input
+buffers are bounded to four seconds each plus transport buffers. No additional
+neural model is needed. The minimum CPU for this mode has not been established;
+ordinary installation checks cannot guarantee real-time spatial rendering.
+[Beta capabilities and limitations →](ATMOS_PROTOTYPE.md)
+
 ## AI karaoke: additional resources
 
 - First use downloads a SHA256-verified **30 MB UVR model** and prepares a

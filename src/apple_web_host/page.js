@@ -32,7 +32,7 @@ async function emberboxAppleCommand(request) {
       (Array.isArray(attributes?.[key])?attributes[key].slice(0,32):[])
         .filter(v=>typeof v==='string').map(v=>aliases[v]||v).filter(v=>variantNames.includes(v))))];
     const directVariants=variants(a);
-    const catalogId=String(a.playParams?.catalogId||current?.id||'');
+    const catalogId=String(a.playParams?.catalogId||current?.catalogId||current?.id||'');
     const cache=window.__emberboxAudioVariants||(window.__emberboxAudioVariants={});
     if(cache.id!==catalogId){cache.id=catalogId;cache.values=[];cache.requested=false;}
     // Extended catalogue attributes are optional. Fetch once per song, without
@@ -59,7 +59,7 @@ async function emberboxAppleCommand(request) {
       duration:Number.isFinite(duration)&&duration>0?duration:Number(a.durationInMillis||0)/1000,
       title:String(a.name || a.title || metadata?.title || ''), artist:String(a.artistName || metadata?.artist || ''),
       album:String(a.albumName || metadata?.album || ''), image:image(a.artwork) || String(metadata?.artwork?.[0]?.src || ''),
-      id:String(current?.id || a.playParams?.id || ''), catalogId:String(a.playParams?.catalogId || ''),
+      id:String(current?.id || a.playParams?.id || ''), catalogId:String(a.playParams?.catalogId || current?.catalogId || ''),
       availableFormats:directVariants.length?directVariants:cache.values||[],
       qualityPreference:{mode:'maximum',applied:maximumApplied},
       url:publicUrl(a.url), canNext:!!music, canPrevious:!!music};

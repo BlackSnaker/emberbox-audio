@@ -28,6 +28,11 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         # An open detail panel follows an actual stream change and source switch.
         host.apple_web.state['audioQuality']={'codec':'alac','sampleRate':96000,'evidence':'decoder'}
         stage.update();assert 'Hi‑Res Lossless' in stage.quality.get_label()
+        host.apple_web.state['audioQuality']={'codec':'eac3','variant':'dolby-atmos','sampleRate':48000,'channels':2,'renderer':'openjoc-binaural','evidence':'decoder'}
+        stage.update();assert 'Dolby Atmos' in stage.quality.get_label()
+        host.apple_web.state['spatial']={'enabled':True,'phase':'preparing'}
+        stage.update();assert not stage.quality.model['known']
+        host.apple_web.state.pop('spatial')
         host.source='spotify';stage.update()
         assert not stage.quality.model['known'] and not stage.quality.model['available']
         stage.quality.popover.popdown()

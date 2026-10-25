@@ -26,6 +26,12 @@ class EmberFlow:
             and getattr(h.apple_web,'state',{}).get('emberFlow') is True)
 
     @property
+    def beats_supported(self):
+        h=self.host
+        return self.supported and not (h.source=='apple-music' and h.apple_mode=='native'
+            and getattr(h.apple_web,'state',{}).get('emberBeatSync') is False)
+
+    @property
     def message(self):
         if not self.supported:return text('Available with in-player Apple Music and YouTube','Для встроенных Apple Music и YouTube')
         if not self.enabled:return text('Gentle blends between tracks','Мягкое смешивание треков')
@@ -38,7 +44,7 @@ class EmberFlow:
         if self.preparing:return text('Preparing the next track','Готовим следующий трек')
         if self.music.book.active!=self.host.source or not self.music.book.upcoming(self.host.source):
             return text('Add a next track to the Ember queue','Добавь следующий трек в очередь Ember')
-        return text('Beat sync when the rhythm is clear','Сводим биты, когда ритм распознан') if self.beat_sync else text('Layered mix · up to 8 seconds','Сведение · до 8 секунд')
+        return text('Beat sync when the rhythm is clear','Сводим биты, когда ритм распознан') if self.beat_sync and self.beats_supported else text('Layered mix · up to 8 seconds','Сведение · до 8 секунд')
 
     def set_enabled(self,enabled):
         self.enabled=bool(enabled);self.error='';self.cancel()
@@ -126,7 +132,7 @@ class EmberFlow:
                     from flow_youtube import YouTubeDecks
                     self.youtube=YouTubeDecks(h)
                 deck=self.youtube
-            deck.beat_sync=self.beat_sync
+            deck.beat_sync=self.beat_sync and self.beats_supported
             try:deck.prepare(next_item)
             except Exception:self.preparing=False;deck.cancel()
             s.changed()

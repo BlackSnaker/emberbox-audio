@@ -34,7 +34,11 @@ def describe(state):
     if known and rate:
         frequency=f'{rate/1000:g}'.replace('.',text('.',','))
         details.append(frequency+' '+text('kHz','кГц'))
-    if known and channels:details.append(text('Stereo','Стерео') if channels==2 else text('Mono','Моно') if channels==1 else f'{channels} '+text('channels','каналов'))
+    if known and channels:
+        details.append(text('Binaural · headphones','Пространственный · наушники') if name=='Dolby Atmos' and value.get('renderer')=='openjoc-binaural'
+            else text('Stereo','Стерео') if channels==2 else text('Mono','Моно') if channels==1 else f'{channels} '+text('channels','каналов'))
+    output_rate=bounded(value.get('outputSampleRate'),8000,768000)
+    if known and output_rate and output_rate!=rate:details.append(text('Output','Выход')+': '+f'{output_rate/1000:g} '+text('kHz','кГц'))
     if known and bitrate:details.append('≈ '+f'{bitrate/1000:.0f}'+' '+text('kbps','кбит/с'))
     available=state.get('availableFormats')
     available=[FORMATS[k] for k in FORMATS if k in available] if isinstance(available,list) else []
@@ -49,6 +53,13 @@ def describe(state):
             else text('Automatic quality selection is unavailable in this connection.','Автовыбор качества недоступен в этом подключении.'))
     elif preference.get('mode')=='external':
         policy=text('Choose the highest quality in the source app settings.','Выбери максимальное качество в настройках приложения-источника.')
+    spatial=state.get('spatial') if isinstance(state.get('spatial'),dict) else {}
+    if spatial.get('enabled') and spatial.get('phase')=='preparing':
+        badge=text('Preparing Atmos…','Готовим Atmos…');known=False;name=''
+        details=[text('Preparing the spatial stream','Подготовка пространственного потока')]
+    elif spatial.get('enabled') and spatial.get('error'):
+        reason=text('Apple device limit reached.','Достигнут лимит устройств Apple.') if spatial['error']=='DEVICE_LIMIT' else text('Spatial playback is unavailable for this attempt.','Пространственное воспроизведение в этой попытке недоступно.')
+        policy=reason+' '+text('Standard playback restored.','Восстановлено обычное воспроизведение.')
     return {'badge':badge,'known':known,'name':name,'details':' · '.join(details),'available':available,'policy':policy}
 
 

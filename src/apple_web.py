@@ -21,7 +21,7 @@ class AppleWeb:
     def __init__(self, changed):
         self.changed = changed
         self.bridge = AppleBridge(getattr(self,'socket_filename','apple-player.sock'),
-            ('status','browse','tracks','search','play','transport','seek','show','hide','enable','artist','artistSection','release','flow')+getattr(self,'extra_methods',()))
+            ('status','browse','tracks','search','play','transport','seek','show','hide','enable','artist','artistSection','release','flow','spatial')+getattr(self,'extra_methods',()))
         self.pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix='apple-player')
         self.state = {}
         self.enabled = False
@@ -32,12 +32,29 @@ class AppleWeb:
         self.last_enable = None
         self.upgrading = False
         self.upgrade_attempted = False
+        self.spatial_preparing=False
         self.start_lock = threading.Lock()
         self.timer = GLib.timeout_add(750, self.poll)
 
     @property
     def connected(self):
         return self.bridge.connected
+
+    def set_spatial(self,enabled):
+        if self.closed or self.spatial_preparing:return
+        if not enabled:self.action('spatial',enabled=False);return
+        from spatial_setup import configured,prepare
+        if configured():self.action('spatial',enabled=True);return
+        self.spatial_preparing=True;self.changed()
+        self.pool.submit(prepare).add_done_callback(lambda future:GLib.idle_add(self._spatial_prepared,future))
+
+    def _spatial_prepared(self,future):
+        self.spatial_preparing=False
+        if not self.closed:
+            try:future.result();self.action('spatial',enabled=True)
+            except Exception:self.error=text('Spatial audio setup failed. See the audio-quality guide.','Не удалось подготовить пространственный звук. См. руководство по качеству звука.')
+            self.changed()
+        return False
 
     @property
     def pid(self):
@@ -150,7 +167,7 @@ class AppleWeb:
         try:
             self.state = future.result()
             self.error = ''
-            if self.state.get('ready') and self.state.get('integrationVersion',0)<14 and not self.upgrade_attempted:
+            if self.state.get('ready') and self.state.get('integrationVersion',0)<15 and not self.upgrade_attempted:
                 self.upgrade_attempted = self.upgrading = True
                 self.pool.submit(self._upgrade,dict(self.state)).add_done_callback(
                     lambda item:GLib.idle_add(self._upgraded,item))
@@ -180,14 +197,17 @@ class AppleWeb:
             if self.connected:
                 try:
                     current = self.bridge.request('status')
-                    if current.get('ready') and current.get('integrationVersion',0)>=14 and (not state.get('authorized') or current.get('authorized')):
+                    if current.get('ready') and current.get('integrationVersion',0)>=15 and (not state.get('authorized') or current.get('authorized')):
                         break
                 except BridgeUnavailable:pass
             time.sleep(.3)
         else:raise BridgeUnavailable('Engine upgrade timed out')
         self.bridge.request('enable',enabled=self.enabled)
         if self.enabled and state.get('id') and state.get('authorized'):
-            self.bridge.request('play',kind='songs',id=state['id'],position=state.get('position',0),paused=not state.get('playing'))
+            catalog=str(state.get('catalogId') or '')
+            restored_id=catalog if catalog.isdecimal() else state['id']
+            self.bridge.request('play',kind='library-songs' if restored_id.startswith('i.') else 'songs',id=restored_id,
+                                position=state.get('position',0),paused=not state.get('playing'))
             if not self.enabled:
                 self.bridge.request('transport',action='pause')
 

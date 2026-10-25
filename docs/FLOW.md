@@ -42,6 +42,14 @@ playing; restoring the preference alone never starts playback. Pausing, seeking,
 manually changing tracks, switching source or disabling Flow clears staged audio.
 Vocal reduction temporarily uses ordinary transitions.
 
+## Apple Music Atmos · beta
+
+Spatial EmberFlow uses two native decoders and one 48 kHz mixer with sample-based
+gain curves. AAC transitions are supported too. The badge follows each song's
+actual decoded format. **Beat alignment is not available in this path yet**;
+the Web Audio implementation below describes ordinary MusicKit playback.
+[Setup and limitations →](ATMOS_PROTOTYPE.md)
+
 ## When the beats meet
 
 The separate **Beats** switch in player settings enables rhythm matching when

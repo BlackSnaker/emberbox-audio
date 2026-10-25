@@ -67,6 +67,19 @@ class SettingsMenu:
             note=Gtk.Label(label=self.flow.message);note.set_line_wrap(True);note.set_max_width_chars(30)
             note.set_xalign(0);note.get_style_context().add_class('caption');box.pack_start(note,False,False,2)
 
+        owner=getattr(self.fullscreen,'__self__',None)
+        apple=getattr(owner,'apple_web',None)
+        if apple and getattr(owner,'source','')=='apple-music' and getattr(owner,'apple_mode','')=='native':
+            state=apple.state.get('spatial',{})
+            toggle=Gtk.CheckButton(label=text('Dolby Atmos · headphones · beta','Dolby Atmos · наушники · бета'))
+            toggle.set_active(state.get('enabled') is True);toggle.set_has_tooltip(False)
+            toggle.set_sensitive(not getattr(apple,'spatial_preparing',False))
+            toggle.connect('toggled',lambda button:(popup.popdown(),apple.set_spatial(button.get_active())))
+            box.pack_start(toggle,False,False,3)
+            note=Gtk.Label(label=text('Spatial headphones with EmberFlow. Beat alignment is unavailable in this mode.','Пространственный звук и EmberFlow для наушников. Подгонка битов в этом режиме недоступна.'))
+            note.set_line_wrap(True);note.set_max_width_chars(30);note.set_xalign(0)
+            note.get_style_context().add_class('caption');box.pack_start(note,False,False,2)
+
         def action(label, callback, style='filter-chip'):
             button = Gtk.Button(label=label)
             button.get_style_context().add_class(style)

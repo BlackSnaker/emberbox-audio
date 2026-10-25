@@ -29,6 +29,13 @@ class QualityTests(unittest.TestCase):
         self.assertFalse(q['known'])
         q=describe({'audioQuality':{'codec':'eac3','variant':'dolby-atmos','evidence':'decoder'}})
         self.assertEqual(q['name'],'Dolby Atmos')
+    def test_native_binaural_details_and_preparation_are_explicit(self):
+        q=describe({'audioQuality':{'codec':'eac3','variant':'dolby-atmos','evidence':'decoder','renderer':'openjoc-binaural','channels':2,'sampleRate':48000}})
+        self.assertEqual(q['name'],'Dolby Atmos')
+        self.assertNotIn('Stereo',q['details']);self.assertNotIn('Стерео',q['details'])
+        waiting=describe({'spatial':{'enabled':True,'phase':'preparing'},'audioQuality':{'codec':'aac','evidence':'decoder'}})
+        self.assertFalse(waiting['known']);self.assertEqual(waiting['name'],'')
+        self.assertNotIn(' · ',waiting['details'])
     def test_maximum_preference_cannot_invent_quality(self):
         q=describe({'qualityPreference':{'mode':'maximum','applied':True}})
         self.assertFalse(q['known']);self.assertNotEqual(q['policy'],'')

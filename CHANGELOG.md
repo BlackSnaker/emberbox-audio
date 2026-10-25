@@ -2,6 +2,14 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.17.0 — 2026-10-25
+
+- Experimental playback of real Apple Music E-AC-3 JOC assets through installed Widevine and OpenJOC: spatial float32 headphone output at 48 kHz. The Atmos badge requires decoder confirmation.
+- Native EmberFlow uses two prepared decoders, one output clock, sample-based gain envelopes and outgoing-decoder release. Ordinary AAC transitions are supported; spatial-path beat alignment is not available yet.
+- Pause, seek, source changes, bounded buffers and ordinary-playback recovery. Account tokens and signed addresses remain on Apple's page; no key export or PCM recording.
+- Optional `--apple-atmos` setup, compiler/glibc checks, pinned decoder download with progress and SHA-256. Engine upgrades retain library-track kinds; integration 15.
+- Bilingual documentation, requirements and automated checks. This remains a beta independent renderer without Dolby certification.
+
 ## 0.16.3 — 2026-10-25
 
 - Read Apple website `audioTraits` alongside catalogue `audioVariants`, including Atmos/surround aliases. Isolate song changes, keep optional lookups asynchronous and upgrade the adapter to integration 14.

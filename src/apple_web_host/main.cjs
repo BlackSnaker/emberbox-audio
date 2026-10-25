@@ -8,6 +8,7 @@ const http = require('node:http');
 const net = require('node:net');
 const {attach:attachMediaQuality}=require(path.join(__dirname,'media_quality.cjs'));
 const {FlowDecks}=require('./flow.cjs');let flow=null;
+const {SpatialPlayback}=require('./spatial.cjs');let spatial=null;
 const yandex = process.env.EMBERBOX_WEB_SERVICE === 'yandex';
 const service = yandex ? {title:'Yandex Music',origin:'https://music.yandex.ru/',
   url:'https://music.yandex.ru/',command:'emberboxYandexCommand',page:'yandex.js',error:'YANDEX_REQUEST_FAILED'} :
@@ -111,11 +112,18 @@ function yandexRoute(route) {
   return '';
 }
 async function command(win,request){
+ if(spatial){const result=await spatial.intercept(flow?.current||win,request);if(result!==null)return result;}
  if(request.method==='flow'){if(!flow)throw Error('FLOW_UNAVAILABLE');return flow.command(request.params||{});}
  if(flow&&(['play','seek'].includes(request.method)||request.method==='enable'&&request.params?.enabled!==true||
    request.method==='transport'))await flow.cancel();
  const result=await pageRequest(flow?.current||win,request);
- if(flow&&request.method==='status')return await flow.status()||result;
+ if(request.method==='status'){
+  const value=flow?await flow.status()||result:result;
+  const merged=spatial?spatial.merge(flow?.current||win,value):value;
+  if(spatial)record({audioQuality:merged.audioQuality,spatial:merged.spatial,playing:merged.playing,position:merged.position,duration:merged.duration,hasTrack:!!merged.title});
+  return merged;
+ }
+ if(spatial)await spatial.after(flow?.current||win,request);
  return result;
 }
 async function pageRequest(win, request, navigations=0) {
@@ -161,7 +169,7 @@ async function pageRequest(win, request, navigations=0) {
     playing:!!result.playing,position:Number(result.position)||0,duration:Number(result.duration)||0,
     hasTrack:!!result.title,windowVisible:win.isVisible()});
   if(request.method==='status') {
-    result.integrationVersion=yandex?5:14;
+    result.integrationVersion=yandex?5:15;
     if(!yandex){result.emberFlow=true;result.emberBeatSync=true;}
     result.audioQuality=win.emberboxQuality?.snapshot(String(result.id||result.title||''))||{};
     record({audioQuality:result.audioQuality,maximumQualityRequested:result.qualityPreference?.applied===true});
@@ -192,7 +200,7 @@ function connectBridge(win) {
           'INVALID_ARGUMENTS','MEDIA_LICENSE','MEDIA_KEY','MEDIA_PLAYBACK','NETWORK_ERROR','SUBSCRIPTION_ERROR','TypeError','ReferenceError','Error',
           'TOKEN_EXPIRED','UNAUTHORIZED_ERROR','UNSUPPORTED_ERROR','USER_INTERACTION_REQUIRED','WIDEVINE_CDM_EXPIRED',
           'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND','REGION_UNAVAILABLE','SUBSCRIPTION_REQUIRED','ADAPTER_UNAVAILABLE','YANDEX_REQUEST_FAILED','FLOW_UNAVAILABLE','FLOW_CANCELLED','FLOW_NOT_READY'];
-        const code=allowed.includes(value)?value:value.includes('Sign in to Apple Music')?'SIGN_IN_REQUIRED':
+        const code=allowed.includes(value)||/^SPATIAL_[A-Z_]{1,50}$/.test(value)?value:value.includes('Sign in to Apple Music')?'SIGN_IN_REQUIRED':
           value.includes('MusicKit is not ready')?'NOT_READY':value==='TIMEOUT'?'TIMEOUT':service.error;
         if(!socket.destroyed)socket.write(JSON.stringify({id:request.id,error:code})+'\n');
       }).finally(()=>clearTimeout(timer));
@@ -238,7 +246,10 @@ app.whenReady().then(async()=>{
   } else {
     const seconds=Number(process.env.EMBERBOX_APPLE_SMOKE_SECONDS||0);
     const win=makeWindow(!seconds && process.env.EMBERBOX_APPLE_HIDE!=='1');
-    if(!yandex)flow=new FlowDecks(win,makeWindow,pageRequest,service.url);
+    if(!yandex){
+      flow=new FlowDecks(win,makeWindow,pageRequest,service.url);
+      spatial=new SpatialPlayback(pageRequest,()=>flow.cancel());
+    }
     connectBridge(win);
     if(seconds) setTimeout(()=>{process.stdout.write(JSON.stringify(state)+'\n');app.quit();},seconds*1000);
     await win.loadURL(service.url);
@@ -247,5 +258,5 @@ app.whenReady().then(async()=>{
   localStack:String(error.stack).split('\n').slice(1).filter(line=>line.includes('app.asar')).slice(0,4)});
   process.stdout.write(JSON.stringify(state)+'\n');app.quit();});
 app.on('window-all-closed',()=>app.quit());
-app.on('before-quit',()=>{app.isQuitting=true;});
+app.on('before-quit',()=>{app.isQuitting=true;if(spatial)spatial.stop(false).catch(()=>{});});
 process.on('SIGTERM',()=>{app.isQuitting=true;app.quit();});

@@ -86,6 +86,12 @@ class DependencyTests(unittest.TestCase):
             plan=deps.build_plan(report('gtk3','gdkx11',installed=('python-gobject',)),venv_dir='/unused/runtime')
         self.assertEqual(plan.packages,('gtk3',))
 
+    def test_optional_spatial_compiler_uses_the_distribution_package(self):
+        for family,package in (('arch','gcc'),('debian','g++'),('fedora','gcc-c++'),('opensuse','gcc-c++')):
+            with patch('dependencies.shutil.which',return_value='/package-manager'):
+                plan=deps.build_plan(report('cxx',family=family),venv_dir='/unused/runtime')
+            self.assertEqual(plan.packages,(package,))
+            self.assertFalse(any('libav' in value for value in plan.packages))
     def test_explicit_yes_is_the_only_way_to_disable_native_confirmation(self):
         for family in deps.MANAGERS:
             ordinary=deps.package_command(family,('fixture-package',),sudo=True)

@@ -37,6 +37,13 @@ The terminal follows Emberbox's [Grunesphism palette](DESIGN.md): warm amber hea
 
 An absent DRM engine is reported separately; a successful application installation does not mean every streaming service is connected.
 
+## Apple Music spatial audio · beta
+
+`./install.sh --apple-atmos` additionally checks a C++17 compiler and prepares the
+pinned OpenJOC decoder with SHA-256 verification and download progress. Enable it
+separately in player settings; requires Linux x86_64, glibc ≥ 2.34 and installed
+compatible Widevine. [Headphone Atmos and EmberFlow →](ATMOS_PROTOTYPE.md)
+
 ## What it prepares
 
 | Component | Purpose |

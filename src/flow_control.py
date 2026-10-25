@@ -142,8 +142,8 @@ class FlowControl(Gtk.ToggleButton):
 
     def sync(self):
         self.syncing=True
-        value=self.flow.beat_sync if self.beats else self.flow.enabled
-        try:self.set_active(value);self.set_sensitive(self.flow.supported or self.flow.enabled)
+        value=self.flow.beat_sync and self.flow.beats_supported if self.beats else self.flow.enabled
+        try:self.set_active(value);self.set_sensitive(self.flow.beats_supported if self.beats else self.flow.supported or self.flow.enabled)
         finally:self.syncing=False
         target=float(value)
         if target!=self.target:

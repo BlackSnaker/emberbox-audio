@@ -80,6 +80,8 @@ jobs:
           node tests/artist_web_test.js
           node tests/yandex_artist_test.js
           node tests/media_quality_test.js
+          node tests/spatial_source_test.js
+          node tests/spatial_playback_test.cjs
       - name: GTK layout and controls
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/gui_smoke.py
       - name: Fullscreen listening room

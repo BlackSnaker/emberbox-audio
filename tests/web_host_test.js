@@ -3,11 +3,12 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),vm=require('node:vm');
 const fixture=fs.mkdtempSync(path.join(os.tmpdir(),'emberbox-web-host-'));
 const folder=path.resolve('src/apple_web_host');
+const hostRequire=require('node:module').createRequire(path.join(folder,'main.cjs'));
 function host(yandex){
   const profile=path.join(fixture,yandex?'yandex':'apple');
   const app={getPath:()=>profile,setPath(){},setName(){},setDesktopName(){},enableSandbox(){},
     commandLine:{appendSwitch(){}},whenReady:()=>new Promise(()=>{}),on(){}};
-  const context=vm.createContext({require:name=>name==='electron'?{app}:require(name),__dirname:folder,
+  const context=vm.createContext({require:name=>name==='electron'?{app}:hostRequire(name),__dirname:folder,
     process:{env:{EMBERBOX_APPLE_PROFILE:profile,EMBERBOX_WEB_SERVICE:yandex?'yandex':'apple'},versions:process.versions,on(){}},
     URL,setTimeout,clearTimeout,console});
   vm.runInContext(fs.readFileSync(path.join(folder,'main.cjs'),'utf8')+'\nglobalThis.api={command,yandexRoute};',context);
@@ -33,7 +34,7 @@ function host(yandex){
   assert.equal((await yandex.command(win,{method:'status'})).integrationVersion,5);
   const apple=host(false);win.webContents.getURL=()=> 'https://music.apple.com/us/new';
   responses.push({ready:true,authorized:true});
-  assert.equal((await apple.command(win,{method:'status'})).integrationVersion,7);
+  assert.equal((await apple.command(win,{method:'status'})).integrationVersion,15);
   responses.push({ready:true,id:'123'});win.emberboxQuality={snapshot:id=>({codec:'aac',track:id,evidence:'decoder'})};
   assert.equal((await apple.command(win,{method:'status'})).audioQuality.track,'123');
   console.log('PASS bounded official-site navigation, adapter update version and decoder quality');

@@ -11,7 +11,7 @@ The material is warm frosted glass, with fine grain and a soft edge highlight. T
 Built-in playback prefers maximum supported quality automatically:
 
 - **YouTube:** `bestaudio/best` selects the best available audio stream, without a forced low-bitrate cap or a second lossy encode.
-- **Apple Music:** request MusicKit's public **HIGH** setting before playback and on song changes. The current [official MusicKit JS runtime](https://js-cdn.music.apple.com/musickit/v3/musickit.js) defines it as 256 kbps. This setting does not add ALAC/Atmos to a web engine that cannot play them. A future higher existing setting is not lowered.
+- **Apple Music:** request MusicKit's public **HIGH** setting before playback and on song changes. The current [official MusicKit JS runtime](https://js-cdn.music.apple.com/musickit/v3/musickit.js) defines it as 256 kbps. Atmos now has a separate optional native JOC path; HIGH alone does not add ALAC or Atmos to the web decoder. A future higher existing setting is not lowered.
 - **Yandex Music:** for a recognised Plus account, use the same quality-controller and player-state setters as the official site's **High quality** choice. Yandex selects FLAC or its highest alternative for that recording, including My Wave. A website/adapter change may make automatic selection unavailable; the detail panel reports this. This integration still needs listening verification by testers with Plus.
 - **Spotify and external browsers:** choose the highest quality in the source app. These connections currently provide no supported quality-setting operation to Emberbox.
 
@@ -26,12 +26,12 @@ The detail panel distinguishes **maximum requested** from the **format actually 
 
 | Source | Playing format | Catalogue formats |
 | --- | --- | --- |
-| Built-in Apple Music | Chromium's active audio decoder, when exposed | Song variants supplied by Apple; optional extended-attribute request |
+| Built-in Apple Music | Chromium decoder or confirmed native headphone JOC | Song variants supplied by Apple; optional extended-attribute request |
 | Built-in Yandex Music | Chromium's active audio decoder, when exposed | Not reported |
 | Built-in YouTube | libmpv codec, decoded sample rate/channels and measured packet bitrate | Not reported |
 | Spotify / external browsers / Firefox companion | These connections do not currently report the decoded stream format | Not reported |
 
-If data are absent, **Quality → Not reported** explains this; subscription level, quality preferences and device mixer rate are never used as substitutes. Browser playback does not acquire Lossless or Atmos support from a badge. E-AC-3 or multichannel audio alone does not confirm Dolby Atmos; the current web adapters do not verify an Atmos stream. [Native JOC prototype and remaining Apple playback work →](ATMOS_PROTOTYPE.md)
+If data are absent, **Quality → Not reported** explains this; subscription level, quality preferences and device mixer rate are never used as substitutes. Browser playback does not acquire Lossless or Atmos support from a badge. E-AC-3 or multichannel audio alone does not confirm Dolby Atmos; the optional native path verifies in-band JOC/OAMD. [Apple Music Atmos and spatial EmberFlow →](ATMOS_PROTOTYPE.md)
 
 The badge describes the stream **before system audio processing**. Resampling, Bluetooth, spatial processing and output hardware can alter what reaches the listener. It does not certify a bit-perfect output path.
 
