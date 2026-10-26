@@ -34,7 +34,7 @@ def frame(size,level=0,recording=False,phase=-1):
 class DJSignal(Gtk.Image):
     def __init__(self,service):
         super().__init__();self.service=service;self.level=0.;self.tick=0;self.last=None;self.size=168
-        self.key=None;self.closed=False;self.prepared=set();self.pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-dj-dial')
+        self.key=None;self.closed=False;self.active=False;self.prepared=set();self.pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-dj-dial')
         self.frames={};self.show_frame((168,0,False,-1),frame(168))
         self.connect('map',self.mapped);self.connect('unmap',self.unmapped);self.connect('destroy',self.close)
     def show_frame(self,key,pixbuf):
@@ -53,16 +53,22 @@ class DJSignal(Gtk.Image):
                 key=(size,0,False,phase);self.frames[key]=frame(*key)
         self.pool.submit(prepare)
     def mapped(self,*_args):
+        if self.closed or not self.active:return
         self.last=None;self.warm(self.size)
         if not self.tick:self.tick=self.add_tick_callback(self.animate)
+    def set_active(self,active):
+        self.active=bool(active)
+        if self.active and self.get_mapped():self.mapped()
+        else:self.unmapped()
     def unmapped(self,*_args):
         if self.tick:self.remove_tick_callback(self.tick);self.tick=0
         self.last=None
     def resize(self,small):
         self.size=94 if small else 168;self.set_size_request(self.size,self.size)
-        if self.get_mapped():self.warm(self.size)
+        if self.active and self.get_mapped():self.warm(self.size)
         self.show_frame((self.size,0,False,-1),frame(self.size))
     def animate(self,_widget,clock):
+        if self.closed or not self.active:self.tick=0;self.last=None;return False
         now=clock.get_frame_time()/1e6;dt=min(.06,max(.001,now-self.last)) if self.last else 1/60;self.last=now
         voice=self.service.voice;recording=voice.phase=='listening'
         busy=self.service.busy or voice.phase in ('preparing-voice','preparing-reply')

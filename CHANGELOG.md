@@ -7,6 +7,8 @@
 - Click the current album title in the widget or fullscreen listening room to open its release page inside Ember. Keep the subdued typography, amber hover and keyboard-accessible controls without tooltips or focus outlines.
 - Resolve Apple albums through the captured song relationship, Spotify albums through the exact selected recording, and Yandex albums through source-owned album IDs. Do not silently select a namesake through search. Keep paging tied to the resolved album ID.
 - Open the release directly, with artwork, notes, tracks and listening/queue actions. Back returns to the previous room; browsing does not change playback. Preserve source-change and late-response guards. Apple integration 18; Yandex integration 6.
+- Stop the DJ dial immediately when leaving its tab, including during the stack crossfade; a late GTK map signal cannot restart hidden animation. Resume the dial when returning.
+
 
 ## 0.18.1 — 2026-10-26
 

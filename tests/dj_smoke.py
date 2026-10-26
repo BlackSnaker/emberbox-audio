@@ -63,8 +63,11 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
             v.mic.clicked();launch.assert_called_once_with('listen',s.language)
         s.voice.mode='listen';s.voice.phase='listening';s.changed();assert v.mic_caption.get_text() in ('FINISH RECORDING','ЗАКОНЧИТЬ ЗАПИСЬ')
         stage.page_tabs['playing'].clicked();assert not s.voice.mode,'Leaving DJ did not close microphone'
+        assert not v.signal.tick,'Leaving DJ must stop its frame clock before the stack crossfade finishes'
+        v.signal.mapped();assert not v.signal.tick,'A late GTK map signal must not restart an inactive DJ dial'
         f.settle(.2);assert s.session and not v.signal.tick,'Hidden DJ kept drawing'
         stage.page_tabs['dj'].clicked();v.toggle_settings();f.settle(.3)
+        assert v.signal.active and v.signal.tick,'Returning to DJ must restart its visible dial'
         for width,height in ((1024,600),(1280,720),(1920,1080)):
             stage.window.unfullscreen();stage.window.resize(width,height);f.settle(.3)
             assert stage.window.get_size()==(width,height),stage.window.get_size()

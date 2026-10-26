@@ -170,8 +170,8 @@ class DJView(Gtk.Box):
         self.show_all();self.cancel_button.hide();self.partial.hide();self.wish.hide()
         self.changed()
 
-    def activate(self):self.active=True;self.service.activate();self.changed()
-    def deactivate(self):self.active=False;self.service.voice.cancel()
+    def activate(self):self.active=True;self.signal.set_active(True);self.service.activate();self.changed()
+    def deactivate(self):self.active=False;self.signal.set_active(False);self.service.voice.cancel()
     def close(self):self.deactivate();self.unsubscribe()
 
     def submit(self):
