@@ -99,7 +99,7 @@ class YandexWeb(AppleWeb):
         self.busy=False
         if not self.closed:
             try:
-                self.state=future.result()
+                self.state=self._seek_state(future.result())
                 if self.state.get('integrationVersion') in (1,2,3,4,5) and not self.upgrade_attempted:
                     self.upgrade_attempted=self.upgrading=True
                     self.pool.submit(self._upgrade_adapter,dict(self.state)).add_done_callback(lambda item:GLib.idle_add(self._adapter_upgraded,item))

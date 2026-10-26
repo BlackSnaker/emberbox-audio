@@ -167,11 +167,17 @@ async function emberboxSpatialSource(params) {
   const index=Number(params.index),offset=Number(params.offset||0),segment=ctx.segments[index];
   if(!Number.isInteger(index)||!segment||!Number.isSafeInteger(offset)||offset<0||offset>18874368)throw Error('INVALID_ARGUMENTS');
   if(ctx.cache?.index!==index){
-   const [init,body]=await Promise.all([bytes(segment.map.url,1048576,segment.map.range),bytes(segment.url,16777216,segment.range)]);
-   const data=new Uint8Array(init.length+body.length);data.set(init);data.set(body,init.length);ctx.cache={index,data,bodyKind:new TextDecoder().decode(body.subarray(4,8)).replace(/[^a-z0-9 ]/gi,'?'),initBytes:init.length,originalOffset:new URL(segment.map.url).origin+new URL(segment.map.url).pathname===new URL(segment.url).origin+new URL(segment.url).pathname?(segment.range?.start||0):0};
+   const cache={index};ctx.cache=cache;
+   cache.loading=Promise.all([bytes(segment.map.url,1048576,segment.map.range),bytes(segment.url,16777216,segment.range)]).then(([init,body])=>{
+    const data=new Uint8Array(init.length+body.length);data.set(init);data.set(body,init.length);
+    Object.assign(cache,{data,bodyKind:new TextDecoder().decode(body.subarray(4,8)).replace(/[^a-z0-9 ]/gi,'?'),initBytes:init.length,originalOffset:new URL(segment.map.url).origin+new URL(segment.map.url).pathname===new URL(segment.url).origin+new URL(segment.url).pathname?(segment.range?.start||0):0});
+   }).catch(error=>{if(ctx.cache===cache)ctx.cache=null;throw error;});
   }
-  const data=ctx.cache.data;if(offset>=data.length)throw Error('INVALID_ARGUMENTS');
-  return {data:encode(data.subarray(offset,offset+393216)),total:data.length,initBytes:ctx.cache.initBytes,originalOffset:ctx.cache.originalOffset,bodyKind:ctx.cache.bodyKind};
+  // A cancelled read may finish after a seek starts another segment. Capture
+  // its own entry before awaiting; never splice bytes from the newer entry.
+  const cache=ctx.cache;await cache.loading;
+  const data=cache.data;if(offset>=data.length)throw Error('INVALID_ARGUMENTS');
+  return {data:encode(data.subarray(offset,offset+393216)),total:data.length,initBytes:cache.initBytes,originalOffset:cache.originalOffset,bodyKind:cache.bodyKind};
  }
  if(params.action==='close'){
   contexts.delete(params.contextId);ctx.cache=null;

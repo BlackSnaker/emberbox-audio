@@ -8,12 +8,13 @@ def box(kind,data):return struct.pack('>I4s',len(data)+8,kind)+data
 
 def full(flags):return struct.pack('>I',flags)
 
-def fixture(offset,description=1,override=None,codec=b'ec-3',extra=b''):
+def fixture(offset,description=1,override=None,codec=b'ec-3',extra=b'',timescale=None,version=0):
     tenc=box(b'tenc',full(1<<24)+bytes((0,0,1,0))+bytes(16)+bytes((16,))+bytes(range(16)))
     entry=box(b'enca',bytes(28)+extra+box(b'sinf',box(b'frma',codec)+box(b'schm',full(0)+b'cbcs'+bytes(4))+box(b'schi',tenc)))
     second=entry.replace(bytes(range(16)),bytes(reversed(range(16))))
     stsd=box(b'stsd',full(0)+struct.pack('>I',2)+entry+second)
-    trak=box(b'trak',box(b'mdia',box(b'minf',box(b'stbl',stsd))))
+    mdhd=box(b'mdhd',full(version<<24)+bytes(8 if version==0 else 16)+struct.pack('>I',timescale)) if timescale is not None else b''
+    trak=box(b'trak',box(b'mdia',mdhd+box(b'minf',box(b'stbl',stsd))))
     trex=box(b'trex',full(0)+struct.pack('>IIIII',1,description,1536,32,0))
     init=box(b'ftyp',b'isom'+bytes(4))+box(b'moov',trak+box(b'mvex',trex))
     def moof(data_offset):
@@ -26,6 +27,14 @@ def fixture(offset,description=1,override=None,codec=b'ec-3',extra=b''):
     return data,len(init)
 
 class DemuxTests(unittest.TestCase):
+    def test_seek_sample_durations_keep_the_declared_media_timescale(self):
+        for version in (0,1):
+            data,init=fixture(0,timescale=48000,version=version)
+            values=list(samples(data,init,0))
+            self.assertEqual(values[0][1]['timescale'],48000);self.assertEqual(values[0][1]['duration'],1536)
+        data,init=fixture(0,timescale=0)
+        with self.assertRaises(ValueError):list(samples(data,init,0))
+
     def test_midtrack_ranges_keep_sample_locations_and_encryption(self):
         for offset in (0,17300342):
             data,init=fixture(offset);values=list(samples(data,init,offset))

@@ -2,7 +2,7 @@
 const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
 const host='https://audio-ssl.itunes.apple.com',requests=[],fetches=[];
 const key=n=>Buffer.from(Uint8Array.from({length:16},(_,i)=>i+n)).toString('base64');
-let noAtmos=false;
+let noAtmos=false,heldSegment=null;
 const files={
  '/master':()=>`#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=768000,CODECS="${noAtmos?'mp4a.40.2':'ec-3'}"\neac3.m3u8?session=NEVER_EXPORT\n`,
  '/extended':()=>`#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1800000,CODECS="alac"\nlossless.m3u8?session=NEVER_EXPORT\n`,
@@ -22,6 +22,7 @@ const context=vm.createContext({location:{origin:'https://music.apple.com'},wind
  fetch:async(url,options)=>{
   fetches.push(String(url));
   const u=new URL(url);assert.equal(u.origin,host);assert.equal(options.credentials,'omit');
+  if(u.pathname==='/audio.mp4'&&options.headers.Range==='bytes=100-119'&&heldSegment)await heldSegment;
   const file=files[u.pathname];assert(file,u.pathname);const raw=file();let bytes=typeof raw==='string'?new TextEncoder().encode(raw):raw;
   const range=options.headers.Range;let status=200;
   if(range){const m=/bytes=(\d+)-(\d+)/.exec(range);assert(m);bytes=bytes.slice(Number(m[1]),Number(m[2])+1);status=206;}
@@ -37,6 +38,21 @@ const call=params=>context.emberboxSpatialSource(params);
  const first=await call({action:'segment',contextId:id,index:0,offset:0});
  assert.equal(first.total,120);assert.deepEqual(Buffer.from(first.data,'base64'),Buffer.from(Uint8Array.from({length:120},(_,i)=>i)));
  const rest=await call({action:'segment',contextId:id,index:0,offset:100});assert.equal(Buffer.from(rest.data,'base64').length,20);
+ // A slow pre-seek segment must not overwrite the newly selected segment's
+ // cache, or cause duplicate downloads for concurrent reads of that segment.
+ const ctx=context.window.__emberSpatialContexts.get(id);ctx.cache=null;
+ files['/second.mp4']=()=>new Uint8Array(120).fill(9);
+ ctx.segments.push({...ctx.segments[0],url:host+'/second.mp4'});
+ let releaseSegment;heldSegment=new Promise(resolve=>releaseSegment=resolve);
+ const late=call({action:'segment',contextId:id,index:0,offset:0});
+ await new Promise(resolve=>setImmediate(resolve));
+ const fetchCount=fetches.length;
+ const pair=await Promise.all([call({action:'segment',contextId:id,index:1,offset:0}),call({action:'segment',contextId:id,index:1,offset:100})]);
+ assert.equal(fetches.length-fetchCount,2,'Concurrent reads must share the same init/body request');
+ assert.equal(Buffer.from(pair[0].data,'base64').at(-1),9);
+ releaseSegment();heldSegment=null;
+ assert.equal(Buffer.from((await late).data,'base64').at(-1),119);
+ assert.equal(ctx.cache.index,1,'The superseded segment replaced the current seek cache');
  await call({action:'license',contextId:id,index:1,challenge:'Y2hhbGxlbmdl'});
  assert(requests.at(-1).keyuri.endsWith(key(1)),'License must correspond to the active media key, not initialization key');
  await assert.rejects(call({action:'segment',contextId:id,index:-1}),/INVALID_ARGUMENTS/);

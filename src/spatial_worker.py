@@ -8,7 +8,6 @@ from pathlib import Path
 import queue
 import re
 import resource
-import struct
 import sys
 import threading
 import time
@@ -18,6 +17,7 @@ from spatial_demux import samples
 from spatial_aac import Aac,PcmResampler,configuration
 from spatial_alac import Alac,configuration as alac_configuration
 from spatial_fairplay import FairPlay
+from spatial_seek import Seeks,SeekCancelled,PcmWriter
 
 resource.setrlimit(resource.RLIMIT_CORE,(0,0))
 # PR_SET_DUMPABLE also prevents system crash handlers from retaining audio.
@@ -27,7 +27,7 @@ if ctypes.CDLL(None).prctl(1,15,0,0,0)!=0:raise RuntimeError('SPATIAL_PARENT_PRO
 if os.getppid()==1:os._exit(1)
 
 lock=threading.Lock();pending={};stopping=threading.Event();bootstrap=queue.Queue(1)
-verified=False;rendered_format=None
+seeks=Seeks()
 control=os.fdopen(os.dup(1),'w',buffering=1)
 
 def emit(value):
@@ -40,20 +40,24 @@ def listen():
             if not raw or len(raw)>4*1024*1024:break
             value=json.loads(raw)
             if value.get('type')=='start':
-                bootstrap.put_nowait(value)
+                seeks.submit(value.get('position',0),value['generation']);bootstrap.put_nowait(value)
+            elif value.get('type')=='seek':
+                seeks.submit(value['position'],value['generation'])
+                emit({'type':'seek-state','generation':value['generation'],'stage':'requested'})
             elif value.get('type')=='response':
                 target=pending.get(value.get('id'))
                 if target:target.put_nowait(value)
             elif value.get('type')=='stop':break
     except Exception:pass
-    finally:stopping.set()
+    finally:stopping.set();seeks.close()
 
-def request(action,**params):
+def request(action,cancelled=None,**params):
     ident=uuid.uuid4().hex;reply=queue.Queue(1);pending[ident]=reply
     try:
         emit({'type':'request','id':ident,'action':action,**params})
         until=time.monotonic()+16
         while not stopping.is_set() and time.monotonic()<until:
+            if cancelled is not None and cancelled.is_set():raise SeekCancelled()
             try:
                 response=reply.get(timeout=.1)
                 if response.get('error'):raise RuntimeError(response['error'])
@@ -68,8 +72,79 @@ def decode64(value,max_size):
     if len(result)>max_size:raise ValueError('Spatial message too large')
     return result
 
+def decode_pass(args,prepared,runtime,rate,cdm,licensed,license_key,writer,origin,generation,cancelled):
+    emit({'type':'seek-state','generation':generation,'stage':'decoding'})
+    segments=prepared['segments'];index=next((i for i,s in enumerate(segments) if s['start']+s['duration']>origin),len(segments)-1)
+    skip=round(max(0.,origin-segments[index]['start'])*rate)
+    decoded=0;emitted=0;expected=0.;verified=False;rendered_format=None;joc=resampler=None
+    fairplay=prepared.get('drm')=='fairplay'
+    def output(data,samples):
+        nonlocal skip,decoded,emitted,verified
+        if cancelled.is_set():raise SeekCancelled()
+        decoded+=samples
+        remove=min(skip,samples);skip-=remove;data=data[remove*8:]
+        if not data:return
+        if not verified:
+            verified=True;emit({'type':'quality','generation':generation,'audioQuality':rendered_format})
+        writer.write(data,generation,cancelled);emitted+=len(data)//8
+    try:
+        for number in range(index,len(segments)):
+            if cancelled.is_set():raise SeekCancelled()
+            segment=segments[number];key=segment['keyIndex'];license_key(key)
+            encrypted=bytearray();total=1
+            while len(encrypted)<total:
+                part=request('segment',cancelled=cancelled,index=number,offset=len(encrypted));total=part['total']
+                if not isinstance(total,int) or not 0<total<=18*1024*1024:raise RuntimeError('SPATIAL_SOURCE_LIMIT')
+                chunk=decode64(part['data'],393216)
+                if not chunk or len(encrypted)+len(chunk)>total:raise RuntimeError('SPATIAL_SOURCE_INVALID')
+                encrypted.extend(chunk)
+            for packet,crypto in samples(encrypted,part['initBytes'],part['originalOffset']):
+                if cancelled.is_set():raise SeekCancelled()
+                # E-AC-3 access units are independently encrypted. Keep half a
+                # second of JOC/HRTF warm-up, without rendering many seconds of
+                # discarded audio before a deep seek inside a long HLS segment.
+                # Never alter the selected asset, decoder or audible packets.
+                duration=crypto.get('duration',0)
+                if not args.get('fullPreroll') and number==index and crypto.get('codec')=='eac3' and crypto.get('timescale')==48000 and 0<duration<=6144:
+                    frames=round(duration*rate/48000)
+                    if skip-frames>=rate*.5:
+                        skip-=frames;decoded+=frames;continue
+                if joc is None:
+                    if crypto.get('codec')=='alac' and prepared.get('codec')=='alac' and fairplay:
+                        _,depth,source_rate=alac_configuration(crypto.get('cookie') or b'')
+                        rendered_format={'codec':'alac','evidence':'decoder','sampleRate':source_rate,'bitDepth':depth,'channels':2,'outputSampleRate':rate}
+                        joc=Alac(crypto['cookie'],output,cancelled,output_rate=rate)
+                    elif crypto.get('codec')=='aac' and prepared.get('codec')=='aac':
+                        source_rate=configuration(crypto.get('asc') or b'')[1]
+                        rendered_format={'codec':'aac','evidence':'decoder','sampleRate':source_rate,'channels':2,'outputSampleRate':rate}
+                        joc=Aac(crypto['asc'],output,cancelled,output_rate=rate)
+                    elif crypto.get('codec')=='eac3':
+                        rendered_format={'codec':'eac3','variant':'dolby-atmos','evidence':'decoder','sampleRate':48000,'channels':2,'renderer':'openjoc-binaural','outputSampleRate':rate}
+                        if rate!=48000:resampler=PcmResampler(48000,rate,output,cancelled)
+                        joc=Joc(runtime['decoder'],resampler.write if resampler else output)
+                    else:raise RuntimeError('SPATIAL_CODEC_MISMATCH')
+                    seeks.attach(joc,cancelled)
+                    if resampler:seeks.attach(resampler,cancelled)
+                    emit({'type':'seek-state','generation':generation,'stage':'codec-ready'})
+                if isinstance(joc,Alac):joc.packet_duration=crypto['duration']
+                cdm.decode_sample(packet,crypto,licensed[key],joc.feed)
+            expected+=segment['duration']
+            # The resampler delivers PCM on another thread. Its buffered tail
+            # is not missing audio; validate it after finish() has drained it.
+            if not isinstance(joc,Aac) and resampler is None and decoded<expected*rate-rate*.15:raise RuntimeError('SPATIAL_TRUNCATED_AUDIO')
+        if joc is None:raise RuntimeError('SPATIAL_EMPTY_FRAGMENT')
+        joc.finish()
+        if resampler:
+            resampler.finish()
+            if decoded<expected*rate-rate*.15:raise RuntimeError('SPATIAL_TRUNCATED_AUDIO')
+        if cancelled.is_set():raise SeekCancelled()
+        emit({'type':'decoded-end','generation':generation,'frames':emitted})
+    finally:
+        if joc:joc.close()
+        if resampler:resampler.close()
+
+
 def main():
-    global verified,rendered_format
     threading.Thread(target=listen,daemon=True).start()
     args=bootstrap.get(timeout=10);runtime=args['runtime'];prepared=args['prepared']
     for key in ('host','decoder'):
@@ -79,10 +154,7 @@ def main():
         if value.hexdigest()!=runtime[key+'Sha256']:raise RuntimeError('SPATIAL_RUNTIME_CHANGED')
     rate=int(args.get('outputRate',48000))
     if rate not in (48000,192000):raise RuntimeError('SPATIAL_PCM_FORMAT')
-    origin=max(0.,float(args.get('position',0)))
-    segments=prepared['segments'];index=next((i for i,s in enumerate(segments) if s['start']+s['duration']>origin),len(segments)-1)
-    skip=round(max(0.,origin-segments[index]['start'])*rate)
-    decoded=0;emitted=0;expected=0.;write_fd=None;cdm=joc=resampler=None
+    cdm=None
     try:
         fairplay=prepared.get('drm')=='fairplay'
         if fairplay:
@@ -92,22 +164,7 @@ def main():
             cdm=FairPlay(runtime['fairplay'])
         else:
             cdm=Cdm(runtime['host'],args['cdm']);cdm.call('certificate',decode64(prepared['certificate'],131072))
-        generation=int(args['generation'])
-        if not 0<generation<2**32:raise ValueError('Invalid PCM generation')
-        write_fd=3
-        def output(data,samples):
-            nonlocal skip,decoded,emitted
-            global verified
-            decoded+=samples
-            remove=min(skip,samples);skip-=remove;data=data[remove*8:]
-            if not data:return
-            if not verified:
-                verified=True
-                emit({'type':'quality','audioQuality':rendered_format})
-            emitted+=len(data)//8
-            view=memoryview(struct.pack('<II',generation,len(data))+data)
-            while view and not stopping.is_set():view=view[os.write(write_fd,view):]
-            if stopping.is_set():raise RuntimeError('SPATIAL_STOPPED')
+        writer=PcmWriter(3,stopping)
         licensed={}
         def license_key(key):
             if key in licensed:return
@@ -124,51 +181,17 @@ def main():
         if fairplay:
             # Confirm the full song before starting, including its rotated key.
             for key in range(len(prepared['licences'])):license_key(key)
-        for number in range(index,len(segments)):
-            if stopping.is_set():return
-            segment=segments[number];key=segment['keyIndex'];license_key(key)
-            encrypted=bytearray();total=1
-            while len(encrypted)<total:
-                part=request('segment',index=number,offset=len(encrypted));total=part['total']
-                if not isinstance(total,int) or not 0<total<=18*1024*1024:raise RuntimeError('SPATIAL_SOURCE_LIMIT')
-                chunk=decode64(part['data'],393216)
-                if not chunk or len(encrypted)+len(chunk)>total:raise RuntimeError('SPATIAL_SOURCE_INVALID')
-                encrypted.extend(chunk)
-            for packet,crypto in samples(encrypted,part['initBytes'],part['originalOffset']):
-                if joc is None:
-                    if crypto.get('codec')=='alac' and prepared.get('codec')=='alac' and fairplay:
-                        _,depth,source_rate=alac_configuration(crypto.get('cookie') or b'')
-                        rendered_format={'codec':'alac','evidence':'decoder','sampleRate':source_rate,'bitDepth':depth,'channels':2,'outputSampleRate':rate}
-                        joc=Alac(crypto['cookie'],output,stopping,output_rate=rate)
-                    elif crypto.get('codec')=='aac' and prepared.get('codec')=='aac':
-                        source_rate=configuration(crypto.get('asc') or b'')[1]
-                        rendered_format={'codec':'aac','evidence':'decoder','sampleRate':source_rate,'channels':2,'outputSampleRate':rate}
-                        joc=Aac(crypto['asc'],output,stopping,output_rate=rate)
-                    elif crypto.get('codec')=='eac3':
-                        rendered_format={'codec':'eac3','variant':'dolby-atmos','evidence':'decoder','sampleRate':48000,'channels':2,'renderer':'openjoc-binaural','outputSampleRate':rate}
-                        if rate!=48000:resampler=PcmResampler(48000,rate,output,stopping)
-                        joc=Joc(runtime['decoder'],resampler.write if resampler else output)
-                    else:raise RuntimeError('SPATIAL_CODEC_MISMATCH')
-                if isinstance(joc,Alac):joc.packet_duration=crypto['duration']
-                cdm.decode_sample(packet,crypto,licensed[key],joc.feed)
-            expected+=segment['duration']
-            # The resampler delivers PCM on another thread. Its buffered tail
-            # is not missing audio; validate it after finish() has drained it.
-            if not isinstance(joc,Aac) and resampler is None and decoded<expected*rate-rate*.15:raise RuntimeError('SPATIAL_TRUNCATED_AUDIO')
-        if joc is None:raise RuntimeError('SPATIAL_EMPTY_FRAGMENT')
-        joc.finish()
-        if resampler:
-            resampler.finish()
-            if decoded<expected*rate-rate*.15:raise RuntimeError('SPATIAL_TRUNCATED_AUDIO')
-        os.close(write_fd);write_fd=None
-        emit({'type':'decoded-end','frames':emitted})
-        while not stopping.wait(.1):pass
+        # Keep the same source context, CDM and licensed handles across seeks.
+        # Only codec state and bounded PCM queues are replaced. EOF stays warm.
+        while value:=seeks.next():
+            origin,generation,cancelled=value
+            try:decode_pass(args,prepared,runtime,rate,cdm,licensed,license_key,writer,origin,generation,cancelled)
+            except Exception:
+                if not cancelled.is_set():raise
     finally:
-        if write_fd is not None:
-            try:os.close(write_fd)
-            except OSError:pass
-        if joc:joc.close()
-        if resampler:resampler.close()
+        seeks.close()
+        try:os.close(3)
+        except OSError:pass
         if cdm:cdm.close()
 
 if __name__=='__main__':

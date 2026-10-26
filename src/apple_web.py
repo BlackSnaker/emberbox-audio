@@ -34,6 +34,7 @@ class AppleWeb:
         self.upgrade_attempted = False
         self.spatial_preparing=False
         self.start_lock = threading.Lock()
+        self.seek_timer=0;self.seek_next=None;self.seek_inflight=False;self.seek_intent=None
         self.timer = GLib.timeout_add(750, self.poll)
 
     @property
@@ -159,8 +160,50 @@ class AppleWeb:
     def action(self, method, **params):
         if self.closed:
             return
+        if method=='seek':
+            position=float(params.get('position',0))
+            if not 0<=position<86400:return
+            self.seek_next=position
+            self.seek_intent=(position,time.monotonic(),str(self.state.get('id') or self.state.get('catalogId') or ''))
+            self.state={**self.state,'position':position}
+            if not self.seek_timer and not self.seek_inflight:self.seek_timer=GLib.timeout_add(60,self._flush_seek)
+            self.changed()
+            return
+        if method in ('play','enable'):
+            self.seek_intent=None;self.seek_next=None
         future = self.pool.submit(self.request, method, **params)
         future.add_done_callback(lambda item:GLib.idle_add(self._action_done,item))
+
+    def _flush_seek(self):
+        self.seek_timer=0
+        if self.closed or self.seek_next is None:return False
+        position=self.seek_next;self.seek_next=None;self.seek_inflight=True
+        future=self.pool.submit(self.request,'seek',position=position)
+        future.add_done_callback(lambda item:GLib.idle_add(self._seek_done,item))
+        return False
+
+    def _seek_done(self,future):
+        self.seek_inflight=False
+        if self.closed:return False
+        if self.seek_next is not None:
+            self.seek_timer=GLib.timeout_add(30,self._flush_seek)
+        else:
+            try:future.result()
+            except Exception:self.seek_intent=None
+        return self._action_done(future)
+
+    def _seek_state(self,state):
+        intent=getattr(self,'seek_intent',None)
+        if not intent:return state
+        position,started,ident=intent
+        spatial=state.get('spatial') or {}
+        current=str(state.get('id') or state.get('catalogId') or '')
+        confirmed=abs(float(state.get('position') or 0)-position)<2 and not spatial.get('seeking')
+        if current!=ident or spatial.get('error') or time.monotonic()-started>12 or confirmed and self.seek_next is None and not self.seek_inflight:
+            self.seek_intent=None;return state
+        # Show the chosen position while the output catches up. Do not advance
+        # it or let an in-flight, pre-click status snap the slider backwards.
+        return {**state,'position':position}
 
     def _action_done(self, future):
         if self.closed:
@@ -194,9 +237,9 @@ class AppleWeb:
         if self.closed:
             return False
         try:
-            self.state = future.result()
+            self.state = self._seek_state(future.result())
             self.error = ''
-            if self.state.get('ready') and self.state.get('integrationVersion',0)<18 and not self.upgrade_attempted:
+            if self.state.get('ready') and self.state.get('integrationVersion',0)<19 and not self.upgrade_attempted:
                 self.upgrade_attempted = self.upgrading = True
                 self.pool.submit(self._upgrade,dict(self.state)).add_done_callback(
                     lambda item:GLib.idle_add(self._upgraded,item))
@@ -226,7 +269,7 @@ class AppleWeb:
             if self.connected:
                 try:
                     current = self.bridge.request('status')
-                    if current.get('ready') and current.get('integrationVersion',0)>=18 and (not state.get('authorized') or current.get('authorized')):
+                    if current.get('ready') and current.get('integrationVersion',0)>=19 and (not state.get('authorized') or current.get('authorized')):
                         break
                 except BridgeUnavailable:pass
             time.sleep(.3)
@@ -251,6 +294,7 @@ class AppleWeb:
 
     def close(self):
         self.closed = True
+        if self.seek_timer:GLib.source_remove(self.seek_timer);self.seek_timer=0
         signin=getattr(self,'lossless_process',None)
         if signin and signin.poll() is None:signin.terminate()
         GLib.source_remove(self.timer)

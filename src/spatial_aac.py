@@ -41,6 +41,9 @@ class Aac:
         if self.process.poll() is None:self.process.terminate()
         try:self.process.wait(timeout=2)
         except subprocess.TimeoutExpired:self.process.kill();self.process.wait()
+        # A warm seek starts a new PCM generation in this same process.
+        # Join the old reader before any callback can reach the next pass.
+        if self.thread is not threading.current_thread():self.thread.join(timeout=2)
         for stream in (self.process.stdin,self.process.stdout):
             try:stream.close()
             except OSError:pass

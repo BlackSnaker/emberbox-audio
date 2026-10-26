@@ -19,6 +19,7 @@ class Slot:
         self.generation=generation;self.origin=float(origin);self.parts=collections.deque()
         self.frames=0;self.received=0;self.consumed=0;self.total=None;self.start=0;self.ready=False;self.padding=0
         self.preroll=max(.4,min(2.,float(preroll)))
+        self.seeking=False;self.attack=0
     def take(self,n):
         parts=[]
         while n and self.parts:
@@ -33,7 +34,7 @@ class Mixer:
     def __init__(self,emit):
         self.emit=emit;self.condition=threading.Condition();self.slots=[None,None]
         self.current=0;self.fade=None;self.frames=0;self.paused=False;self.stopped=False
-        self.player=None;self.finished=False
+        self.player=None;self.finished=False;self.seek_tail=None
     def configure(self,p):
         slot=int(p['slot']);generation=int(p['generation'])
         if slot not in (0,1) or not 0<generation<2**32:raise ValueError('Invalid spatial slot')
@@ -57,10 +58,26 @@ class Mixer:
     def control(self,p):
         action=p['type']
         if action=='slot':self.configure(p)
+        elif action=='seek':
+            slot=int(p['slot']);generation=int(p['generation']);position=float(p['position'])
+            if slot not in (0,1) or not 0<generation<2**32 or not 0<=position<86400:raise ValueError('Invalid spatial slot')
+            with self.condition:
+                # Discard old buffered PCM immediately, including a half-finished
+                # Flow mix. Keep the device and its absolute output clock alive.
+                old=self.slots[self.current]
+                tail=old.take(BLOCK) if old and not self.paused else np.empty((0,2),np.float32)
+                self.seek_tail=tail*(1.-curve(np.linspace(0,1,len(tail))))[:,None] if len(tail) else None
+                self.fade=None;self.current=slot;self.slots[1-slot]=None
+                target=self.slots[slot]=Slot(generation,position,.4)
+                target.start=self.frames+(len(tail) if len(tail) else 0);target.preroll=.12;target.seeking=True
+                self.finished=False;self.condition.notify_all()
         elif action=='end':
             with self.condition:
                 target=self.slots[int(p['slot'])]
-                if target and target.generation==p['generation']:target.total=int(p['frames'])
+                if target and target.generation==p['generation']:
+                    target.total=int(p['frames'])
+                    if not target.ready and target.received>=target.total:
+                        target.ready=True;self.emit({'type':'ready','slot':int(p['slot']),'generation':target.generation})
                 self.condition.notify_all()
         elif action=='transition':
             with self.condition:
@@ -90,10 +107,14 @@ class Mixer:
             with self.condition:self.stopped=True;self.condition.notify_all()
     def render(self):
         with self.condition:
+            if self.seek_tail is not None:
+                tail=self.seek_tail;self.seek_tail=None;self.frames+=len(tail)
+                return tail.astype('<f4',copy=False).tobytes()
             fade=self.fade if self.fade and not self.fade.get('rendered') else None
             old=self.slots[fade['old'] if fade else self.current]
             new=self.slots[fade['next']] if fade else None
             if not old:return None
+            if old.seeking and not old.ready:return None
             if old.ended() and not fade and old.padding<RATE*.15:
                 old.padding+=BLOCK;self.frames+=BLOCK;return bytes(BLOCK*8)
             count=min(BLOCK,old.frames)
@@ -103,6 +124,11 @@ class Mixer:
             if count<BLOCK and not old.ended() and old.total!=old.consumed+old.frames and not fade:return None
             if not count:return None
             out=old.take(count)
+            if old.seeking:
+                # A short sample envelope avoids an abrupt first waveform edge.
+                length=round(.020*RATE);n=min(len(out),max(0,length-old.attack))
+                if n:out[:n]*=curve((np.arange(n)+old.attack)/max(1,length-1))[:,None]
+                old.attack+=len(out)
             if fade and len(out)<count:out=np.pad(out,((0,count-len(out)),(0,0)))
             if fade:out=blend(out,new.take(count),self.frames-fade['start'],fade['length'],fade['initial'])
             self.frames+=count
@@ -128,10 +154,13 @@ class Mixer:
                 elapsed=max(0.,(played-current.start)/RATE)
                 position=current.origin+min(elapsed,current.total/RATE) if current.total is not None else current.origin+elapsed
                 ended=current.ended() and played>=current.start+current.total-1
-                ready=current.received>=min(RATE,current.total or RATE)
+                ready=current.ready if current.seeking else current.received>=min(RATE,current.total or RATE)
                 self.emit({'type':'state','slot':fade['next'] if fade and fade['announced'] else self.current,
+                    'generation':current.generation,
                     'position':position,'phase':'ended' if ended else 'playing' if ready else 'preparing',
-                    'playing':ready and not self.paused and not ended,'buffers':[[s.frames,s.received,s.consumed,s.total if s.total is not None else -1] if s else [] for s in self.slots],
+                    'playing':ready and not self.paused and not ended,'seeking':current.seeking and (not ready or not self.paused and played<current.start),
+                    'buffers':[[s.frames,s.received,s.consumed,s.total if s.total is not None else -1] if s else [] for s in self.slots],
+                    'playedFrame':round(played),'paused':self.paused,
                     'mixFrame':self.frames,'fade':([self.fade['start'],self.fade['length']] if self.fade else [])})
 
 

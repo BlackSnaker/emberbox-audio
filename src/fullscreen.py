@@ -659,8 +659,14 @@ class FullscreenPlayer:
         self.update()
 
     def on_seek(self,_scale,_scroll,value):
-        if self.progress.get_sensitive():self.host.seek_to(value)
+        if self.progress.get_sensitive():self.request_seek(value)
         return True
+
+    def request_seek(self,value):
+        self.position=max(0,min(self.host.length/1e6,float(value)))
+        self.host.seek_to(self.position)
+        self.progress.set_value(self.position)
+        self.elapsed.set_text(clock_text(self.position))
 
     def on_key(self,_window,event):
         key=Gdk.keyval_name(event.keyval)
@@ -672,7 +678,7 @@ class FullscreenPlayer:
         if key in ('space','XF86AudioPlay'):self.action('toggle');return True
         if key in ('Left','Right'):
             if self.progress.get_sensitive() and self.host.length>0:
-                self.host.seek_to(max(0,min(self.host.length/1e6,self.position+(-10 if key=='Left' else 10))))
+                self.request_seek(self.position+(-10 if key=='Left' else 10))
             return True
         if key in ('Up','Down'):
             if self.host.sound.available:self.host.sound.set_volume(max(0,min(1,self.host.sound.volume+(.03 if key=='Up' else -.03))))

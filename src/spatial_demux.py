@@ -49,7 +49,7 @@ def audio_specific_config(data,start,end,depth=0):
 
 
 def initialization(data,end):
-    trex={};descriptions=[]
+    trex={};descriptions=[];timescale=None
     def entry(kind,p,q):
         codec={b'ec-3':'eac3',b'mp4a':'aac',b'alac':'alac'}.get(kind);scheme=None;configs=[];asc=None;cookie=None
         if kind not in (b'enca',b'ec-3',b'mp4a',b'alac'):return None
@@ -71,9 +71,15 @@ def initialization(data,end):
         if not codec or len(configs)!=1 or scheme not in (b'cbcs',b'cenc'):return None
         return {**configs[0],'codec':codec,'asc':asc,'cookie':cookie,'scheme':2 if scheme==b'cbcs' else 1}
     def walk(start,limit,depth=0):
+        nonlocal timescale
         if depth>12:raise ValueError('CMAF nesting limit')
         for kind,_,p,q in boxes(data,start,limit):
             if kind in (b'moov',b'trak',b'mdia',b'minf',b'stbl',b'mvex'):walk(p,q,depth+1)
+            elif kind==b'mdhd':
+                version=uint(data,p,1,q)
+                if version not in (0,1):raise ValueError('Unsupported CMAF timescale')
+                timescale=uint(data,p+(12 if version==0 else 20),4,q)
+                if not timescale:raise ValueError('Invalid CMAF timescale')
             elif kind==b'stsd':
                 if descriptions:raise ValueError('Multiple audio tracks unsupported')
                 count=uint(data,p+4,4,q)
@@ -84,6 +90,8 @@ def initialization(data,end):
                 track=uint(data,p+4,4,q);trex[track]={'description':uint(data,p+8,4,q),'duration':uint(data,p+12,4,q),'size':uint(data,p+16,4,q)}
     walk(0,end)
     if not any(descriptions):raise ValueError('Unsupported CMAF audio initialization')
+    for description in descriptions:
+        if description is not None:description['timescale']=timescale
     return trex,descriptions
 
 

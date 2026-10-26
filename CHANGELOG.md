@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.18.3 — 2026-10-26
+
+- Seek inside an already open Apple track without restarting its licensed host, negotiating the asset again or recreating the output device. Keep the original ALAC / Hi-Res / Atmos asset and decoder-confirmed quality.
+- Cancel blocked codec pipes, discard old PCM generations and honor the latest position during rapid seeks. Preserve pause, support rewind after EOF and use short sample envelopes at the boundary. Coalesce slider requests and update fullscreen progress immediately; repeated arrow keys accumulate correctly.
+- Avoid rendering discarded Atmos audio far before the target: use declared sample timing and retain half a second of JOC/HRTF preroll. Unknown timing keeps the full preroll. A failed native seek receives one native retry, without silently falling back to web AAC.
+- Verify real Apple Lossless/Atmos seeks, paused and rapid seeks, mixed-format EmberFlow, blocked FFmpeg cancellation and exact 24-bit / 192 kHz ALAC samples after seeking. Apple integration 19. Timings depend on the device and network.
+
 ## 0.18.2 — 2026-10-26
 
 - Click the current album title in the widget or fullscreen listening room to open its release page inside Ember. Keep the subdued typography, amber hover and keyboard-accessible controls without tooltips or focus outlines.

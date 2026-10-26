@@ -357,8 +357,11 @@ def run():
             before_seek = stage.position
             key(stage.window, 'Right')
             assert host.calls[-1] == ('spotify', 'seek', before_seek+10)
+            key(stage.window, 'Right')
+            assert host.calls[-1] == ('spotify', 'seek', before_seek+20)
+            assert stage.progress.get_value() == before_seek+20
             key(stage.window, 'Left')
-            assert host.calls[-1] == ('spotify', 'seek', max(0, before_seek-10))
+            assert host.calls[-1] == ('spotify', 'seek', before_seek+10)
             key(stage.window, 'space')
             assert host.calls[-1] == ('spotify', 'toggle')
             key(stage.window, 'Up')

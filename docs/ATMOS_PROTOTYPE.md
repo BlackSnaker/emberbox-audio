@@ -71,8 +71,23 @@ or output device may resample or otherwise process audio. The source badge does
 not certify an unchanged signal all the way to the headphones.
 
 Pause, seek, source changes and cancellation control the entire native path.
-Expired authentication, unavailable licences, network or decoder errors restore
-ordinary playback instead of repeatedly retrying the same song.
+Startup errors such as expired authentication or unavailable licences restore
+ordinary playback. Native seek recovery preserves quality as described below.
+
+### Seeking without a quality change
+
+Seeking within the current track retains its source context, CDM/licensed handles
+and output device. Only the codec pass and bounded PCM queue are replaced. Rapid
+requests cancel stale passes and the last position wins; seeking while paused
+stays paused. The slider responds immediately while the output confirms the move.
+No lower-bitrate rendition or AAC conversion is used to make seeking faster.
+
+For deep Atmos seeks, declared 48 kHz media timestamps allow unused access units
+to be skipped before a half-second JOC/HRTF preroll. The audible section still
+uses the same Atmos decoder and asset. Unknown timing retains the complete
+preroll. A native seek failure gets one native retry; if that fails, playback
+stops rather than silently switching the seek to web AAC. Other startup failures
+retain the ordinary-playback recovery described below.
 
 ## Components and resources
 

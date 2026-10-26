@@ -24,6 +24,9 @@ const oldPipe=new PassThrough();p.pipePcm(pcmSession,partial,{stdio:[null,null,n
 oldPipe.write(packet(21).subarray(0,13));partial.closePcm();assert.equal(forwarded.length,0);
 const newPipe=new PassThrough();p.pipePcm(pcmSession,replacement,{stdio:[null,null,null,newPipe]});
 newPipe.write(packet(22).subarray(0,3));newPipe.write(packet(22).subarray(3));
+// A warm seek keeps the producer pipe. Discard its old whole generation.
+replacement.generation=24;newPipe.write(Buffer.concat([packet(22),packet(24)]));
+assert.deepEqual(forwarded.pop(),packet(24));
 assert.equal(forwarded.length,1);assert.deepEqual(forwarded[0],packet(22));replacement.closePcm();
 let blocked=true;raw.write=frame=>{forwarded.push(Buffer.from(frame));return !blocked;};
 const pressured={slot:0,generation:23},pressuredPipe=new PassThrough();
@@ -45,8 +48,22 @@ p.loadDeck=async(r,deck,prepared)=>{deck.context=prepared.contextId;deck.child=c
  await p.intercept(win,{method:'transport',params:{action:'pause'}});assert.equal(p.merge(win,metadata).playing,false);
  await p.intercept(win,{method:'transport',params:{action:'resume'}});assert.equal(commands.at(-1).paused,false);
  await p.intercept(win,{method:'transport',params:{action:'pause'}});
- await p.intercept(win,{method:'seek',params:{position:90}});assert(d.child.killed);r=p.session;assert.equal(r.state.position,90);
- await p.failed(r,'DEVICE_LIMIT');assert.equal(p.session,null);assert.equal(calls.at(-1).method,'play');assert.equal(calls.at(-1).params.position,90);
+ const decoder=d.child,sourceContext=d.context,output=r.mixer;
+ await p.intercept(win,{method:'seek',params:{position:90}});
+ assert.equal(d.child,decoder);assert.equal(decoder.killed,false);assert.equal(d.context,sourceContext);assert.equal(r.mixer,output);assert.equal(p.session,r);
+ assert.equal(r.state.position,90);assert.equal(r.paused,true);assert.equal(commands.at(-1).type,'seek');
+ const staleGeneration=d.generation;await p.intercept(win,{method:'seek',params:{position:12}});
+ p.mixerMessage(r,{type:'state',slot:0,generation:staleGeneration,position:91,phase:'playing',playing:true,seeking:false});
+ assert.equal(r.state.position,12);assert.equal(r.seeking,true);assert.equal(r.paused,true);
+ p.mixerMessage(r,{type:'state',slot:0,generation:d.generation,position:12,phase:'playing',playing:false,seeking:false});
+ assert.equal(r.seeking,false);assert.equal(p.merge(win,metadata).playing,false);
+ await p.intercept(win,{method:'seek',params:{position:90}});
+ const playsBeforeSeekFailure=calls.filter(c=>c.method==='play').length;
+ await p.failed(r,'SPATIAL_SEEK_TIMEOUT');assert(p.session);assert.equal(p.session.nativeOnly,true);assert.equal(p.session.state.position,90);
+ assert.equal(calls.filter(c=>c.method==='play').length,playsBeforeSeekFailure,'A seek failure silently downgraded to web AAC');
+ r=p.session;p.message(r,r.active,{type:'quality',audioQuality:{codec:'aac',evidence:'decoder',sampleRate:48000,channels:2,outputSampleRate:48000}});
+ assert.equal(p.session,null,'A native seek recovery admitted a lower-quality rendition');
+ assert.equal(calls.filter(c=>c.method==='play').length,playsBeforeSeekFailure);
  assert.equal(p.merge(win,metadata).audioQuality.codec,'aac');assert.equal(p.session,null);
  await p.configure(false);assert.equal(JSON.parse(fs.readFileSync(process.env.EMBERBOX_SPATIAL_CONFIG)).enabled,false);
  await p.configure(true);p.merge(win,metadata);r=p.session;
@@ -98,13 +115,15 @@ p.loadDeck=async(r,deck,prepared)=>{deck.context=prepared.contextId;deck.child=c
  p.mixerMessage(r,{type:'flow-started',key:latest.key,slot:latest.slot,duration:.22});
  await r.manualTask;assert.equal(r.active,latest);p.source=source;
  p.mixerMessage(r,{type:'released',slot:primed.slot,generation:primed.generation});
- // Rewind uses the same output device; pause while preparing wins over play.
+ // Rewind keeps both the native output and same licensed worker alive.
+ const warmWorker=r.active.child,warmContext=r.active.context;
  await p.intercept(win,{method:'seek',params:{position:0}});await tick();
- assert.equal(p.session,r);assert.equal(r.mixer,mixer);assert(r.manual);
- await p.intercept(win,{method:'transport',params:{action:'pause'}});await r.manualTask;
+ assert.equal(p.session,r);assert.equal(r.mixer,mixer);assert.equal(r.manual,null);assert(r.seeking);
+ assert.equal(r.active.child,warmWorker);assert.equal(r.active.context,warmContext);
+ await p.intercept(win,{method:'transport',params:{action:'pause'}});
  assert.equal(r.manual,null);assert.equal(r.paused,true);assert.equal(r.active,latest);
- const cancelledRewind=r.decks[1-latest.slot];
- if(cancelledRewind)p.mixerMessage(r,{type:'released',slot:cancelledRewind.slot,generation:cancelledRewind.generation});
+ p.mixerMessage(r,{type:'state',slot:latest.slot,generation:latest.generation,position:0,phase:'playing',playing:false,seeking:false});
+ assert.equal(r.seeking,false);
  const goodSource=p.source;p.source=async()=>{throw Error('SPATIAL_NETWORK');};
  await p.intercept(win,{method:'play',params:{kind:'songs',id:'123'}});await r.manualTask;
  assert.equal(r.active,latest);assert.equal(latest.child.killed,false);
