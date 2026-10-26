@@ -41,6 +41,7 @@ from account_panel import AccountPanel
 from ember_mpris import EmberMpris
 from frame_health import FrameHealth
 from fullscreen import FullscreenPlayer
+from artist_catalog import album_ref
 from desktop_launch import launch as launch_desktop
 import desktop_window
 from kwin_desktop import KWinDesktop
@@ -79,6 +80,9 @@ window { background-color: transparent; border: none; box-shadow: none; }
 .title { color: #fbf1c7; font-size: 20px; font-weight: bold; }
 .artist { color: #bdae93; font-size: 12px; }
 .album { color: #928374; font-size: 10px; }
+button.album-link, button.album-link:focus { background: transparent; border: none; box-shadow: none;
+  padding: 0; min-height: 0; min-width: 0; outline-style: none; border-radius: 4px; }
+button.album-link:hover label { color: #f5d68c; }
 .time { color: #928374; font-size: 10px; font-weight: bold; }
 .hint { color: #a89984; font-size: 10px; }
 .cover { border-radius: 11px; }
@@ -392,8 +396,14 @@ class Widget:
         self.album.set_ellipsize(Pango.EllipsizeMode.END)
         self.album.set_max_width_chars(40)
         self.album.get_style_context().add_class('album')
+        self.album_button=Gtk.Button();self.album_button.add(self.album)
+        self.album_button.get_style_context().add_class('album-link')
+        self.album_button.set_has_tooltip(False);self.album_button.set_sensitive(False)
+        self.album_button.get_accessible().set_name(text('Open album','Открыть альбом'))
+        self.album_button.connect('clicked',self.show_album)
+        self.album.connect('notify::label',self.update_album_link)
         self.album_row=Gtk.Box(spacing=7)
-        self.album_row.pack_start(self.album,True,True,0)
+        self.album_row.pack_start(self.album_button,True,True,0)
         self.quality=QualityBadge();self.album_row.pack_end(self.quality,False,False,0)
         details.pack_start(self.album_row, False, False, 0)
 
@@ -583,6 +593,15 @@ class Widget:
     def show_fullscreen(self):
         if self.fullscreen is None:self.fullscreen=FullscreenPlayer(self)
         self.fullscreen.open()
+
+    def show_album(self,_button=None):
+        if not album_ref(self):return
+        if self.fullscreen is None:self.fullscreen=FullscreenPlayer(self)
+        self.fullscreen.open_album()
+
+    def update_album_link(self,*_args):
+        self.album_button.set_sensitive(album_ref(self) is not None)
+        self.album_button.get_accessible().set_name(text('Open album: ','Открыть альбом: ')+self.album.get_text())
 
     def prepare_fullscreen(self):
         self.fullscreen_prewarm=0

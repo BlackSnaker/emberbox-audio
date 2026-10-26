@@ -5,10 +5,31 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
-from artist_catalog import ArtistRepository,artist_ref,plain,sanitize,ReleaseCatalog
+from artist_catalog import ArtistRepository,artist_ref,album_ref,plain,sanitize,ReleaseCatalog
 
 
 class Artists(unittest.TestCase):
+    def test_album_click_captures_source_recording_and_rejects_status_text(self):
+        host=SimpleNamespace(source='apple-music',apple_mode='native',length=180000000,
+            album=MagicMock(),artist=MagicMock(),apple_web=SimpleNamespace(state={
+                'id':'i.original','catalogId':'123','album':'Original edition'}))
+        host.album.get_text.return_value='Original edition';host.artist.get_text.return_value='Original Artist'
+        ref=album_ref(host);self.assertEqual(ref['songId'],'123');self.assertEqual(ref['title'],'Original edition')
+        host.apple_web.state={'id':'456','album':'Next edition'}
+        self.assertEqual(ref['songId'],'123','Changing songs must not mutate a clicked reference')
+        self.assertIsNone(album_ref(host),'Connection/error labels must not act as an album title')
+        host.apple_mode='browser';self.assertIsNone(album_ref(host))
+        host.source='youtube';self.assertIsNone(album_ref(host))
+
+    def test_album_uses_source_album_id_or_spotify_track_identity(self):
+        host=SimpleNamespace(source='yandex-music',length=180000000,album=MagicMock(),artist=MagicMock(),
+            yandex_web=SimpleNamespace(state={'id':'123','album':'Edition','albumId':'456'}))
+        host.album.get_text.return_value='Edition';host.artist.get_text.return_value='Artist'
+        self.assertEqual(album_ref(host)['id'],'456')
+        host.source='spotify';host.session=None;host.track_id='/org/mpris/MediaPlayer2/Track/ABC'
+        self.assertEqual(album_ref(host)['songUri'],'spotify:track:ABC')
+        host.length=0;self.assertIsNone(album_ref(host))
+
     def test_prose_is_text_and_preserves_paragraphs(self):
         value=plain('<p>A &amp; B</p><script>credential</script><p><b>Second</b> line</p>')
         self.assertEqual(value,'A & B\n\nSecond line')

@@ -38,6 +38,20 @@ REFERENCES=r'''(() => {
   return result;
 })()'''
 
+ALBUM_REFERENCE=r'''(() => {
+  const uri=URI,current=CURRENT;
+  const id=uri.match(/(?:spotify:track:|\/track\/)([A-Za-z0-9]{1,64})(?:$|[?/#])/)?.[1];
+  if(!id)return null;
+  const row=Array.from(document.querySelectorAll('main [data-testid="tracklist-row"]'))
+    .find(row=>row.querySelector('a[href="/track/'+id+'"]'));
+  const footer=current?document.querySelector('footer, [data-testid="now-playing-widget"]'):null;
+  const currentId=footer?.querySelector('a[href^="/track/"]')?.getAttribute('href')?.match(/^\/track\/([A-Za-z0-9]{1,64})(?:$|\?)/)?.[1];
+  const root=row||(footer&&currentId===id?footer:null);
+  const href=root?.querySelector('a[href^="/album/"]')?.getAttribute('href')||'';
+  const album=href.match(/^\/album\/([A-Za-z0-9]{1,64})(?:$|\?)/)?.[1];
+  return album?{id:album}:null;
+})()'''
+
 READ=r'''(() => {
   const root=document.querySelector('main');if(!root)return null;
   const name=root.querySelector('h1')?.textContent.trim()||'';if(!name)return null;
@@ -108,6 +122,13 @@ class SpotifyArtist:
         ident=str(ref.get('id') or '')
         if ident and not re.fullmatch(r'[A-Za-z0-9]{1,64}',ident):raise ValueError('Invalid Spotify ID')
         if category=='release':
+            if not ident:
+                album=self.client.evaluate(ALBUM_REFERENCE.replace('URI',json.dumps(str(ref.get('songUri') or '')))
+                    .replace('CURRENT','true' if ref.get('current') else 'false')) or {}
+                ident=str(album.get('id') or '')
+                if not re.fullmatch(r'[A-Za-z0-9]{1,64}',ident):
+                    raise RuntimeError(text('Spotify did not supply the album for this recording. Retry while the song is selected.',
+                        'Spotify не передал альбом этой записи. Повтори, пока выбрана эта песня.'))
             self.navigate('/album/'+ident)
             data=self.client.tracks({'href':'/album/'+ident})
             info=self.read()

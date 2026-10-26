@@ -63,6 +63,15 @@ GTK controls at once. Distinct IDs with the same title are never merged.
 
 ## Open a release
 
+The **album title ›** beneath the artist opens that recording's release directly.
+The desktop widget's album title opens the same page in the listening room.
+Its cover, supplied liner notes and track list stay inside Ember; **Back** returns
+to the previous room. Opening a release never starts or pauses music.
+Apple uses the song's album relationship, Spotify reads the selected recording's
+album link, and Yandex uses its own album identity. Missing identity is reported,
+not replaced by a similarly named album. YouTube's video connection has no verified
+album catalogue, so its album label is not a link.
+
 Click a cover for tracks, available release date and track count. **Read the
 liner notes** softly unfolds the source's album description when supplied.
 

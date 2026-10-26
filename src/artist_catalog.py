@@ -46,6 +46,25 @@ def artist_ref(host,item=None):
     return ref
 
 
+def album_ref(host):
+    """Snapshot the recording whose album label was clicked; never name-search."""
+    source=host.source
+    title=host.album.get_text().strip()
+    if source not in ('spotify','apple-music','yandex-music') or not title or not host.length:return None
+    if source=='apple-music' and host.apple_mode!='native':return None
+    ref=artist_ref(host)
+    ref.update(name=title[:300],title=title[:300],artist=host.artist.get_text()[:300],kind='album')
+    if source in ('apple-music','yandex-music'):
+        state=(host.apple_web if source=='apple-music' else host.yandex_web).state
+        if state.get('album')!=title:return None  # The label may contain a connection error.
+        album_id=str(state.get('albumId') or '')
+        if re.fullmatch(r'\d{1,20}',album_id):ref['id']=album_id
+    elif not ref.get('songUri'):
+        ident=str(getattr(host,'track_id','') or '').rsplit('/',1)[-1]
+        if re.fullmatch(r'[A-Za-z0-9]{1,64}',ident):ref['songUri']='spotify:track:'+ident
+    return ref
+
+
 def sanitize(result):
     """Render provider prose as text; never interpret remote markup as GTK markup."""
     if not isinstance(result,dict):raise ValueError('Invalid artist response')

@@ -97,6 +97,7 @@ class ArtistView(Gtk.Box):
         self.service,self.artwork,self.go_back,self.accounts,self.search=service,artwork,back,accounts,search
         self.active=False;self.closed=False;self.request=0;self.source=service.host.source
         self.reference={};self.profile=None;self.release=None;self.release_ref=None
+        self.direct_release=False
         self.section='overview';self.items=[];self.sections=[];self.choices=[];self.next_offset=None
         self.cache={};self.card_size=164;self.portrait_size=184;self.busy=False;self.syncing=False
         self.banner_cache=BannerCache(artwork.pool)
@@ -136,15 +137,21 @@ class ArtistView(Gtk.Box):
         self.intro_pending=True
         self.request+=1;self.reference=dict(ref);self.source=self.service.host.source
         self.profile=self.release=self.release_ref=None;self.items=[];self.sections=[];self.choices=[]
+        self.direct_release=False
         self.section='overview';self.next_offset=None;self.note=''
         self.catalog=ReleaseCatalog();self.card_page=0;self.search_only=False
+
+    def set_release_reference(self,ref):
+        self.set_reference({'name':ref.get('artist','')})
+        self.direct_release=True;self.release_ref=dict(ref);self.release=dict(ref)
 
     def activate(self):
         self.active=True
         self.intro_pending=True
         if self.source!=self.service.host.source:self.set_reference(artist_ref(self.service.host))
         if not self.reference:self.reference=artist_ref(self.service.host)
-        if self.profile:
+        if self.direct_release and self.release_ref:self.load('release',self.release_ref)
+        elif self.profile:
             self.render()
             if self.catalog_mode():self.load_catalog()
         else:self.load('artist',self.reference)
@@ -162,6 +169,7 @@ class ArtistView(Gtk.Box):
 
     def back(self):
         self.cancel_intro()
+        if self.direct_release:self.go_back();return
         if self.release_ref:
             self.request+=1;self.service.cancel_browse();self.busy=False;self.spinner.stop()
             self.release=self.release_ref=None;self.section=self.saved_section;self.select(self.section,force=True)
@@ -258,7 +266,8 @@ class ArtistView(Gtk.Box):
         key=(source,category,str(ref.get('id') or ''),str(ref.get('songId') or ref.get('songUri') or ''),
              str(ref.get('name') or ''),str(ref.get('section') or ''),offset)
         self.busy=True;self.spinner.start();self.accounts_button.hide()
-        self.notice.set_text(text('Opening a little more of their world…','Открываю музыкальный мир артиста…'))
+        self.notice.set_text(text('Opening this release…','Открываю альбом…') if category=='release' else
+                            text('Opening a little more of their world…','Открываю музыкальный мир артиста…'))
         self.render()
         def done(result,error):
             if self.closed or not self.active or generation!=self.request or source!=self.service.host.source:return
@@ -277,7 +286,9 @@ class ArtistView(Gtk.Box):
                 if self.profile and self.profile.get('id'):
                     self.reference={'id':str(self.profile['id']),'name':self.profile.get('name','')}
                 self.search_only=bool(result.get('searchOnly'))
-            elif category=='release':self.release=result.get('release') or self.release
+            elif category=='release':
+                self.release=result.get('release') or self.release
+                if self.release and self.release.get('id'):self.release_ref.update(self.release)
             values=result.get('items') or []
             if append:
                 seen={v.get('uri') or v.get('id') for v in self.items}
@@ -460,8 +471,10 @@ class ArtistView(Gtk.Box):
         self.song_buttons=[];self.album_buttons=[];self.choice_buttons=[];self.filters={}
         self.overview_panels={};self.shelf_widgets=[]
         self.overview_columns=None;self.overview_fit_key=None
+        self.crumb.set_text(text('THE ALBUM ROOM','КОМНАТА АЛЬБОМА') if self.release_ref else text('THE ARTIST ROOM','КОМНАТА АРТИСТА'))
+        self.refresh_button.get_accessible().set_name(text('Refresh album','Обновить альбом') if self.release_ref else text('Refresh artist','Обновить артиста'))
         if self.release_ref:
-            self.back_button.set_label('‹ '+text('Artist','Артист'));self.hero(self.release or self.release_ref,True)
+            self.back_button.set_label('‹ '+(text('Back','Назад') if self.direct_release else text('Artist','Артист')));self.hero(self.release or self.release_ref,True)
             prose=(self.release or {}).get('description') or ''
             if prose:
                 reveal=Gtk.Revealer();reveal.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN);reveal.set_transition_duration(350)

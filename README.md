@@ -139,6 +139,8 @@ Open **Listening room · Fullscreen** from settings, press the **⛶** header bu
 
 The fullscreen **Collection** page brings personal picks, saved albums and search into the room. **+** builds a private queue; its own **Queue** page lets you reorder, remove and play songs in sequence. Transport stays visible across the room. [Source support and queue controls →](docs/COLLECTION.md)
 
+**Open the album behind the song.** Click its title in the widget or fullscreen to open the release, explore its tracks and liner notes, listen or add songs to your queue. Browsing keeps the current playback state.
+
 **Step into the artist's world.** Click the artist's name for a photographic
 masthead, popular songs, album and single shelves, compilations, appearances and editorial
 stories. Open a release, read its liner notes, listen or build your queue without

@@ -19,7 +19,7 @@ from music_library import MusicService
 from listening_library import LibraryView,QueueView,CSS as LIBRARY_CSS
 from quality_badge import QualityBadge,CSS as QUALITY_CSS
 from karaoke import KaraokeView,CSS as KARAOKE_CSS
-from artist_catalog import artist_ref
+from artist_catalog import artist_ref,album_ref
 from artist_view import ArtistView,CSS as ARTIST_CSS
 from dj_service import DJService
 from dj_view import DJView,CSS as DJ_CSS
@@ -52,6 +52,9 @@ window.ember-stage.stage-opening { background-color: transparent; }
 .stage-track-title { color: #fbf1c7; font-size: 34px; font-weight: bold; letter-spacing: -1px; }
 .stage-artist { color: #bdae93; font-size: 17px; }
 .stage-album { color: #928374; font-size: 11px; }
+.ember-stage button.stage-album-link { background: transparent; border: none; box-shadow: none;
+  padding: 0; min-height: 0; min-width: 0; border-radius: 5px; }
+.ember-stage button.stage-album-link:hover label { color: #f5d68c; }
 .stage-lyrics-heading { color: #bdae93; font-size: 10px; letter-spacing: 2px; }
 .stage-lyric-scroll, .stage-lyric-scroll viewport { background-color: transparent; border: none; }
 .stage-lyric-scroll scrollbar { background-color: transparent; }
@@ -223,7 +226,11 @@ class FullscreenPlayer:
         self.artist_button.remove(self.artist_button.get_child());self.artist_button.add(artist_line)
         self.left.pack_start(self.artist_button,False,False,0)
         self.album=label('','stage-album');self.album.set_ellipsize(Pango.EllipsizeMode.END)
-        self.left.pack_start(self.album,False,False,0)
+        self.album_button=self.button('',self.open_album,'stage-album-link')
+        album_line=Gtk.Box(spacing=6);album_line.pack_start(self.album,True,True,0)
+        album_line.pack_end(label('›','stage-album'),False,False,0)
+        self.album_button.remove(self.album_button.get_child());self.album_button.add(album_line)
+        self.left.pack_start(self.album_button,False,False,0)
         self.quality=QualityBadge();self.left.pack_start(self.quality,False,False,0)
         self.body.pack_start(self.left,False,False,0)
         right=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=14)
@@ -361,6 +368,24 @@ class FullscreenPlayer:
         self.artist_view.set_reference(artist_ref(self.host,item))
         self.show_page('artist',force=True)
 
+    def open_album(self):
+        ref=album_ref(self.host)
+        if not ref:return
+        source=self.host.source
+        if not self.visible:
+            self.open()
+            def after_open():
+                if self.closed or not self.visible or self.host.source!=source:return False
+                if self.reveal.active:return True
+                self.show_album(ref);return False
+            GLib.timeout_add(40,after_open)
+        elif not self.reveal.active:self.show_album(ref)
+
+    def show_album(self,ref):
+        if self.page!='artist':self.artist_return=self.page if self.page in ('playing','library','queue','dj') else 'playing'
+        self.artist_view.set_release_reference(ref)
+        self.show_page('artist',force=True)
+
     def search_artist(self,name):
         self.show_page('library');self.library_view.entry.set_text(name[:200]);self.library_view.search()
 
@@ -472,6 +497,7 @@ class FullscreenPlayer:
         self.left.set_halign(Gtk.Align.START if visible else Gtk.Align.CENTER)
         for item in (self.title,self.artist,self.album):item.set_xalign(0. if visible else .5)
         self.artist_button.set_halign(Gtk.Align.START if visible else Gtk.Align.CENTER)
+        self.album_button.set_halign(Gtk.Align.START if visible else Gtk.Align.CENTER)
         self.quality.set_halign(Gtk.Align.START if visible else Gtk.Align.CENTER)
         self.lyrics_button.set_label(text('Artwork','Обложка') if visible else text('Lyrics','Текст песни'))
         self.lyrics_button.get_accessible().set_name(text('Show artwork','Показать обложку') if visible else text('Show lyrics','Показать текст песни'))
@@ -665,6 +691,8 @@ class FullscreenPlayer:
         accessible_name=text('Open artist: ','Открыть артиста: ')+artist
         if self.artist_button.get_accessible().get_name()!=accessible_name:
             self.artist_button.get_accessible().set_name(accessible_name)
+        self.album_button.set_sensitive(album_ref(h) is not None)
+        self.album_button.get_accessible().set_name(text('Open album: ','Открыть альбом: ')+album)
         quality_visible=self.quality.get_visible();self.quality.update(h)
         if metadata_changed or quality_visible!=self.quality.get_visible():self.layout_size=None
         if self.layout_size!=(width,height):

@@ -248,11 +248,22 @@ async function emberboxAppleCommand(request) {
     return artistPage(result,{...spec,limit:24});
   }
   if(request.method==='release') {
-    if(!/^\d{1,20}$/.test(id))throw Error('Invalid album');
-    const sf=storefront();
-    const resource=(await api(`/v1/catalog/${sf}/albums/${id}`,{extend:'editorialNotes'})).data?.[0];
-    if(!resource)throw Error('NOT_FOUND');
-    const tracks=offset?await api(`/v1/catalog/${sf}/albums/${id}/tracks`,{limit:100,offset}):resource.relationships?.tracks||{};
+    const sf=storefront(),deadline=Date.now()+6500;
+    const read=(path,query)=>artistApi(path,query,deadline);
+    let albumId=id;
+    if(!albumId){
+      const songId=String(params.songId||'');let song;
+      if(/^\d{1,20}$/.test(songId))song=(await read(`/v1/catalog/${sf}/songs/${songId}`,{include:'albums'})).data?.[0];
+      else if(/^i\.[\w.-]{1,198}$/.test(songId))song=(await read(`/v1/me/library/songs/${encodeURIComponent(songId)}/catalog`,{include:'albums'})).data?.[0];
+      else throw Error('Invalid song');
+      if(song?.type!=='songs'||/^\d{1,20}$/.test(songId)&&String(song.id)!==songId)throw Error('NOT_FOUND');
+      albumId=String((song?.relationships?.albums?.data||[]).find(a=>a.type==='albums'&&/^\d{1,20}$/.test(String(a.id)))?.id||'');
+      if(!albumId)throw Error('NOT_FOUND');
+    }
+    if(!/^\d{1,20}$/.test(albumId))throw Error('Invalid album');
+    const resource=(await read(`/v1/catalog/${sf}/albums/${albumId}`,{extend:'editorialNotes'})).data?.[0];
+    if(!resource||resource.type!=='albums'||String(resource.id)!==albumId)throw Error('NOT_FOUND');
+    const tracks=offset?await read(`/v1/catalog/${sf}/albums/${albumId}/tracks`,{limit:100,offset}):resource.relationships?.tracks||{};
     return {release:item(resource),...page(tracks)};
   }
   if (request.method === 'search') {

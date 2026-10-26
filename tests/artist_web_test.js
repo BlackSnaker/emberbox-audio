@@ -1,7 +1,7 @@
 /* Real Apple artist commands with bounded offline catalogue resources. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const requests=[],transport=[],deadlines=[];
-let collaboration=false,missingRelationship=false,latestOnly=false,mismatchArtist=false,hangProfile=false,quickTimers=false;
+let collaboration=false,missingRelationship=false,latestOnly=false,mismatchArtist=false,hangProfile=false,quickTimers=false,missingAlbum=false;
 const viewBehavior=new Map();
 let catalogueNext,failCatalogue=false;
 const artist=id=>({id:String(id),type:'artists',attributes:{name:'Emberbox Sessions '+id,
@@ -10,7 +10,8 @@ const artist=id=>({id:String(id),type:'artists',attributes:{name:'Emberbox Sessi
   url:'https://music.apple.com/us/artist/fixture/'+id},privateToken:'NEVER_EXPORT'});
 const song=id=>({id:String(id),type:'songs',attributes:{name:'Original song '+id,artistName:'Emberbox Sessions',
   durationInMillis:180000,playParams:{id:String(id)},artwork:{url:'https://example.invalid/{w}x{h}.jpg'}},
-  relationships:{artists:{data:missingRelationship?[]:[artist(100),...(collaboration?[artist(101)]:[])]}}});
+  relationships:{artists:{data:missingRelationship?[]:[artist(100),...(collaboration?[artist(101)]:[])]},
+    albums:{data:missingAlbum?[]:[{id:'456',type:'albums'}]}}});
 const album=id=>({id:String(id),type:'albums',attributes:{name:'Original album '+id,artistName:'Emberbox Sessions',
   releaseDate:'2026-10-23',trackCount:3,isCompilation:id===457,isSingle:false,playParams:{id:String(id)},
   artwork:{url:'https://example.invalid/{w}x{h}.jpg'},copyright:'Original fixture © Emberbox',
@@ -155,6 +156,15 @@ const section=(result,id)=>result.sections.find(s=>s.id===id);
   result=await call('release',{id:'456'});assert.equal(result.release.trackCount,3);
   assert.equal(result.items.length,2);assert.equal(result.items[1].playable,false);assert.equal(result.next,100);
   result=await call('release',{id:'456',offset:100});assert.equal(result.items[0].id,'125');assert.equal(result.next,null);
+  result=await call('release',{songId:'123',name:'Wrong namesake album'});
+  assert.equal(result.release.id,'456');assert.equal(result.release.title,'Original album 456');
+  assert.equal(requests.at(-2).path,'/v1/catalog/us/songs/123');assert.equal(requests.at(-2).query.include,'albums');
+  result=await call('release',{songId:'i.library',songKind:'library-songs'});
+  assert.equal(requests.at(-2).path,'/v1/me/library/songs/i.library/catalog');assert.equal(result.release.id,'456');
+  missingAlbum=true;const beforeAlbumMiss=requests.length;
+  await assert.rejects(call('release',{songId:'123',name:'Wrong namesake album'}),/NOT_FOUND/);
+  assert.equal(requests.length,beforeAlbumMiss+1,'Missing album relationships must not fall back to name search');missingAlbum=false;
+  await assert.rejects(call('release',{songId:'../account'}));
   result=await call('artist',{songId:'i.library'});assert.equal(result.artist.id,'100');
   assert(requests.some(r=>r.path==='/v1/me/library/songs/i.library/catalog'));
   for(const id of ['../account','https://evil.invalid/','123?token=secret']) {

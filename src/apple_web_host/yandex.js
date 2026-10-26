@@ -114,6 +114,8 @@ async function emberboxYandexCommand(request) {
   status.artists=(Array.isArray(track?.artists)?track.artists:Array.isArray(extTrack?.artists)?extTrack.artists:[])
     .filter(a=>/^\d{1,20}$/.test(String(a.id||''))).slice(0,12)
     .map(a=>({id:String(a.id),name:String(a.name||a.title||'').slice(0,300)}));
+  const albumId=String(track?.mainAlbum?.id||extTrack?.album?.id||'');
+  status.albumId=/^\d{1,20}$/.test(albumId)?albumId:'';
   if(request.method==='status')return status;
   if(region)throw Error('REGION_UNAVAILABLE');
   if(!authorized)throw Error('SIGN_IN_REQUIRED');
@@ -297,7 +299,18 @@ async function emberboxYandexCommand(request) {
     return {items:albums(),next:null,note:'Показаны загруженные сайтом релизы; отдельные категории доступны только когда сайт их предоставляет.'};
   }
   if(request.method==='release') {
-    const id=String(p.id||'');if(!/^\d{1,20}$/.test(id))throw Error('INVALID_ARGUMENTS');
+    let id=String(p.id||'');
+    if(!id){
+      if(!p.songId||String(p.songId)!==status.id)throw Error('NOT_FOUND');
+      id=status.albumId;
+      if(!id){
+        const href=bar?.querySelector('a[href*="/album/"]')?.getAttribute('href')||'';
+        const match=/^\/album\/(\d{1,20})(?:\/track\/(\d{1,20}))?$/.exec(href);
+        if(match&&(!match[2]||match[2]===String(p.songId)))id=match[1];
+      }
+      if(!id)throw Error('NOT_FOUND');
+    }
+    if(!/^\d{1,20}$/.test(id))throw Error('INVALID_ARGUMENTS');
     await navigate('/album/'+id,true);await wait(()=>listRoot().querySelector(trackSelector)||emptyTracks());
     const root=listRoot();
     return {release:{id,kind:'album',uri:'yandex:album:'+id,title:text(root.querySelector('h1')),

@@ -126,6 +126,14 @@ try:
         {'PlaybackStatus':'Paused','Metadata':{'xesam:title':'Apple track'}})
     app.on_sessions([spotify,browser])
     assert app.title.get_text()=='Spotify track'
+    assert not app.album_button.get_sensitive()
+    spotify.properties['Metadata']['xesam:album']='Original album'
+    app.on_sessions([spotify,browser]);assert app.album_button.get_sensitive()
+    assert not app.album_button.get_has_tooltip()
+    transport_count=len(app.monitor.calls)
+    with patch.object(widget.FullscreenPlayer,'open_album') as album:
+        app.album_button.clicked();album.assert_called_once()
+    assert len(app.monitor.calls)==transport_count,'The widget album link must not start or pause music'
     app.seek_to(17)
     assert app.monitor.calls[-1]==(spotify.name,'SetPosition')
     spotify.properties['CanSeek']=False

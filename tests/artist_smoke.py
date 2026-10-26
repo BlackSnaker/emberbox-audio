@@ -41,7 +41,7 @@ def load(source,category,term='',collection=None,offset=0):
         return {'artist':dict(profile,id=ref.get('id','A'),name='Solstice' if ref.get('id')=='SHORT' else profile['name']),
                 'sections':copy.deepcopy(sections)}
     if category=='artist-section':return {'items':copy.deepcopy(albums[:2] if offset else albums),'next':None if offset else 24}
-    if category=='release':return {'release':dict(albums[0],id=ref['id'],artist='Emberbox Sessions',
+    if category=='release':return {'release':dict(albums[0],id=ref.get('id','1'),artist='Emberbox Sessions',
                 description='Original demonstration liner notes.\n\nA small collection about warmth, memory and evenings that last a little longer.',
                 copyright='Original fixture © Emberbox'),'items':copy.deepcopy(tracks),'next':None}
     return {'items':[]}
@@ -96,6 +96,7 @@ def overview_first_screen(view,stage):
 
 
 host=f.FixtureHost()
+host.session=SimpleNamespace(metadata={'xesam:url':'spotify:track:1'})
 host.youtube=SimpleNamespace(queue=[],current=None,eof=False,paused=True,mpv=None)
 real_image_load=fullscreen.Artwork.load
 def local_artwork(loader,image,url,size,radius=8,**options):
@@ -107,6 +108,17 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
     try:
         stage.open();f.wait_transition(stage);assert not calls
         stage.window.unfullscreen();stage.window.resize(1920,1080);f.settle(.4)
+        assert stage.album_button.get_sensitive() and not stage.album_button.get_has_tooltip()
+        assert host.album.get_text() in stage.album_button.get_accessible().get_name()
+        stage.album_button.clicked();wait(lambda:view.release is not None and len(view.song_buttons)==5)
+        assert view.direct_release and stage.page=='artist'
+        assert calls[-1][1]=='release' and calls[-1][2]['songUri']=='spotify:track:1'
+        assert not any(category=='artist' for _,category,_,_ in calls),'Opening the album must not first load an artist/discography'
+        assert view.release_ref['id']=='1','Pagination must retain the resolved release ID'
+        assert not plays and not host.calls,'Opening an album must not issue a transport command'
+        shot(stage,'current-album')
+        view.back_button.clicked();f.settle(.2);assert stage.page=='playing'
+        assert not plays;calls.clear()
         block[0]=True;painted=[0]
         stage.window.get_frame_clock().connect('after-paint',lambda *_:painted.__setitem__(0,painted[0]+1))
         stage.artist_button.clicked();wait(entered.is_set)
