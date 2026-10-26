@@ -6,8 +6,14 @@ from spatial_seek import Seeks,PcmWriter,SeekCancelled
 import numpy as np
 from spatial_mixer import Mixer,RATE,BLOCK
 from spatial_aac import PcmResampler
+from spatial_alac import configuration as alac_configuration
 
 class SpatialSeekTests(unittest.TestCase):
+    @classmethod
+    def tearDownClass(cls):
+        worker=sys.modules.get('spatial_worker')
+        if worker:worker.control.close()
+
     def test_deep_atmos_seek_keeps_preroll_and_all_audible_samples(self):
         import spatial_worker as worker
         for timescale,full in ((48000,False),(None,False),(48000,True)):
@@ -42,7 +48,11 @@ class SpatialSeekTests(unittest.TestCase):
         info=json.loads(subprocess.run(['ffprobe','-v','error','-show_streams','-show_packets','-show_data','-of','json','pipe:0'],input=encoded,capture_output=True,check=True).stdout)
         def unhex(value):return bytes.fromhex(''.join(line.split(':',1)[1].split('  ',1)[0].strip() for line in value.splitlines() if ':' in line))
         cookie=unhex(info['streams'][0]['extradata'])
-        packets=[(unhex(p['data']),{'codec':'alac','cookie':cookie,'duration':int(p['duration'])}) for p in info['packets']]
+        # Older ffprobe omits packet durations for fragmented ALAC. This
+        # generated signal has a known sample count and codec frame size.
+        frame=alac_configuration(cookie)[0]
+        self.assertEqual(len(info['packets']),(len(source)+frame-1)//frame)
+        packets=[(unhex(p['data']),{'codec':'alac','cookie':cookie,'duration':min(frame,len(source)-i*frame)}) for i,p in enumerate(info['packets'])]
         class LicensedHost:
             def decode_sample(self,packet,crypto,key,deliver):
                 buf=ctypes.create_string_buffer(packet);deliver(ctypes.addressof(buf),len(packet))
