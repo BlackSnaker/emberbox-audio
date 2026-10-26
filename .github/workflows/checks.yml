@@ -23,6 +23,7 @@ jobs:
           printf 'XDG_DESKTOP_DIR="%s/emberbox-installer/Рабочий стол"\n' "$RUNNER_TEMP" > "$RUNNER_TEMP/emberbox-installer/config/user-dirs.dirs"
       - name: Test display infrastructure
         run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
           sudo apt-get update -qq
           sudo apt-get install -y xvfb dbus-x11 desktop-file-utils
       - name: Install missing dependencies and desktop integration
@@ -61,6 +62,7 @@ jobs:
           persist-credentials: false
       - name: System dependencies
         run: |
+          sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
           sudo apt-get update -qq
           sudo apt-get install -y python3-gi gir1.2-gtk-3.0 python3-numpy python3-scipy python3-pil python3-websocket python3-mpv mpv ffmpeg dbus-x11 xvfb nodejs libgl1 libgl1-mesa-dri libegl1 libegl-mesa0
       - name: Compile
