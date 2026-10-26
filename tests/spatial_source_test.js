@@ -1,6 +1,6 @@
 'use strict';
 const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs');
-const host='https://audio-ssl.itunes.apple.com',requests=[];
+const host='https://audio-ssl.itunes.apple.com',requests=[],fetches=[];
 const key=n=>Buffer.from(Uint8Array.from({length:16},(_,i)=>i+n)).toString('base64');
 let noAtmos=false;
 const files={
@@ -20,6 +20,7 @@ const context=vm.createContext({location:{origin:'https://music.apple.com'},wind
  crypto:{randomUUID:()=>String(Math.random())},URL,TextEncoder,TextDecoder,Uint8Array,Map,AbortController,setTimeout,clearTimeout,
  atob:s=>Buffer.from(s,'base64').toString('binary'),btoa:s=>Buffer.from(s,'binary').toString('base64'),
  fetch:async(url,options)=>{
+  fetches.push(String(url));
   const u=new URL(url);assert.equal(u.origin,host);assert.equal(options.credentials,'omit');
   const file=files[u.pathname];assert(file,u.pathname);const raw=file();let bytes=typeof raw==='string'?new TextEncoder().encode(raw):raw;
   const range=options.headers.Range;let status=200;
@@ -61,6 +62,15 @@ const call=params=>context.emberboxSpatialSource(params);
  const spatial=await call({action:'prepare',fairplay:true,kind:'songs',id:'789'});
  assert.equal(spatial.codec,'eac3','Atmos retains priority over the optional stereo Lossless path');
  await call({action:'close',contextId:spatial.contextId});
+ const fetched=fetches.length;
+ const replay=await call({action:'prepare',fairplay:true,kind:'songs',id:'789'});
+ assert.equal(replay.codec,'eac3');assert.notEqual(replay.contextId,spatial.contextId);
+ assert.equal(fetches.length,fetched,'Replaying a recent track should reuse bounded manifest descriptors');
+ assert.equal(context.window.__emberSpatialContexts.size,1);
+ assert(!context.window.__emberSpatialContexts.get(replay.contextId).licences.some(v=>v.response),'A descriptor cache must not retain DRM leases');
+ await call({action:'close',contextId:replay.contextId});
+ assert(context.window.__emberSpatialRecent.items.size<=4);
  music.isAuthorized=false;await assert.rejects(call({action:'prepare'}),/SIGN_IN_REQUIRED/);
+ assert.equal(context.window.__emberSpatialRecent,undefined,'Sign-out must discard recent descriptors');
  console.log('PASS spatial source: enhanced rendition, key rotation, ranges, bounds, stale contexts and private URL/token isolation');
 })().catch(e=>{console.error(e);process.exitCode=1;});

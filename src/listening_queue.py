@@ -6,6 +6,7 @@ from pathlib import Path
 
 SOURCES=('spotify','apple-music','youtube','yandex-music')
 LIMIT=200
+HISTORY=20
 
 
 def track(value,source):
@@ -60,16 +61,19 @@ class QueueBook:
         temporary.chmod(0o600);temporary.replace(self.path)
 
     def add(self,source,values):
-        self.compact(source)
         items=[item for value in values if (item:=track(value,source))]
+        self.compact(source,reserve=min(len(items),LIMIT))
         room=LIMIT-len(self.queues[source]);items=items[:max(0,room)]
         for item in items:item['entry']=uuid.uuid4().hex
         self.queues[source].extend(items)
         self.save();return len(items)
 
-    def compact(self,source):
+    def compact(self,source,reserve=0):
         index=self.indices[source]
-        if index>0:self.queues[source]=self.queues[source][index:];self.indices[source]=0
+        # Adding a song must not erase Previous. Keep recent history whenever
+        # it fits; reclaim older played entries before rejecting pending music.
+        drop=min(max(0,index),max(0,index-HISTORY,len(self.queues[source])+reserve-LIMIT))
+        if drop:self.queues[source]=self.queues[source][drop:];self.indices[source]-=drop
 
     def replace(self,source,values):
         self.active=None;self.queues[source]=[];self.indices[source]=-1

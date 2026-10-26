@@ -6,6 +6,18 @@ from spatial_mix import blend,curve,RATE,BLOCK
 from spatial_mixer import Mixer
 
 class SpatialMixTests(unittest.TestCase):
+    def test_manual_handover_uses_short_preroll_and_a_click_free_envelope(self):
+        events=[];m=Mixer(events.append)
+        m.configure({'slot':0,'generation':1});m.configure({'slot':1,'generation':2,'preroll':.4})
+        m.received(0,1,np.full((RATE,2),-.5,np.float32).tobytes())
+        m.received(1,2,np.full((RATE//2,2),.5,np.float32).tobytes())
+        self.assertTrue(m.slots[1].ready);self.assertFalse(m.slots[0].ready)
+        with self.assertRaises(ValueError):m.control({'type':'transition','duration':8,'key':'automatic'})
+        m.control({'type':'transition','duration':.22,'key':'manual','manual':True})
+        audio=np.frombuffer(b''.join(m.render() for _ in range(11)),'<f4').reshape(-1,2)
+        self.assertAlmostEqual(float(audio[0,0]),-.5);self.assertAlmostEqual(float(audio[-1,0]),.5)
+        self.assertLess(float(abs(np.diff(audio[:,0])).max()),.001)
+        self.assertLessEqual(float(abs(audio).max()),.5)
     def test_chunk_boundaries_preserve_the_exact_envelope_and_peak_headroom(self):
         n=RATE*2;t=np.arange(n,dtype=np.float32)/RATE
         a=np.column_stack((np.sin(2*np.pi*220*t),np.sin(2*np.pi*441*t))).astype(np.float32)

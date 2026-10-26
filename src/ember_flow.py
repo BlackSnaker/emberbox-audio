@@ -58,7 +58,7 @@ class EmberFlow:
         temporary=self.path.with_suffix('.next.json')
         temporary.write_text(json.dumps({'enabled':self.enabled,'beat_sync':self.beat_sync}));temporary.chmod(0o600);temporary.replace(self.path)
 
-    def cancel(self):
+    def cancel(self,preserve_apple=False):
         self.context=None;self.ready=self.busy=self.preparing=self.attempted=False;self.pending_item=None
         self.last_position=self.last_time=None;self.mixing_until=0.
         self.quiet_since=None
@@ -66,7 +66,9 @@ class EmberFlow:
         meter=getattr(self.host,'meter',None)
         if meter and hasattr(meter,'set_rhythm'):meter.set_rhythm(None)
         if self.youtube:self.youtube.cancel()
-        if self.apple:self.apple.cancel()
+        if self.apple:
+            if preserve_apple:self.apple.cancel(preserve=True)
+            else:self.apple.cancel()
 
     def adopt(self,item,duration,extra=0.):
         s=self.music;source=self.host.source;pending=s.book.upcoming(source)
@@ -80,12 +82,13 @@ class EmberFlow:
     def tick(self,state):
         if self.closed:return
         h=self.host;s=self.music;source=h.source;now=self.clock()
-        if self.enabled and self.supported and s.book.active is None and state.get('playing') and not s.loading:
+        fast_apple=source=='apple-music' and h.apple_mode=='native' and getattr(h.apple_web,'state',{}).get('spatial',{}).get('fastSwitch') is True
+        if (self.enabled or fast_apple) and self.supported and s.book.active is None and state.get('playing') and not s.loading:
             current=s.book.current(source)
             if current and s.book.upcoming(source) and matches(current,state):
                 s.book.active=source;s.watch.reset();s.started=time.monotonic();s.changed()
         karaoke=getattr(getattr(getattr(h,'fullscreen',None),'karaoke',None),'audio',None)
-        if not self.enabled or not self.supported or s.book.active!=source or s.loading or (
+        if not (self.enabled or fast_apple) or not self.supported or s.book.active!=source or s.loading or (
                 karaoke and (karaoke.active or karaoke.starting)):
             if self.context or self.mixing_until or self.busy:self.cancel();s.changed()
             return
@@ -120,7 +123,7 @@ class EmberFlow:
         if self.last_position is not None and abs(position-self.last_position)>max(1.5,now-self.last_time+1.5):
             self.cancel();return
         self.last_position=position;self.last_time=now
-        if not self.attempted and 7<remaining<=28:
+        if not self.attempted and 7<remaining and (remaining<=28 or fast_apple and position>=1):
             self.attempted=True;self.preparing=True;self.prepare_started=now
             if source=='apple-music':
                 if self.apple is None:
@@ -157,7 +160,7 @@ class EmberFlow:
         if self.quiet_since is not None and now-self.quiet_since>=.6:duration=min(duration,1.4)
         beat_apple=source=='apple-music' and self.beat_sync and getattr(h.apple_web,'state',{}).get('emberBeatSync') is True
         lead=duration+(10. if beat_apple else 2.5 if source=='apple-music' else 1.2 if self.beat_sync else .4)
-        if self.ready and .5<remaining<=lead:
+        if self.enabled and self.ready and .5<remaining<=lead:
             self.busy=True;self.ready=False;duration=min(duration,remaining-.2)
             if source=='apple-music':self.pending_item=next_item;deck.transition(duration)
             else:

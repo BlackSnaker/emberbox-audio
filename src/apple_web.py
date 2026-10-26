@@ -196,7 +196,7 @@ class AppleWeb:
         try:
             self.state = future.result()
             self.error = ''
-            if self.state.get('ready') and self.state.get('integrationVersion',0)<16 and not self.upgrade_attempted:
+            if self.state.get('ready') and self.state.get('integrationVersion',0)<17 and not self.upgrade_attempted:
                 self.upgrade_attempted = self.upgrading = True
                 self.pool.submit(self._upgrade,dict(self.state)).add_done_callback(
                     lambda item:GLib.idle_add(self._upgraded,item))
@@ -226,7 +226,7 @@ class AppleWeb:
             if self.connected:
                 try:
                     current = self.bridge.request('status')
-                    if current.get('ready') and current.get('integrationVersion',0)>=16 and (not state.get('authorized') or current.get('authorized')):
+                    if current.get('ready') and current.get('integrationVersion',0)>=17 and (not state.get('authorized') or current.get('authorized')):
                         break
                 except BridgeUnavailable:pass
             time.sleep(.3)

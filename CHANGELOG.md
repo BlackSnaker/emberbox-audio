@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.18.1 — 2026-10-26
+
+- Keep the native Apple output device and mixer alive on manual track changes and rewind. Consume a prepared next deck with a short, sample-smooth handover; keep the current song playing while an unprepared choice loads. Preserve Atmos / ALAC source quality.
+- Warm one upcoming Ember-queue song early, including when automatic EmberFlow mixing is off. Serialize source negotiation, cancel superseded selections and forward only complete PCM frames when a decoder is replaced. Recent manifest descriptors use a four-entry, one-minute memory cache with fresh DRM contexts.
+- Fix Previous using an outgoing song's stale position. Repeated Previous can leave a pending rewind; adding music retains up to twenty history entries within the existing 200-entry queue limit. Apple transport no longer waits for catalogue browsing.
+- Avoid unnecessary analysis of known-format raw PCM and validate the asynchronous spatial resampler's tail only after draining it. Keep failed manual selections separate from playback-format failures. Engine integration 17.
+
 ## 0.18.0 — 2026-10-25
 
 - Optional native Apple ALAC / Hi-Res playback with separate private sign-in, saved sessions and automatic Atmos → ALAC → standard selection. Decoder-confirmed source bit depth/rate.

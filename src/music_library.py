@@ -5,7 +5,7 @@ import time
 from gi.repository import GLib
 from discovery import LocalSpotify
 from sources import choose_session
-from listening_queue import QueueBook,EndWatch,track,LIMIT
+from listening_queue import QueueBook,EndWatch,track,LIMIT,matches
 from paths import CONFIG_DIR
 from source_picker import text
 from youtube_search import Search,video_url
@@ -69,12 +69,15 @@ class MusicRepository:
             with LocalSpotify() as client:
                 if alive():client.play(item['uri'])
             return
+        if source=='apple-music':
+            # Catalogue reads never own the transport. A slow artist or
+            # discography request must not delay Next or Previous.
+            player=h.apple_web if h.apple_mode=='native' else h.apple
+            if alive():player.request('play',kind=item['kind'],id=item['id'])
+            return
         with self.locks[source]:
             if not alive():return
-            if source=='apple-music':
-                player=h.apple_web if h.apple_mode=='native' else h.apple
-                player.request('play',kind=item['kind'],id=item['id'])
-            elif source=='yandex-music':
+            if source=='yandex-music':
                 # Website rows are virtualised. Relocate this exact ID rather
                 # than keeping a stale DOM row from a previous search page.
                 result=h.yandex_web.request('search',term=(item['title']+' '+item['artist'])[:200])
@@ -112,6 +115,7 @@ class MusicService:
         self.loading=False;self.error='';self.started=0.;self.source=host.source
         self.browse_future=None;self.play_future=None
         self.pause_after=set()
+        self.previous_restart=None
         self.browse_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-collection')
         self.play_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-queue')
         self.youtube=Search(self._youtube_results);self.youtube_done=None
@@ -164,7 +168,7 @@ class MusicService:
         source=self.host.source;value=track(item,source)
         if not value:return
         if context is not None and self.play_context(item,context):return
-        self.book.compact(source)
+        self.book.compact(source,reserve=1)
         current=self.book.current(source)
         found=self.book.indices[source] if current and current['uri']==value['uri'] else next(
             (i for i,v in self.book.upcoming(source) if v['uri']==value['uri']),None)
@@ -241,7 +245,8 @@ class MusicService:
         self.book.save();self.changed()
 
     def start(self,index=None):
-        self.flow.cancel()
+        self.flow.cancel(preserve_apple=True)
+        self.previous_restart=None
         source=self.host.source
         if source=='youtube' and self.host.youtube_mode!='native':
             self.error=text('Choose the in-player YouTube source to play this queue.','Выбери встроенный YouTube в меню источников для воспроизведения очереди.')
@@ -275,7 +280,15 @@ class MusicService:
 
     def step(self,direction):
         source=self.host.source;index=self.book.indices[source]
-        if direction<0 and self.host.position>3_000_000:self.host.seek_to(0);return
+        item=self.book.current(source);state=snapshot(self.host);now=time.monotonic()
+        restart=self.previous_restart
+        repeated=bool(item and restart and restart[0]==item['entry'] and now-restart[1]<20)
+        # A pending selection still displays the outgoing song's position.
+        # Never seek that song instead of stepping back through our queue.
+        if direction<0 and item and not self.loading and matches(item,state) and state['position']>3 and not repeated:
+            self.previous_restart=(item['entry'],now)
+            self.watch.reset();self.host.seek_to(0);return
+        self.previous_restart=None
         if 0<=index+direction<len(self.book.queues[source]):self.start(index+direction)
         elif direction<0:self.host.seek_to(0)
         else:self.book.active=None;self.pause(source);self.changed()
@@ -295,6 +308,7 @@ class MusicService:
 
     def stop(self,pause_pending=False):
         self.flow.cancel()
+        self.previous_restart=None
         if self.loading and pause_pending:self.pause_after.add(self.play_generation)
         self.play_generation+=1;self.loading=False;self.book.active=None;self.error='';self.watch.reset();self.changed()
 
@@ -305,6 +319,15 @@ class MusicService:
         if self.closed:return False
         if self.source!=self.host.source:self.source_changed()
         source=self.host.source
+        if source=='apple-music' and self.host.apple_mode=='native':
+            failed=self.host.apple_web.state.get('spatial',{}).get('switchError')
+            item=self.book.current(source)
+            if isinstance(failed,dict) and item and self.book.active==source and failed.get('id')==item['id']:
+                self.stop();self.error=text('This track could not start. Try it again; your previous song is still available.',
+                    'Не удалось включить этот трек. Попробуй ещё раз — предыдущая песня остаётся доступной.');self.changed();return True
+        if self.previous_restart:
+            item=self.book.current(source);state=snapshot(self.host)
+            if item and matches(item,state) and state['position']<=3:self.previous_restart=None
         self.flow.tick(snapshot(self.host))
         if self.flow.busy:return True
         if self.book.active==source and not self.loading:

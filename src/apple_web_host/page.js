@@ -329,6 +329,18 @@ async function emberboxAppleCommand(request) {
   }
   if (request.method === 'play') {
     if (!kinds.includes(kind) || !safeId.test(id)) throw Error('Invalid library item');
+    if(params.native===true&&['songs','library-songs'].includes(kind)){
+      // The native decoder already owns playback. Hydrate its public metadata
+      // without warming up MusicKit's AAC queue on every handover.
+      const m=params.metadata||{};
+      window.__emberboxRestoredTrack={music,resource:{id,attributes:{name:String(m.title||''),
+        artistName:String(m.artist||''),albumName:String(m.album||''),durationInMillis:(Number(m.duration)||0)*1000,
+        artwork:{url:String(m.image||'')},audioVariants:Array.isArray(m.availableFormats)?m.availableFormats:[],
+        playParams:{id,kind:'song',catalogId:String(m.catalogId||'')}}}};
+      window.__emberboxRestorePosition=0;
+      if(music.isPlaying)await (music.pause?music.pause():player.pause());
+      return {paused:true};
+    }
     // MusicKit detects library IDs itself. Its legacy "librarySong" option
     // produces a duplicated /me/library/library-songs path in current builds.
     const queueKind = {'library-songs':'song','songs':'song','albums':'album','library-albums':'album','library-playlists':'playlist'}[kind];

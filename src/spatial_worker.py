@@ -152,10 +152,14 @@ def main():
                 if isinstance(joc,Alac):joc.packet_duration=crypto['duration']
                 cdm.decode_sample(packet,crypto,licensed[key],joc.feed)
             expected+=segment['duration']
-            if not isinstance(joc,Aac) and decoded<expected*rate-rate*.15:raise RuntimeError('SPATIAL_TRUNCATED_AUDIO')
+            # The resampler delivers PCM on another thread. Its buffered tail
+            # is not missing audio; validate it after finish() has drained it.
+            if not isinstance(joc,Aac) and resampler is None and decoded<expected*rate-rate*.15:raise RuntimeError('SPATIAL_TRUNCATED_AUDIO')
         if joc is None:raise RuntimeError('SPATIAL_EMPTY_FRAGMENT')
         joc.finish()
-        if resampler:resampler.finish()
+        if resampler:
+            resampler.finish()
+            if decoded<expected*rate-rate*.15:raise RuntimeError('SPATIAL_TRUNCATED_AUDIO')
         os.close(write_fd);write_fd=None
         emit({'type':'decoded-end','frames':emitted})
         while not stopping.wait(.1):pass

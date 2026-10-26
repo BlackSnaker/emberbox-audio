@@ -28,8 +28,9 @@ class AppleDecks:
         if not self.transitioning or not self.transitioning.done():return None
         future=self.transitioning;self.transitioning=None
         return future.result()
-    def cancel(self):
-        if self.active and (not self.reset or self.reset.done()):self.reset=self.pool.submit(self.request,'cancel')
+    def cancel(self,preserve=False):
+        if self.active and (not self.reset or self.reset.done()):
+            self.reset=self.pool.submit(self.request,'cancel',**({'preserve':True} if preserve else {}))
         self.active=False;self.key='';self.prepared=self.transitioning=None
     def close(self):
         self.cancel();self.pool.shutdown(wait=False,cancel_futures=False)

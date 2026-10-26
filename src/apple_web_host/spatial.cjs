@@ -27,12 +27,12 @@ class SpatialPlayback {
   this.blocked=new Set();this.error='';this.revision=0;this.generation=0;
   try{this.enabled=JSON.parse(fs.readFileSync(process.env.EMBERBOX_SPATIAL_CONFIG,'utf8')).enabled===true;}catch{this.enabled=false;}
  }
- info(){const r=this.session;return {enabled:this.enabled,available:!!runtime(),losslessAvailable:!!fairplayRuntime(),phase:r?.state.phase||'idle',error:this.error,
+ info(){const r=this.session;return {enabled:this.enabled,available:!!runtime(),losslessAvailable:!!fairplayRuntime(),fastSwitch:true,phase:r?.state.phase||'idle',error:this.error,switching:!!r?.manual,switchError:this.switchError||null,
   flow:r&&(r.transition||!r.standby&&r.decks.filter(Boolean).length>1)?'mixing':r?.standby?.ready?'ready':r?.standby?'preparing':'idle',flowError:this.flowError||'',workerExit:this.workerExit||null,fragment:this.fragmentDebug||null,mix:this.mixDebug||null};}
  async configure(enabled){
   if(typeof enabled!=='boolean')throw Error('INVALID_ARGUMENTS');
   if(enabled&&!runtime())throw Error('SPATIAL_SETUP_REQUIRED');
-  this.enabled=enabled;this.blocked.clear();this.error='';
+  this.enabled=enabled;this.blocked.clear();this.error='';this.switchError=null;
   const file=process.env.EMBERBOX_SPATIAL_CONFIG;
   if(file){fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});fs.writeFileSync(file+'.tmp',JSON.stringify({enabled}),{mode:0o600});fs.renameSync(file+'.tmp',file);}
   if(!enabled)await this.stop(true);return this.info();
@@ -55,8 +55,8 @@ class SpatialPlayback {
   const deck={metadata:{...metadata},slot:0,generation:++this.generation,quality:null,ready:false,context:null,child:null};
   const nativeRuntime=runtime();
   const r={win,nativeRuntime,rate:nativeRuntime?.fairplay?192000:48000,active:deck,decks:[deck,null],standby:null,mixer:null,paused,
-   state:{phase:'preparing',position:Number(position)||0,playing:!paused},lastAdvance:Date.now(),flowRevision:0};
-  this.session=r;this.error='';this.workerHint='';this.workerExit=null;this.fragmentDebug=null;
+   state:{phase:'preparing',position:Number(position)||0,playing:!paused},lastAdvance:Date.now(),flowRevision:0,preparation:Promise.resolve()};
+  this.session=r;this.error='';this.switchError=null;this.workerHint='';this.workerExit=null;this.fragmentDebug=null;
   this.blocked.add(String(metadata.id));if(this.blocked.size>32)this.blocked.delete(this.blocked.values().next().value);
   r.stall=setInterval(()=>{if(this.session===r&&r.active.quality&&!r.paused&&r.state.phase!=='ended'&&Date.now()-r.lastAdvance>15000)this.failed(r,'SPATIAL_BUFFER_TIMEOUT');},1000);
   r.watchdog=setTimeout(()=>{if(this.session===r&&!r.active.quality)this.failed(r,'SPATIAL_START_TIMEOUT');},25000);
@@ -77,6 +77,24 @@ class SpatialPlayback {
   });
  }
  send(child,value){if(child&&!child.killed&&child.stdin.writable)child.stdin.write(JSON.stringify(value)+'\n');}
+ pipePcm(r,deck,child){
+  const source=child.stdio[3],input=r.mixer.stdio[3+deck.slot];let buffer=Buffer.alloc(0),waiting=false,closed=false;
+  const drain=()=>{waiting=false;flush();if(!waiting&&!closed)source.resume();};
+  const flush=()=>{
+   while(!closed&&!waiting&&buffer.length>=8){
+    const generation=buffer.readUInt32LE(0),length=buffer.readUInt32LE(4);
+    if(generation!==deck.generation||length<8||length>1048576||length%8){this.deckFailed(r,deck,'SPATIAL_PCM_FORMAT');return;}
+    if(buffer.length<length+8)return;
+    const frame=buffer.subarray(0,length+8);buffer=buffer.subarray(length+8);
+    // A cancelled producer may end halfway through a frame. Forward complete
+    // frames only, so its replacement cannot corrupt the shared slot's pipe.
+    if(!input.write(frame)){waiting=true;source.pause();input.once('drain',drain);}
+   }
+  };
+  const data=chunk=>{if(closed)return;buffer=buffer.length?Buffer.concat([buffer,chunk]):chunk;flush();};
+  source.on('data',data);
+  deck.closePcm=()=>{closed=true;buffer=Buffer.alloc(0);source.off('data',data);source.pause();input.off('drain',drain);};
+ }
  async load(r){
   await this.cancelFlow();if(this.session!==r)return;
   await this.page(r.win,{method:'transport',params:{action:'pause'}});if(this.session!==r)return;
@@ -90,10 +108,10 @@ class SpatialPlayback {
  async loadDeck(r,deck,prepared,position=0){
   deck.context=prepared.contextId;
   if(this.session!==r||!r.decks.includes(deck)){this.source(r.win,{action:'close',contextId:deck.context}).catch(()=>{});return;}
-  this.send(r.mixer,{type:'slot',slot:deck.slot,generation:deck.generation,position});
+  this.send(r.mixer,{type:'slot',slot:deck.slot,generation:deck.generation,position,preroll:deck.manual?.4:2});
   const child=deck.child=this.spawn(process.env.EMBERBOX_SPATIAL_WORKER,['pipe','pipe','pipe','pipe'],r.rate);
   this.wire(child,v=>this.message(r,deck,v),code=>this.deckFailed(r,deck,code));
-  child.stdio[3].pipe(r.mixer.stdio[3+deck.slot],{end:false});
+  this.pipePcm(r,deck,child);
   this.send(child,{type:'start',runtime:r.nativeRuntime,outputRate:r.rate,cdm:process.env.EMBERBOX_WIDEVINE,prepared,position,pcm:true,generation:deck.generation});
  }
  message(r,deck,value){
@@ -142,15 +160,18 @@ class SpatialPlayback {
    r.state.playing=value.playing===true;
   }else if(value.type==='flow-started'&&deck&&deck===r.standby&&r.transition?.key===value.key){
    this.blocked.add(String(deck.metadata.id));if(this.blocked.size>32)this.blocked.delete(this.blocked.values().next().value);
-   r.active=deck;r.standby=null;r.synchronizing=true;r.state={phase:'playing',position:0,playing:!r.paused};r.lastAdvance=Date.now();
-   const revision=this.revision;
-   this.page(r.win,{method:'play',params:{kind:deck.kind,id:deck.requestedId,paused:true}}).then(()=>{
-    if(this.session!==r)return;
-    const pending=r.transition;r.transition=null;clearTimeout(pending?.timer);
-    pending?.resolve({started:true,duration:Math.min(8,Number(value.duration)||8),overlap:true,beatSync:null,recovery:0});
-   }).catch(()=>this.failed(r,'SPATIAL_QUEUE_SYNC_FAILED'));
+   r.active=deck;r.standby=null;r.synchronizing=true;r.state={phase:'playing',position:deck.position||0,playing:!r.paused};r.lastAdvance=Date.now();
+   const pending=r.transition;r.transition=null;clearTimeout(pending?.timer);
+   if(r.manual===pending?.manual)r.manual=null;
+   pending?.resolve({started:true,duration:Math.min(8,Number(value.duration)||8),overlap:true,beatSync:null,recovery:0});
+   // Keep the website's metadata in step without setQueue/play: that would
+   // start a second AAC/DRM pipeline just to describe our existing PCM output.
+   this.page(r.win,{method:'play',params:{kind:deck.kind,id:deck.requestedId,native:true,metadata:deck.metadata}}).catch(()=>{});
   }else if(value.type==='released'&&deck?.generation===value.generation&&deck!==r.active)this.dropDeck(r,deck);
-  else if(value.type==='error')this.failed(r,'SPATIAL_MIX_FAILED');
+  else if(value.type==='error'){
+   if(/^[A-Za-z _-]{1,60}$/.test(value.hint||''))this.mixDebug={...this.mixDebug,lastError:value.hint};
+   this.failed(r,'SPATIAL_MIX_FAILED');
+  }
  }
  deckFailed(r,deck,code){
   if(this.session!==r||!r.decks.includes(deck))return;
@@ -158,12 +179,81 @@ class SpatialPlayback {
   deck.error=code;this.flowError=code;this.dropDeck(r,deck);this.send(r.mixer,{type:'cancel'});
  }
  dropDeck(r,deck){
+  deck.closePcm?.();
   if(deck.child){deck.child.stdio[3]?.unpipe();this.send(deck.child,{type:'stop'});deck.child.kill('SIGTERM');}
   if(deck.context)this.source(r.win,{action:'close',contextId:deck.context}).catch(()=>{});
   if(r.standby===deck)r.standby=null;if(r.decks[deck.slot]===deck)r.decks[deck.slot]=null;
  }
+ async prepareDeck(r,p,position=0,manual=false){
+  const revision=r.flowRevision;
+  const deck={metadata:{id:p.id},kind:p.kind,requestedId:p.id,key:p.key,position,manual,
+   slot:1-r.active.slot,generation:++this.generation,quality:null,ready:false};
+  r.standby=deck;
+  // Only source negotiation is serialized. It must not create a third lease
+  // when an obsolete click or an earlier automatic preload is still in flight.
+  const prepare=async()=>{
+   if(this.session!==r||revision!==r.flowRevision||r.standby!==deck)throw Error('FLOW_CANCELLED');
+   const freeUntil=Date.now()+2000;
+   while(r.decks[deck.slot]&&Date.now()<freeUntil)await new Promise(resolve=>setTimeout(resolve,20));
+   if(this.session!==r||revision!==r.flowRevision||r.standby!==deck)throw Error('FLOW_CANCELLED');
+   if(r.decks[deck.slot])throw Error('FLOW_NOT_READY');
+   r.decks[deck.slot]=deck;
+   const prepared=await this.source(r.win,{action:'prepare',id:p.id,kind:p.kind,allowStereo:true,fairplay:!!r.nativeRuntime?.fairplay});
+   if(this.session!==r||revision!==r.flowRevision||r.standby!==deck){
+    await this.source(r.win,{action:'close',contextId:prepared.contextId}).catch(()=>{});throw Error('FLOW_CANCELLED');}
+   deck.metadata=prepared.metadata;
+   await this.loadDeck(r,deck,prepared,position);
+   return deck;
+  };
+  deck.loading=r.preparation.catch(()=>{}).then(prepare).catch(error=>{
+   if(r.standby===deck)this.dropDeck(r,deck);
+   throw error;
+  });
+  r.preparation=deck.loading.catch(()=>{});
+  return deck.loading;
+ }
+ async waitReady(r,deck,valid,timeout=14000){
+  const until=Date.now()+timeout;
+  while(this.session===r&&r.standby===deck&&valid()&&!deck.error&&Date.now()<until){
+   if(deck.ready&&deck.quality)return;
+   await new Promise(resolve=>setTimeout(resolve,20));
+  }
+  if(!valid()||this.session!==r||r.standby!==deck)throw Error('FLOW_CANCELLED');
+  throw Error(deck.error||'FLOW_NOT_READY');
+ }
+ select(r,p,position=0){
+  const request={id:p.id,kind:p.kind,position};r.manual=request;this.error='';this.switchError=null;
+  // Finish a cancelled overlap before reusing its slot. A new Play command
+  // may arrive while that output clock is paused.
+  if(r.paused&&r.decks.filter(Boolean).length>1){r.paused=false;this.send(r.mixer,{type:'pause',paused:false});}
+  const reusable=r.standby&&!r.transition&&position===0&&
+   (r.standby.requestedId===p.id||this.matches(r.standby.metadata,{id:p.id,catalogId:p.id}))?r.standby:null;
+  r.manualTask=(async()=>{
+   let deck=reusable;
+   if(!deck){
+    await this.flow(r,{operation:'cancel',force:true});
+    if(r.manual!==request||this.session!==r)return;
+    deck=await this.prepareDeck(r,{...p,key:'manual-'+(++this.generation)},position,true);
+   }else if(deck.loading)await deck.loading;
+   const valid=()=>r.manual===request;
+   await this.waitReady(r,deck,valid,20000);
+   if(!valid()||this.session!==r)return;
+   r.paused=false;this.send(r.mixer,{type:'pause',paused:false});
+   await new Promise((resolve,reject)=>{
+    r.transition={key:deck.key,manual:request,resolve,reject,timer:setTimeout(()=>this.failed(r,'SPATIAL_MIX_TIMEOUT'),6000)};
+    this.send(r.mixer,{type:'transition',key:deck.key,duration:.22,manual:true});
+   });
+  })().catch(error=>{
+   if(this.session!==r||r.manual!==request)return;
+   r.manual=null;this.switchError={id:request.id,code:errors.has(error.message)?error.message:'SPATIAL_SWITCH_FAILED'};
+   if(r.standby)this.dropDeck(r,r.standby);
+  });
+  return {ok:true,preparing:!reusable?.ready};
+ }
  async flow(r,p){
   if(p.operation==='cancel'){
+   if(r.manual&&!p.force)return {cancelled:true};
+   if(p.preserve&&!r.transition)return {cancelled:true};
    r.flowRevision++;const mixing=!!r.transition;clearTimeout(r.transition?.timer);r.transition?.reject(Error('FLOW_CANCELLED'));r.transition=null;
    if(r.standby){if(!mixing)this.dropDeck(r,r.standby);else r.standby=null;}
    this.send(r.mixer,{type:'cancel',keep:r.active.slot});return {cancelled:true};
@@ -171,20 +261,14 @@ class SpatialPlayback {
   if(p.operation==='status')return {current:{playing:!r.paused,time:r.state.position,rate:1},outgoing:r.decks.filter(Boolean).length>1?{playing:!r.paused}:null,rhythm:null};
   if(p.operation==='prepare'){
    this.flowError='';
-   if(!r.mixer||!r.active.quality||r.paused||r.state.phase!=='playing')throw Error('FLOW_NOT_READY');
+   if(!r.mixer||!r.active.quality||r.manual||r.paused||r.state.phase!=='playing')throw Error('FLOW_NOT_READY');
    if(!['songs','library-songs'].includes(p.kind)||!/^\w[\w.-]{0,199}$/.test(String(p.id))||typeof p.key!=='string'||p.key.length>80)throw Error('INVALID_ARGUMENTS');
    await this.flow(r,{operation:'cancel'});const revision=r.flowRevision;
-   const prepared=await this.source(r.win,{action:'prepare',id:p.id,kind:p.kind,allowStereo:true,fairplay:!!r.nativeRuntime?.fairplay});
-   if(this.session!==r||revision!==r.flowRevision){this.source(r.win,{action:'close',contextId:prepared.contextId}).catch(()=>{});throw Error('FLOW_CANCELLED');}
-   const freeUntil=Date.now()+1200;while(r.decks[1-r.active.slot]&&Date.now()<freeUntil)await new Promise(resolve=>setTimeout(resolve,30));
-   if(r.decks[1-r.active.slot]){this.source(r.win,{action:'close',contextId:prepared.contextId}).catch(()=>{});throw Error('FLOW_NOT_READY');}
-   const deck={metadata:prepared.metadata,kind:p.kind,requestedId:p.id,key:p.key,slot:1-r.active.slot,generation:++this.generation,quality:null,ready:false};
-   r.standby=deck;r.decks[deck.slot]=deck;
-   try{await this.loadDeck(r,deck,prepared);}catch(e){this.dropDeck(r,deck);throw e;}
-   const until=Date.now()+14000;
-   while(this.session===r&&revision===r.flowRevision&&r.standby===deck&&!deck.error&&Date.now()<until){
-    if(deck.ready&&deck.quality)return {ready:true};await new Promise(resolve=>setTimeout(resolve,40));}
-   if(r.standby===deck)this.dropDeck(r,deck);throw Error('FLOW_NOT_READY');
+   let deck;
+   try{
+    deck=await this.prepareDeck(r,p);
+    await this.waitReady(r,deck,()=>revision===r.flowRevision);return {ready:true};
+   }catch(e){if(deck&&r.standby===deck)this.dropDeck(r,deck);throw e;}
   }
   if(p.operation==='transition'){
    const deck=r.standby;if(!deck?.ready||!deck.quality||deck.key!==p.key||r.transition||r.paused||r.active.metadata.duration-r.state.position>23)throw Error('FLOW_NOT_READY');
@@ -224,10 +308,16 @@ class SpatialPlayback {
   if(request.method==='flow')return this.flow(r,request.params||{});
   if(request.method==='seek'){
    const position=Number(request.params?.position);if(!Number.isFinite(position)||position<0)throw Error('INVALID_ARGUMENTS');
-   const metadata=r.active.metadata;await this.stop(false);this.begin(r.win,metadata,Math.min(position,Number(metadata.duration)||position),r.paused);return {ok:true};
+   const metadata=r.active.metadata,target=Math.min(position,Number(metadata.duration)||position);
+   if(!r.paused&&r.mixer&&r.active.quality)return this.select(r,{kind:String(metadata.id).startsWith('i.')?'library-songs':'songs',id:String(metadata.id)},target);
+   await this.stop(false);this.begin(r.win,metadata,target,r.paused);return {ok:true};
+  }
+  if(request.method==='play'&&['songs','library-songs'].includes(request.params?.kind)&&/^\w[\w.-]{0,199}$/.test(String(request.params?.id))&&request.params?.paused!==true&&r.mixer&&r.active.quality){
+   return this.select(r,{kind:request.params.kind,id:String(request.params.id)},Math.max(0,Number(request.params.position)||0));
   }
   if(request.method==='transport'&&['pause','resume','toggle'].includes(request.params?.action)){
    r.paused=request.params.action==='toggle'?!r.paused:request.params.action==='pause';r.state.playing=!r.paused;r.lastAdvance=Date.now();
+   if(r.paused&&r.manual){r.manual=null;await this.flow(r,{operation:'cancel',force:true});}
    if(!r.paused&&r.state.phase==='ended'){const metadata=r.active.metadata;await this.stop(false);this.begin(r.win,metadata,0,false);}
    else this.send(r.mixer,{type:'pause',paused:r.paused});return {ok:true};
   }

@@ -15,9 +15,24 @@ let current={...metadata};
 const page=async(w,request)=>{calls.push(request);if(request.method==='status')return defer?await defer:{...current};
  if(request.method==='play')current={...current,id:request.params.id,catalogId:request.params.id};return {ok:true};};
 const p=new SpatialPlayback(page,async()=>{});
+// A killed PCM producer must never leave half a frame in a reusable pipe.
+const {PassThrough}=require('node:stream'),{EventEmitter}=require('node:events');
+const raw=new EventEmitter(),forwarded=[];raw.write=frame=>{forwarded.push(Buffer.from(frame));return true;};
+const pcmSession={mixer:{stdio:[null,null,null,raw]}},partial={slot:0,generation:21},replacement={slot:0,generation:22};
+function packet(generation){const frame=Buffer.alloc(24);frame.writeUInt32LE(generation);frame.writeUInt32LE(16,4);return frame;}
+const oldPipe=new PassThrough();p.pipePcm(pcmSession,partial,{stdio:[null,null,null,oldPipe]});
+oldPipe.write(packet(21).subarray(0,13));partial.closePcm();assert.equal(forwarded.length,0);
+const newPipe=new PassThrough();p.pipePcm(pcmSession,replacement,{stdio:[null,null,null,newPipe]});
+newPipe.write(packet(22).subarray(0,3));newPipe.write(packet(22).subarray(3));
+assert.equal(forwarded.length,1);assert.deepEqual(forwarded[0],packet(22));replacement.closePcm();
+let blocked=true;raw.write=frame=>{forwarded.push(Buffer.from(frame));return !blocked;};
+const pressured={slot:0,generation:23},pressuredPipe=new PassThrough();
+p.pipePcm(pcmSession,pressured,{stdio:[null,null,null,pressuredPipe]});
+pressuredPipe.write(Buffer.concat([packet(23),packet(23)]));assert.equal(forwarded.length,2);
+blocked=false;raw.emit('drain');assert.equal(forwarded.length,3);pressured.closePcm();
 function child(){return {killed:false,stdin:{writable:true,write:s=>commands.push(JSON.parse(s))},stdio:[null,null,null,{unpipe(){}}],kill(){this.killed=true;}};}
 p.load=async r=>{r.mixer=child();r.active.child=child();};
-p.source=async(w,request)=>request.action==='prepare'?{contextId:'next-context',metadata:next}:{};
+p.source=async(w,request)=>request.action==='prepare'?{contextId:'context-'+request.id,metadata:request.id==='123'?metadata:next}:{};
 p.loadDeck=async(r,deck,prepared)=>{deck.context=prepared.contextId;deck.child=child();deck.quality=quality;deck.ready=true;};
 (async()=>{
  assert.equal(p.merge(win,metadata).emberFlow,true);
@@ -29,6 +44,7 @@ p.loadDeck=async(r,deck,prepared)=>{deck.context=prepared.contextId;deck.child=c
  assert.equal(out.audioQuality.variant,'dolby-atmos');assert.equal(out.position,45);assert.equal(out.emberFlow,true);
  await p.intercept(win,{method:'transport',params:{action:'pause'}});assert.equal(p.merge(win,metadata).playing,false);
  await p.intercept(win,{method:'transport',params:{action:'resume'}});assert.equal(commands.at(-1).paused,false);
+ await p.intercept(win,{method:'transport',params:{action:'pause'}});
  await p.intercept(win,{method:'seek',params:{position:90}});assert(d.child.killed);r=p.session;assert.equal(r.state.position,90);
  await p.failed(r,'DEVICE_LIMIT');assert.equal(p.session,null);assert.equal(calls.at(-1).method,'play');assert.equal(calls.at(-1).params.position,90);
  assert.equal(p.merge(win,metadata).audioQuality.codec,'aac');assert.equal(p.session,null);
@@ -54,6 +70,46 @@ p.loadDeck=async(r,deck,prepared)=>{deck.context=prepared.contextId;deck.child=c
  const cancelled=p.flow(r,{operation:'transition',key:'cancel',duration:6});
  const rejection=assert.rejects(cancelled,/FLOW_CANCELLED/);await p.flow(r,{operation:'cancel'});await rejection;
  assert.equal(commands.at(-1).keep,0);assert.equal(r.active.metadata.id,'123');
+ p.mixerMessage(r,{type:'released',slot:1,generation:r.decks[1].generation});
+ // Manual Next consumes the actual prepared deck and keeps the output clock.
+ await p.flow(r,{operation:'prepare',key:'manual-ready',kind:'songs',id:'456'});
+ const primed=r.standby,mixer=r.mixer,outgoing=r.active;
+ await p.flow(r,{operation:'cancel',preserve:true});assert.equal(r.standby,primed);
+ const tick=async()=>await new Promise(resolve=>setImmediate(resolve));
+ const chosen=await p.intercept(win,{method:'play',params:{kind:'songs',id:'456'}});
+ await tick();assert.equal(chosen.preparing,false);assert.equal(p.session,r);assert.equal(r.mixer,mixer);
+ assert.equal(r.standby,primed);assert.equal(outgoing.child.killed,false);
+ assert.equal(commands.at(-1).duration,.22);assert.equal(commands.at(-1).manual,true);
+ p.mixerMessage(r,{type:'flow-started',key:primed.key,slot:primed.slot,duration:.22});
+ await r.manualTask;assert.equal(r.active,primed);assert.equal(r.manual,null);
+ assert.equal(calls.at(-1).params.native,true,'Native handover must not warm MusicKit AAC again');
+ p.mixerMessage(r,{type:'released',slot:outgoing.slot,generation:outgoing.generation});
+ // A second click cancels stale source preparation before it can spawn/play.
+ const source=p.source;let releaseSource,entered=false;
+ p.source=async(w,request)=>{
+  if(request.action==='prepare'&&request.id==='123'&&!entered){entered=true;await new Promise(resolve=>releaseSource=resolve);}
+  return source(w,request);
+ };
+ await p.intercept(win,{method:'play',params:{kind:'songs',id:'123'}});await tick();assert(entered);
+ await p.intercept(win,{method:'play',params:{kind:'songs',id:'456'}});releaseSource();await tick();await tick();
+ assert.equal(r.active,primed,'An obsolete click must never replace audible metadata');
+ assert.equal(r.standby.requestedId,'456');assert.equal(r.decks.filter(Boolean).length,2);
+ const latest=r.standby;
+ p.mixerMessage(r,{type:'flow-started',key:latest.key,slot:latest.slot,duration:.22});
+ await r.manualTask;assert.equal(r.active,latest);p.source=source;
+ p.mixerMessage(r,{type:'released',slot:primed.slot,generation:primed.generation});
+ // Rewind uses the same output device; pause while preparing wins over play.
+ await p.intercept(win,{method:'seek',params:{position:0}});await tick();
+ assert.equal(p.session,r);assert.equal(r.mixer,mixer);assert(r.manual);
+ await p.intercept(win,{method:'transport',params:{action:'pause'}});await r.manualTask;
+ assert.equal(r.manual,null);assert.equal(r.paused,true);assert.equal(r.active,latest);
+ const cancelledRewind=r.decks[1-latest.slot];
+ if(cancelledRewind)p.mixerMessage(r,{type:'released',slot:cancelledRewind.slot,generation:cancelledRewind.generation});
+ const goodSource=p.source;p.source=async()=>{throw Error('SPATIAL_NETWORK');};
+ await p.intercept(win,{method:'play',params:{kind:'songs',id:'123'}});await r.manualTask;
+ assert.equal(r.active,latest);assert.equal(latest.child.killed,false);
+ assert.equal(p.info().switchError.id,'123');assert.equal(p.info().error,'');
+ assert.equal(r.decks.filter(Boolean).length,1);p.source=goodSource;
  await assert.rejects(p.intercept(win,{method:'spatial',params:{enabled:'true'}}),/INVALID_ARGUMENTS/);
  await p.stop(false);
  const profile=path.join(root,'native-profile');fs.mkdirSync(profile);fs.writeFileSync(path.join(profile,'session-ready'),'fixture');

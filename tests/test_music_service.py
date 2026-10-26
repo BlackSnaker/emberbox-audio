@@ -34,6 +34,18 @@ def drain(predicate,seconds=2):
 
 
 class Adapters(unittest.TestCase):
+    def test_apple_transport_is_not_blocked_by_a_catalogue_read(self):
+        h=host();r=MusicRepository(h);entered=threading.Event();release=threading.Event()
+        def browse():
+            with r.locks['apple-music']:entered.set();release.wait(2)
+        worker=threading.Thread(target=browse);worker.start();self.assertTrue(entered.wait(1))
+        try:
+            done=threading.Event()
+            transport=threading.Thread(target=lambda:(r.play({'source':'apple-music','kind':'songs','id':'123'},lambda:True),done.set()))
+            transport.start()
+            self.assertTrue(done.wait(.3),'Transport waited for the catalogue lock')
+        finally:release.set();worker.join();transport.join()
+        h.apple_web.request.assert_called_once_with('play',kind='songs',id='123')
     def test_apple_library_album_and_catalogue_requests(self):
         h=host();r=MusicRepository(h)
         for category,expected in [('home','playlists'),('albums','albums')]:
@@ -82,6 +94,35 @@ class Playback(unittest.TestCase):
         s=self.service;s.add([song('A'),song('B')]);s.start();drain(lambda:not s.loading);s.poll()
         self.host.playing=False;s.poll();self.assertEqual(self.calls,['A'])
         s.step(1);drain(lambda:not s.loading);self.assertEqual(self.calls,['A','B'])
+    def test_previous_during_selection_does_not_seek_the_outgoing_song(self):
+        s=self.service;s.book.replace('spotify',[song('A'),song('B'),song('C')]);s.book.select('spotify',2)
+        s.loading=True;self.host.title.value='Song B';self.host.position=90_000_000
+        s.step(-1);drain(lambda:not s.loading)
+        self.host.seek_to.assert_not_called();self.assertEqual(s.book.current('spotify')['id'],'B')
+    def test_previous_ignores_stale_position_after_the_request_was_acknowledged(self):
+        s=self.service;s.book.replace('spotify',[song('A'),song('B'),song('C')]);s.book.select('spotify',2)
+        self.host.title.value='Song B';self.host.position=90_000_000
+        s.step(-1);drain(lambda:not s.loading)
+        self.host.seek_to.assert_not_called();self.assertEqual(s.book.current('spotify')['id'],'B')
+    def test_repeated_previous_can_go_back_while_rewind_is_still_preparing(self):
+        s=self.service;s.book.replace('spotify',[song('A'),song('B')]);s.book.select('spotify',1)
+        self.host.title.value='Song B';self.host.position=90_000_000
+        with patch('music_library.time.monotonic',return_value=100):s.step(-1)
+        self.host.seek_to.assert_called_once_with(0)
+        with patch('music_library.time.monotonic',return_value=103):s.step(-1)
+        drain(lambda:not s.loading)
+        self.assertEqual(s.book.current('spotify')['id'],'A');self.host.seek_to.assert_called_once()
+    def test_confirmed_rewind_restores_the_normal_restart_behavior(self):
+        s=self.service;s.book.replace('spotify',[song('A'),song('B')]);s.book.select('spotify',1)
+        self.host.title.value='Song B';self.host.position=90_000_000;s.step(-1)
+        self.host.position=0;s.poll();self.host.position=12_000_000;s.step(-1)
+        self.assertEqual(self.host.seek_to.call_count,2);self.assertEqual(s.book.indices['spotify'],1)
+    def test_failed_native_selection_does_not_silently_consume_the_queue(self):
+        s=self.service;h=self.host;h.source='apple-music';s.source_changed()
+        s.book.replace('apple-music',[{'uri':'apple:songs:123','title':'Requested song'}]);s.book.select('apple-music',0)
+        h.apple_web.state={'id':'456','spatial':{'switchError':{'id':'123','code':'SPATIAL_NETWORK'}}}
+        s.poll();self.assertIsNone(s.book.active);self.assertTrue(s.error)
+        self.assertEqual(s.book.current('apple-music')['id'],'123')
     def test_pending_track_is_inserted_without_replaying_history(self):
         s=self.service;s.add([song('A'),song('B'),song('C')]);s.book.select('spotify',1)
         s.play_now(song('A'));drain(lambda:not s.loading)

@@ -51,7 +51,7 @@ class PcmResampler(Aac):
     def __init__(self,rate,output_rate,output,stopping):
         self.output=output;self.stopping=stopping;self.error=None
         self.process=subprocess.Popen(['ffmpeg','-nostdin','-hide_banner','-loglevel','error','-threads','1',
-            '-f','f32le','-ac','2','-ar',str(rate),'-i','pipe:0','-threads','1',
+            '-probesize','32','-analyzeduration','0','-f','f32le','-ac','2','-ar',str(rate),'-i','pipe:0','-threads','1',
             '-af',f'aresample={output_rate}:filter_size=64:phase_shift=10','-ac','2','-ar',str(output_rate),
             '-f','f32le','pipe:1'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
         self.thread=threading.Thread(target=self.read,daemon=True);self.thread.start()

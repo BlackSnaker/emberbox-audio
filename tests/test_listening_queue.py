@@ -41,6 +41,18 @@ class QueueState(unittest.TestCase):
         b=self.book;b.add('spotify',[song('A'),song('A')]);b.add('apple-music',[{'uri':'apple:songs:123','title':'Apple'}])
         self.assertNotEqual(b.queues['spotify'][0]['entry'],b.queues['spotify'][1]['entry'])
         b.replace('spotify',[song('B')]);self.assertEqual(len(b.queues['apple-music']),1)
+    def test_adding_music_retains_recent_history_for_previous(self):
+        b=self.book;b.add('spotify',[song(x) for x in 'ABC']);b.select('spotify',2)
+        b.add('spotify',[song('D')]);self.assertEqual(b.indices['spotify'],2)
+        self.assertEqual([i['id'] for i in b.queues['spotify']],list('ABCD'))
+        b.select('spotify',1);self.assertEqual(b.current('spotify')['id'],'B')
+    def test_history_is_bounded_and_reclaimed_before_pending_tracks(self):
+        b=self.book;b.add('spotify',[song(str(i)) for i in range(LIMIT)]);b.select('spotify',100)
+        b.add('spotify',[song('new')]);self.assertEqual(b.indices['spotify'],20)
+        self.assertEqual(b.current('spotify')['id'],'100');self.assertEqual(b.upcoming('spotify')[-1][1]['id'],'new')
+        b.add('spotify',[song('extra'+str(i)) for i in range(LIMIT)])
+        self.assertEqual(len(b.queues['spotify']),LIMIT);self.assertEqual(b.indices['spotify'],0)
+        self.assertEqual(b.current('spotify')['id'],'100');self.assertEqual(b.queues['spotify'][1]['id'],'101')
     def test_corrupt_restore_is_empty(self):
         self.book.path.write_text('{incomplete')
         self.assertFalse(QueueBook(self.book.path).queues['spotify'])

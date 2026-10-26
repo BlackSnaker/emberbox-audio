@@ -15,9 +15,10 @@ if ctypes.CDLL(None).prctl(1,15,0,0,0)!=0:raise RuntimeError('SPATIAL_PARENT_PRO
 if os.getppid()==1:os._exit(1)
 
 class Slot:
-    def __init__(self,generation,origin):
+    def __init__(self,generation,origin,preroll=2):
         self.generation=generation;self.origin=float(origin);self.parts=collections.deque()
         self.frames=0;self.received=0;self.consumed=0;self.total=None;self.start=0;self.ready=False;self.padding=0
+        self.preroll=max(.4,min(2.,float(preroll)))
     def take(self,n):
         parts=[]
         while n and self.parts:
@@ -38,7 +39,7 @@ class Mixer:
         if slot not in (0,1) or not 0<generation<2**32:raise ValueError('Invalid spatial slot')
         with self.condition:
             if self.fade:raise ValueError('Spatial mix in progress')
-            self.slots[slot]=Slot(generation,p.get('position',0));self.condition.notify_all()
+            self.slots[slot]=Slot(generation,p.get('position',0),p.get('preroll',2));self.condition.notify_all()
     def received(self,slot,generation,raw):
         value=np.frombuffer(raw,dtype='<f4').reshape(-1,2)
         if not np.isfinite(value).all():raise ValueError('Nonfinite spatial samples')
@@ -50,7 +51,7 @@ class Mixer:
                 self.condition.wait(.1)
             if self.stopped:return
             target.parts.append(value.copy());target.frames+=len(value);target.received+=len(value)
-            if not target.ready and target.received>=RATE*2:
+            if not target.ready and target.received>=RATE*target.preroll:
                 target.ready=True;self.emit({'type':'ready','slot':slot,'generation':generation})
             self.condition.notify_all()
     def control(self,p):
@@ -64,7 +65,8 @@ class Mixer:
         elif action=='transition':
             with self.condition:
                 other=1-self.current;target=self.slots[other]
-                if self.fade or not target or target.frames<RATE:raise ValueError('Spatial next not ready')
+                minimum=RATE*(.4 if p.get('manual') is True else 1.)
+                if self.fade or not target or target.frames<minimum:raise ValueError('Spatial next not ready')
                 duration=max(.15,min(8.,float(p['duration'])))
                 outgoing=self.slots[self.current]
                 if outgoing.total is not None:duration=min(duration,max(.01,(outgoing.total-outgoing.consumed)/RATE))
@@ -190,4 +192,7 @@ def main():
 
 if __name__=='__main__':
     try:main()
-    except Exception:print(json.dumps({'type':'error','code':'SPATIAL_MIX_FAILED'}),flush=True);raise SystemExit(1)
+    except Exception as error:
+        hints={'Spatial mix in progress','Spatial next not ready','Invalid spatial slot','Nonfinite spatial samples','Invalid PCM frame'}
+        hint=str(error) if str(error) in hints else type(error).__name__
+        print(json.dumps({'type':'error','code':'SPATIAL_MIX_FAILED','hint':hint}),flush=True);raise SystemExit(1)

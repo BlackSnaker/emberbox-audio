@@ -47,6 +47,16 @@ Each input holds up to four seconds plus bounded transport/decoder buffers.
 Mixing uses one sample clock, smooth complementary gain envelopes and up to
 an eight-second overlap. Artwork and queue handover follow the audible output.
 
+Manual selection keeps that mixer and its output clock running. One upcoming
+Ember-queue song is prepared early, even with automatic mixing switched off.
+A ready choice uses a short 220 ms envelope; an uncached choice keeps the current
+song audible while loading. Network and licence preparation can still take time.
+Rapid choices supersede obsolete preparations. Recent manifest descriptors stay
+in a four-entry, 60-second memory cache; every replay opens fresh DRM contexts.
+Previous restarts the current song after three seconds; pressing it again while
+the rewind is pending selects the previous queue entry. Adding songs keeps up to
+twenty recent history entries, reclaiming them if the 200-entry limit needs room.
+
 The original Atmos-only session uses a 48 kHz output clock. When native Lossless
 is connected, both decks share **192 kHz**, so a 96/192 kHz source is not forced
 through a 48 kHz mixer during overlap. Lower-rate material is converted with a

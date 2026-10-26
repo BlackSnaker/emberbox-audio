@@ -3,13 +3,19 @@ async function emberboxSpatialSource(params) {
  'use strict';
  if(location.origin!=='https://music.apple.com')throw Error('SIGN_IN_REQUIRED');
  const music=window.MusicKit?.getInstance?.();
- if(!music?.isAuthorized)throw Error('SIGN_IN_REQUIRED');
+ if(!music?.isAuthorized){delete window.__emberSpatialRecent;throw Error('SIGN_IN_REQUIRED');}
  const attr=line=>Object.fromEntries([...line.matchAll(/(?:^|,)([A-Z0-9-]+)=("[^"]*"|[^,]*)/g)].map(m=>[m[1],m[2].replace(/^"|"$/g,'')]));
  const decode=value=>Uint8Array.from(atob(value),c=>c.charCodeAt(0));
  const encode=value=>{let s='';for(let i=0;i<value.length;i+=16384)s+=String.fromCharCode(...value.subarray(i,i+16384));return btoa(s);};
  const canonical=uri=>{const raw=uri.includes('base64,')?decode(uri.split('base64,')[1]):new TextEncoder().encode(uri);return raw.length===16?'data:;base64,'+encode(raw):uri;};
  const widevine=a=>a.KEYFORMAT==='com.widevine'||a.KEYFORMAT==='urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed';
  const contexts=window.__emberSpatialContexts||(window.__emberSpatialContexts=new Map());
+ // Short-lived manifest descriptors only. No decrypted audio or DRM session is
+ // cached; a replay still opens its own authorized licence and bounded context.
+ const scope=String(music.storefrontId||music.storefrontCountryCode||'us');
+ let recent=window.__emberSpatialRecent;
+ if(!recent||recent.music!==music||recent.scope!==scope)recent=window.__emberSpatialRecent={music,scope,items:new Map()};
+ const cacheKey=JSON.stringify([params.kind,params.id,params.fairplay===true,params.allowStereo===true,params.enhanced!==false]);
  const safeUrl=value=>{const u=new URL(value);if(u.protocol!=='https:'||u.username||u.password||!['apple.com','applemusic.com','cdn-apple.com','mzstatic.com'].some(h=>u.hostname===h||u.hostname.endsWith('.'+h)))throw Error('SPATIAL_SOURCE_UNSUPPORTED');return u;};
  async function bytes(value,max=524288,range){
   const u=safeUrl(value),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),7000);
@@ -30,6 +36,14 @@ async function emberboxSpatialSource(params) {
  }
  if(params.action==='prepare'||params.action==='inspect') {
   if(params.action==='prepare'&&contexts.size>=2)throw Error('SPATIAL_BUSY');
+  for(const [key,value] of recent.items)if(Date.now()-value.time>60000)recent.items.delete(key);
+  const cached=params.action==='prepare'&&params.id!==undefined?recent.items.get(cacheKey):null;
+  if(cached){
+   if(await music._playbackController?.services?.store?.storekit?.hasMusicSubscription?.()!==true){recent.items.clear();throw Error('SUBSCRIPTION_REQUIRED');}
+   const contextId=crypto.randomUUID(),c=cached.context;
+   contexts.set(contextId,{...c,licences:c.licences.map(v=>({...v})),cache:null});
+   return {...cached.prepared,contextId};
+  }
   let current=music.nowPlayingItem;
   if(params.id!==undefined){
    if(!['songs','library-songs'].includes(params.kind)||!/^\w[\w.-]{0,199}$/.test(String(params.id)))throw Error('INVALID_ARGUMENTS');
@@ -130,7 +144,13 @@ async function emberboxSpatialSource(params) {
   const names={'atmos':'dolby-atmos','surround':'dolby-audio','hiResLossless':'hi-res-lossless'};
   const formats=[...new Set([...(Array.isArray(a.audioVariants)?a.audioVariants:[]),...(Array.isArray(a.audioTraits)?a.audioTraits:[])].map(v=>names[v]||v).filter(v=>['dolby-atmos','dolby-audio','hi-res-lossless','lossless','lossy-stereo'].includes(v)))];
   const metadata={id:String(params.id||current.id),catalogId:String(current.catalogId||current.id),title:String(a.name||''),artist:String(a.artistName||''),album:String(a.albumName||''),duration:Number(a.durationInMillis||0)/1000,image:art.replace('{w}','1200').replace('{h}','1200'),availableFormats:formats.length?formats:lossless?['lossless']:selected.a.CODECS.includes('ec-3')?['dolby-atmos']:['lossy-stereo'],authorized:true,ready:true};
-  return {metadata,codec:lossless?'alac':selected.a.CODECS.includes('ec-3')?'eac3':'aac',drm:lossless?'fairplay':'widevine',contextId,certificate:encode(certificate),licences:licences.map(v=>lossless?{uri:v.keyuri}:{pssh:v.pssh}),segments:segments.map(({start,duration,keyIndex})=>({start,duration,keyIndex}))};
+  const prepared={metadata,codec:lossless?'alac':selected.a.CODECS.includes('ec-3')?'eac3':'aac',drm:lossless?'fairplay':'widevine',contextId,certificate:encode(certificate),licences:licences.map(v=>lossless?{uri:v.keyuri}:{pssh:v.pssh}),segments:segments.map(({start,duration,keyIndex})=>({start,duration,keyIndex}))};
+  if(params.id!==undefined){
+   recent.items.delete(cacheKey);
+   recent.items.set(cacheKey,{time:Date.now(),context:{item,asset,licences:licences.map(v=>({...v})),segments},prepared:{...prepared,contextId:undefined}});
+   while(recent.items.size>4)recent.items.delete(recent.items.keys().next().value);
+  }
+  return prepared;
  }
  const ctx=contexts.get(params.contextId);if(!ctx)throw Error('SPATIAL_STALE_CONTEXT');
  if(params.action==='license'){
@@ -147,7 +167,7 @@ async function emberboxSpatialSource(params) {
   const index=Number(params.index),offset=Number(params.offset||0),segment=ctx.segments[index];
   if(!Number.isInteger(index)||!segment||!Number.isSafeInteger(offset)||offset<0||offset>18874368)throw Error('INVALID_ARGUMENTS');
   if(ctx.cache?.index!==index){
-   const init=await bytes(segment.map.url,1048576,segment.map.range),body=await bytes(segment.url,16777216,segment.range);
+   const [init,body]=await Promise.all([bytes(segment.map.url,1048576,segment.map.range),bytes(segment.url,16777216,segment.range)]);
    const data=new Uint8Array(init.length+body.length);data.set(init);data.set(body,init.length);ctx.cache={index,data,bodyKind:new TextDecoder().decode(body.subarray(4,8)).replace(/[^a-z0-9 ]/gi,'?'),initBytes:init.length,originalOffset:new URL(segment.map.url).origin+new URL(segment.map.url).pathname===new URL(segment.url).origin+new URL(segment.url).pathname?(segment.range?.start||0):0};
   }
   const data=ctx.cache.data;if(offset>=data.length)throw Error('INVALID_ARGUMENTS');
@@ -155,7 +175,7 @@ async function emberboxSpatialSource(params) {
  }
  if(params.action==='close'){
   contexts.delete(params.contextId);ctx.cache=null;
-  for(const licence of ctx.licences)if(licence.response)await music.services.license.revokeLicense(ctx.item,{keyuri:licence.keyuri},{userInitiated:false,stkn:licence.response.stkn}).catch(()=>{});
+  for(const licence of ctx.licences)if(licence.response)Promise.resolve().then(()=>music.services.license.revokeLicense(ctx.item,{keyuri:licence.keyuri},{userInitiated:false,stkn:licence.response.stkn})).catch(()=>{});
   return {closed:true};
  }
  throw Error('UNSUPPORTED');

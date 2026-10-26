@@ -97,6 +97,13 @@ const call = (method,params={})=>context.emberboxAppleCommand({method,params});
   await call('transport',{action:'pause'});assert.equal(calls.at(-1),'pause');
   await call('transport',{action:'toggle'});assert.equal(calls.at(-1),'play');
   await call('seek',{position:25});assert.equal(calls.at(-1).seek,25);
+  const queueCalls=calls.filter(value=>value?.queue).length;
+  await call('play',{kind:'songs',id:'456',native:true,metadata:{title:'Native song',artist:'Native artist',
+    album:'Native album',catalogId:'456',duration:240,availableFormats:['lossless']}});
+  result=await call('status');assert.equal(result.id,'456');assert.equal(result.title,'Native song');
+  assert.equal(result.playing,false);assert.equal(result.audioQuality,undefined);
+  assert.equal(calls.filter(value=>value?.queue).length,queueCalls,'Native metadata sync must not set another SDK queue');
+  context.window.__emberboxRestoredTrack=null;
   const savedApi=music.api.music;
   const savedQueue=music.setQueue;
   let restoreMetadata;

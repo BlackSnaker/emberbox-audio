@@ -40,6 +40,20 @@ class FlowTests(unittest.TestCase):
             self.assertFalse(deck.beat_sync)
             self.now=16.;self.flow.tick(dict(values[0],position=170,duration=180,valid=True,playing=True))
             deck.transition.assert_called_once()
+    def test_native_next_is_warmed_early_even_when_automatic_mixing_is_off(self):
+        self.host.source='apple-music';self.host.apple_web.state={'emberFlow':True,'emberBeatSync':False,'spatial':{'fastSwitch':True}}
+        values=[dict(song(x),uri='apple:songs:'+str(i),id=str(i)) for i,x in enumerate('ABC',100)]
+        self.music.book.replace('apple-music',values);self.music.book.select('apple-music',0)
+        deck=Mock();deck.ready=True;deck.failed=False
+        with patch('flow_apple.AppleDecks',return_value=deck):
+            self.flow.tick(dict(values[0],position=2,duration=180,valid=True,playing=True))
+            deck.prepare.assert_called_once();self.assertFalse(self.flow.enabled)
+            self.now=170;self.flow.tick(dict(values[0],position=172,duration=180,valid=True,playing=True))
+            self.flow.tick(dict(values[0],position=173,duration=180,valid=True,playing=True))
+            deck.transition.assert_not_called()
+    def test_manual_selection_preserves_the_native_prepared_song(self):
+        self.flow.apple=Mock();self.flow.cancel(preserve_apple=True)
+        self.flow.apple.cancel.assert_called_once_with(preserve=True)
     def test_off_and_unsupported_sources_do_not_prepare_players(self):
         self.flow.tick(self.state());self.decks.prepare.assert_not_called()
         self.flow.enabled=True;self.host.source='apple-music'

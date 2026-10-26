@@ -148,6 +148,9 @@ class FixtureHost:
         self.browser_binding = self.youtube_binding = ''
         self.youtube_mode = 'native'
         self.apple_mode = 'native'
+        self.apple_web=SimpleNamespace(state={})
+        self.yandex_web=SimpleNamespace(state={})
+        self.youtube=SimpleNamespace(current=None,eof=False)
 
     def on_action(self, _button, action):
         self.calls.append((self.source, action))
