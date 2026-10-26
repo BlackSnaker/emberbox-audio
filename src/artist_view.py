@@ -7,7 +7,7 @@ from listening_queue import track
 from discovery_panel import clear
 from music_library import NAMES
 from artist_catalog import artist_ref,plain,SECTIONS,ReleaseCatalog
-from artist_header import ArtistBanner,BannerCache
+from artist_header import ArtistBanner,BannerCache,portrait_slot
 from artist_reveal import ArtistReveal
 
 CSS=b'''
@@ -104,6 +104,7 @@ class ArtistView(Gtk.Box):
         self.saved_section='overview';self.note='';self.size=None
         self.catalog=ReleaseCatalog();self.card_page=0;self.card_page_size=48
         self.wide=True;self.height=1080;self.overview_panels={};self.shelf_widgets=[]
+        self.overview_columns=None;self.overview_fit_key=None;self.overview_fit_idle=0
         self.song_buttons=[];self.album_buttons=[];self.choice_buttons=[];self.filters={}
         toolbar=Gtk.Box(spacing=12)
         self.back_button=button('‹ '+text('Back','Назад'),self.back)
@@ -119,6 +120,7 @@ class ArtistView(Gtk.Box):
         toolbar.pack_start(self.filter_bar,False,False,0)
         self.content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18)
         self.scroll=scroll(self.content);self.entrance=ArtistReveal(self.scroll,self.finish_intro)
+        self.scroll.connect('size-allocate',self.queue_overview_fit)
         self.pack_start(self.entrance,True,True,0)
         foot=Gtk.Box(spacing=12)
         self.notice=label('','stage-library-note');self.notice.set_line_wrap(True);self.notice.set_lines(2)
@@ -430,7 +432,8 @@ class ArtistView(Gtk.Box):
             columns.pack_start(panel,True,True,0);self.overview_panels['songs']=panel
         elif self.profile:
             panel=self.story();columns.pack_start(panel,True,True,0);self.overview_panels['story']=panel
-        if columns.get_children():self.content.pack_start(columns,False,False,0)
+        if columns.get_children():
+            self.overview_columns=columns;self.content.pack_start(columns,False,False,0)
         for key in ('albums','featured-albums','singles','compilations','appears','latest-release'):
             values=[]
             for value in self.section_items(key):
@@ -456,6 +459,7 @@ class ArtistView(Gtk.Box):
         clear(self.content);clear(self.filter_bar);self.filter_bar.hide()
         self.song_buttons=[];self.album_buttons=[];self.choice_buttons=[];self.filters={}
         self.overview_panels={};self.shelf_widgets=[]
+        self.overview_columns=None;self.overview_fit_key=None
         if self.release_ref:
             self.back_button.set_label('‹ '+text('Artist','Артист'));self.hero(self.release or self.release_ref,True)
             prose=(self.release or {}).get('description') or ''
@@ -511,7 +515,40 @@ class ArtistView(Gtk.Box):
             retry=button(text('Continue loading the discography','Продолжить загрузку дискографии'),self.load_catalog)
             retry.set_sensitive(not self.busy);self.content.pack_start(retry,False,False,0)
         self.content.show_all()
+        self.fit_overview()
         if animate:self.entrance.begin(self.hero_banner)
+
+    def queue_overview_fit(self,*_args):
+        if not self.closed and not self.overview_fit_idle:
+            self.overview_fit_idle=GLib.idle_add(self.fit_overview_idle,priority=GLib.PRIORITY_DEFAULT)
+
+    def fit_overview_idle(self):
+        self.overview_fit_idle=0
+        return self.fit_overview()
+
+    def fit_overview(self):
+        columns=self.overview_columns
+        if (self.closed or not self.active or not self.wide or self.height<900 or
+                not columns or not self.shelf_widgets):return False
+        width,height=self.scroll.get_allocated_width(),self.scroll.get_allocated_height()
+        if width<100 or height<100:return False
+        banner=self.hero_banner
+        reading_width=width-portrait_slot(width,banner.minimum_height) if banner.uri else width
+        hero_height=max(banner.minimum_height,banner.content.get_preferred_height_for_width(reading_width)[1])
+        heading=self.shelf_widgets[0].get_children()[0]
+        heading_height=heading.get_preferred_height_for_width(width)[1]
+        key=(id(columns),width,height,hero_height,heading_height)
+        if key==self.overview_fit_key:return False
+        self.overview_fit_key=key
+        budget=height-hero_height-2*self.content.get_spacing()-heading_height-4
+        panels=columns.get_children()
+        panel_width=max(1,(width-columns.get_spacing()*(len(panels)-1))//len(panels))
+        # Preserve the full-size portrait, typography and covers. Only tighten
+        # internal gaps enough to introduce the discography within the viewport.
+        for spacing in range(11,3,-1):
+            for panel in panels:panel.set_spacing(spacing)
+            if max(panel.get_preferred_height_for_width(panel_width)[1] for panel in panels)<=budget:break
+        return False
 
     def paged_cards(self,values):
         # A large discography must not create hundreds of images/widgets on
@@ -583,4 +620,5 @@ class ArtistView(Gtk.Box):
         if self.active:self.render()
 
     def close(self):
+        if self.overview_fit_idle:GLib.source_remove(self.overview_fit_idle);self.overview_fit_idle=0
         self.deactivate();self.closed=True;self.entrance.close();self.unsubscribe();self.cache.clear();self.banner_cache.clear()

@@ -90,7 +90,9 @@ def overview_first_screen(view,stage):
     heading=view.shelf_widgets[0].get_children()[0]
     _,hy,_,hh=rectangle(heading,stage.window);_,scroll_y,_,scroll_h=rectangle(view.scroll,stage.window)
     assert heading.get_mapped() and hy>=max(fy+fh,sy+sh) and hy>=scroll_y and hy+hh<=scroll_y+scroll_h+1,\
-        'The first discography heading must fit fully below the useful music panels, without being clipped at the viewport edge'
+        ('The first discography heading must fit fully below the useful music panels, without being clipped at the viewport edge',
+         {'heading':(hy,hh),'scroll':(scroll_y,scroll_h),'feature':(fy,fh),'songs':(sy,sh),
+          'masthead':rectangle(view.hero_banner,stage.window)})
 
 
 host=f.FixtureHost()
