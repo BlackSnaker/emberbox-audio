@@ -7,6 +7,7 @@
 - Restore Atmos music level on stereo output: disable cinema dialogue attenuation and broadcast DRC, include LFE equally in both rendered channels, and retain the JOC binaural scene. The virtual speaker layout never requires a physical multichannel device.
 - Protect the louder stereo sum with a linked, 192 kHz oversampled peak limiter: −1 dBFS ceiling, 5 ms lookahead, smooth 120 ms release, no automatic makeup gain. Preserve both ears' balance, exact stream duration, seek preroll and EmberFlow. Ordinary ALAC / Hi-Res remains outside this processing.
 - Clarify the actual two-channel PCM output in quality details. Add level, intersample peak, channel balance, short-tail and native-configuration regressions. Apple integration 21.
+- Keep the software fullscreen fade on one monotonic timer; a stale GDK frame timestamp must not skip its opening animation after a slow first paint.
 
 ## 0.18.4 — 2026-10-27
 

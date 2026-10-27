@@ -843,7 +843,10 @@ class FullscreenPlayer:
 
     def animate(self,_window,clock):
         now=clock.get_frame_time()
-        self.reveal.advance(now)
+        # The compositor fallback owns a monotonic GLib timer. A GDK frame
+        # timestamp can lag behind a slow first paint; mixing the two clocks
+        # could start the fade in the past and skip straight to its end.
+        if not self.reveal.fallback:self.reveal.advance(now)
         if not self.visible:return False
         if self.reveal.active:return True
         self.motion.tick(now/1e6)

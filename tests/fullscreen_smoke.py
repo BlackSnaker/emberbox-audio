@@ -319,6 +319,13 @@ def run():
             assert not stage.visible
             stage.open()
             assert stage.reveal.active
+            if stage.reveal.fallback:
+                # Xvfb/slow first paints may deliver an old GDK frame time.
+                # The fallback must use only its own monotonic timer, so this
+                # callback cannot move its origin two seconds into the past.
+                before=(stage.reveal.started,stage.reveal.progress)
+                stage.animate(stage.window,SimpleNamespace(get_frame_time=lambda:GLib.get_monotonic_time()-2_000_000))
+                assert (stage.reveal.started,stage.reveal.progress)==before, 'Fallback fade must have one clock owner'
             settle()
             if stage.reveal.active:
                 assert stage.reveal.cover_pixels is not None, 'Cover must travel from the widget'
