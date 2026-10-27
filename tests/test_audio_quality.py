@@ -45,6 +45,7 @@ class QualityTests(unittest.TestCase):
         q=describe({'audioQuality':{'codec':'eac3','variant':'dolby-atmos','evidence':'decoder','renderer':'openjoc-binaural','channels':2,'sampleRate':48000}})
         self.assertEqual(q['name'],'Dolby Atmos')
         self.assertNotIn('Stereo',q['details']);self.assertNotIn('Стерео',q['details'])
+        self.assertIn('PCM',q['details']);self.assertIn('2',q['details'])
         waiting=describe({'spatial':{'enabled':True,'phase':'preparing'},'audioQuality':{'codec':'aac','evidence':'decoder'}})
         self.assertFalse(waiting['known']);self.assertEqual(waiting['name'],'')
         self.assertNotIn(' · ',waiting['details'])

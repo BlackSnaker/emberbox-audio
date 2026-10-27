@@ -125,8 +125,12 @@ def decode_pass(args,prepared,runtime,rate,cdm,licensed,license_key,writer,origi
                         joc=Aac(crypto['asc'],output,cancelled,output_rate=rate)
                     elif crypto.get('codec')=='eac3':
                         rendered_format={'codec':'eac3','variant':'dolby-atmos','evidence':'decoder','sampleRate':48000,'channels':2,'renderer':'openjoc-binaural','outputSampleRate':rate}
-                        if rate!=48000:resampler=PcmResampler(48000,rate,output,cancelled)
-                        joc=Joc(runtime['decoder'],resampler.write if resampler else output)
+                        # Removing dialogue attenuation can put a correctly
+                        # reconstructed stereo sum above full scale. Protect
+                        # only Atmos, after binaural rendering and before Flow.
+                        # Ordinary ALAC samples never pass through this limiter.
+                        resampler=PcmResampler(48000,rate,output,cancelled,peak_limit=True)
+                        joc=Joc(runtime['decoder'],resampler.write)
                     else:raise RuntimeError('SPATIAL_CODEC_MISMATCH')
                     seeks.attach(joc,cancelled)
                     if resampler:seeks.attach(resampler,cancelled)

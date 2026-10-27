@@ -51,11 +51,20 @@ class Aac:
 
 class PcmResampler(Aac):
     """A bounded streaming pipe when native decks need one common clock."""
-    def __init__(self,rate,output_rate,output,stopping):
+    def __init__(self,rate,output_rate,output,stopping,*,peak_limit=False):
         self.output=output;self.stopping=stopping;self.error=None
+        filters=f'aresample={output_rate}:filter_size=64:phase_shift=10'
+        if peak_limit:
+            # Oversample the rendered stereo before peak detection. A common
+            # gain for both ears preserves the spatial balance. No automatic
+            # makeup gain, hard clipping or loudness riding; below the ceiling
+            # this stage is unity. Delay compensation also flushes the tail.
+            filters='aresample=192000:filter_size=64:phase_shift=10,'+\
+                'alimiter=limit=0.891250938:attack=5:release=120:level=0:latency=1'
+            if output_rate!=192000:filters+=','+f'aresample={output_rate}:filter_size=64:phase_shift=10'
         self.process=subprocess.Popen(['ffmpeg','-nostdin','-hide_banner','-loglevel','error','-threads','1',
             '-probesize','32','-analyzeduration','0','-f','f32le','-ac','2','-ar',str(rate),'-i','pipe:0','-threads','1',
-            '-af',f'aresample={output_rate}:filter_size=64:phase_shift=10','-ac','2','-ar',str(output_rate),
+            '-af',filters,'-ac','2','-ar',str(output_rate),
             '-f','f32le','pipe:1'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL)
         self.thread=threading.Thread(target=self.read,daemon=True);self.thread.start()
 

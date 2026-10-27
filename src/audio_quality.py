@@ -35,7 +35,7 @@ def describe(state):
         frequency=f'{rate/1000:g}'.replace('.',text('.',','))
         details.append(frequency+' '+text('kHz','кГц'))
     if known and channels:
-        details.append(text('Binaural · headphones','Пространственный · наушники') if name=='Dolby Atmos' and value.get('renderer')=='openjoc-binaural'
+        details.append(text('Binaural · 2-channel PCM','Пространственный · PCM, 2 канала') if name=='Dolby Atmos' and value.get('renderer')=='openjoc-binaural'
             else text('Stereo','Стерео') if channels==2 else text('Mono','Моно') if channels==1 else f'{channels} '+text('channels','каналов'))
     output_rate=bounded(value.get('outputSampleRate'),8000,768000)
     if known and output_rate and output_rate!=rate:details.append(text('Output','Выход')+': '+f'{output_rate/1000:g} '+text('kHz','кГц'))

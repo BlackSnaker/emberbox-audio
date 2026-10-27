@@ -122,7 +122,12 @@ class Joc:
         self.inspect=bind(lib,'openjoc_stream_decoder_copy_live_inspection_json',C.c_int,C.c_void_p,C.c_void_p,C.c_size_t,C.POINTER(C.c_size_t))
         config=Config()
         if init(C.byref(config))!=0:raise RuntimeError('SPATIAL_DECODER_INIT')
+        # The virtual speakers are rendered into two ears, never sent as a
+        # physical 7.1.4 device layout. Music needs neither cinema dialogue
+        # attenuation nor broadcast DRC. Keep the LFE in both output channels;
+        # the downstream linked peak limiter protects the combined stereo mix.
         config.render_mode=2;config.virtual_layout=b'7.1.4'
+        config.drc=0;config.dialnorm=2;config.lfe=1
         if create(C.byref(config),C.byref(self.handle))!=0:raise RuntimeError('SPATIAL_DECODER_INIT')
 
     def consume(self):

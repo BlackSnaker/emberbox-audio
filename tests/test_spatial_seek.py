@@ -14,8 +14,18 @@ class SpatialSeekTests(unittest.TestCase):
         worker=sys.modules.get('spatial_worker')
         if worker:worker.control.close()
 
+    @unittest.skipUnless(shutil.which('ffmpeg'),'FFmpeg unavailable')
     def test_deep_atmos_seek_keeps_preroll_and_all_audible_samples(self):
         import spatial_worker as worker
+        # Compare seeking with uninterrupted playback through the same output
+        # protection. Values above its ceiling legitimately change; the seek
+        # must still deliver exactly the samples heard in a linear pass.
+        source=np.repeat(np.arange(100,dtype=np.float32)/100,1536)
+        linear=[];processor=PcmResampler(48000,48000,lambda data,n:linear.append(data),threading.Event(),peak_limit=True)
+        try:
+            processor.write(np.column_stack((source,source)).astype('<f4').tobytes());processor.finish()
+            reference=np.frombuffer(b''.join(linear),'<f4').reshape(-1,2)[96000:,0]
+        finally:processor.close()
         for timescale,full in ((48000,False),(None,False),(48000,True)):
             packets=[(bytes([i]),{'codec':'eac3','duration':1536,'timescale':timescale}) for i in range(100)]
             decoded=[];out=[];events=[]
@@ -32,7 +42,6 @@ class SpatialSeekTests(unittest.TestCase):
             prepared={'codec':'eac3','segments':[{'start':0,'duration':3.2,'keyIndex':0}]}
             with patch.object(worker,'request',return_value={'total':1,'data':'AA==','initBytes':0,'originalOffset':0}),patch.object(worker,'samples',return_value=iter(packets)),patch.object(worker,'Joc',Decoder),patch.object(worker,'emit',side_effect=events.append):
                 worker.decode_pass({'fullPreroll':full},prepared,{'decoder':'fixture'},48000,Host(),{0:'opaque'},lambda _:None,Writer(),2.,2,threading.Event())
-            reference=np.repeat(np.arange(100,dtype=np.float32)/100,1536)[96000:]
             np.testing.assert_array_equal(np.frombuffer(b''.join(out),'<f4').reshape(-1,2)[:,0],reference)
             if timescale and not full:
                 self.assertGreater(decoded[0],0);self.assertLessEqual(decoded[0]*1536,96000-24000)

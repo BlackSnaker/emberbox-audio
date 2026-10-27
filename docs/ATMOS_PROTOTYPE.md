@@ -70,6 +70,26 @@ an AV receiver and head tracking are not implemented. The sound server, Bluetoot
 or output device may resample or otherwise process audio. The source badge does
 not certify an unchanged signal all the way to the headphones.
 
+### Atmos volume on stereo devices
+
+The 7.1.4 layout is a **virtual scene**, rendered into two output channels;
+it does not require twelve physical speakers. Version 0.18.5 uses a music
+presentation: no cinema dialogue attenuation or broadcast DRC, with the LFE
+included equally in both ears. This removes avoidable level/bass loss while
+retaining the JOC spatial reconstruction. The gain difference depends on the
+track's metadata; different stereo and Atmos masters need not sound equally loud.
+
+After rendering, an Atmos-only stereo-linked limiter detects peaks at 192 kHz
+with a −1 dBFS ceiling, 5 ms lookahead and 120 ms release. Both channels share
+one gain, preserving the spatial balance. There is no automatic makeup gain
+or loudness riding; only peaks above the ceiling are reduced. Delay compensation
+retains the complete tail and track timing, including seeks and EmberFlow.
+ALAC / Hi-Res does not pass through this limiter. No sound-server volume,
+hardware layout, extra model or stored audio recording is involved.
+
+The policies use the pinned [OpenJOC C API](https://github.com/chyinan/OpenJOC/blob/v0.20.1/crates/openjoc-capi/include/openjoc.h)
+and its [unity dialogue-gain mode](https://github.com/chyinan/OpenJOC/blob/v0.20.1/crates/openjoc-eac3/src/dialnorm.rs).
+
 Pause, seek, source changes and cancellation control the entire native path.
 Startup errors such as expired authentication or unavailable licences restore
 ordinary playback. Native seek recovery preserves quality as described below.
