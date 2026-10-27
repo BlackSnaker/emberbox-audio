@@ -15,6 +15,7 @@ let current={...metadata};
 const page=async(w,request)=>{calls.push(request);if(request.method==='status')return defer?await defer:{...current};
  if(request.method==='play')current={...current,id:request.params.id,catalogId:request.params.id};return {ok:true};};
 const p=new SpatialPlayback(page,async()=>{});
+const realLoadDeck=p.loadDeck.bind(p);
 // A killed PCM producer must never leave half a frame in a reusable pipe.
 const {PassThrough}=require('node:stream'),{EventEmitter}=require('node:events');
 const raw=new EventEmitter(),forwarded=[];raw.write=frame=>{forwarded.push(Buffer.from(frame));return true;};
@@ -108,7 +109,10 @@ p.loadDeck=async(r,deck,prepared)=>{deck.context=prepared.contextId;deck.child=c
   return source(w,request);
  };
  await p.intercept(win,{method:'play',params:{kind:'songs',id:'123'}});await tick();assert(entered);
- await p.intercept(win,{method:'play',params:{kind:'songs',id:'456'}});releaseSource();await tick();await tick();
+ await p.intercept(win,{method:'play',params:{kind:'songs',id:'456'}});await tick();await tick();
+ assert.equal(r.standby.requestedId,'456','Latest selection waited for obsolete catalogue preparation');
+ assert.equal(commands.at(-1).type,'transition','Latest selected track was not ready before the old API returned');
+ releaseSource();await tick();await tick();
  assert.equal(r.active,primed,'An obsolete click must never replace audible metadata');
  assert.equal(r.standby.requestedId,'456');assert.equal(r.decks.filter(Boolean).length,2);
  const latest=r.standby;
@@ -141,5 +145,25 @@ p.loadDeck=async(r,deck,prepared)=>{deck.context=prepared.contextId;deck.child=c
  p.message(r,r.active,{type:'quality',audioQuality:{...alac,evidence:'catalog'}});assert.equal(r.active.quality,null);
  p.message(r,r.active,{type:'quality',audioQuality:{...alac,outputSampleRate:48000}});assert.equal(r.active.quality,null);
  p.message(r,r.active,{type:'quality',audioQuality:alac});assert.deepEqual(r.active.quality,alac);
+ // A warm host with an expired opaque lease gets one fresh-host retry,
+ // without replacing the audible track or negotiating a different asset.
+ const refresh={slot:1,generation:89,metadata:next,child:child(),persistent:true,loads:2,used:3,reusedHost:true,prepared:{contextId:'retry-context',metadata:next},position:0};
+ r.decks[1]=refresh;r.standby=refresh;const expired=refresh.child,loader=p.loadDeck,playingQuality=r.active.quality;let retries=0;
+ p.loadDeck=async(...args)=>{retries++;return loader(...args);};
+ p.deckFailed(r,refresh,'SPATIAL_LICENSE_REJECTED');assert.equal(retries,1);assert.equal(expired.killed,true);assert.equal(r.standby,refresh);assert.equal(r.active.quality,playingQuality);
+ p.deckFailed(r,refresh,'SPATIAL_LICENSE_REJECTED');assert.equal(retries,1);assert.equal(r.standby,null);assert.equal(p.info().error,'');p.loadDeck=loader;
+ // Reuse a parked licensed host without a new native process or login.
+ const parked={slot:1,generation:90,metadata:next,child:child(),persistent:true,loads:2,used:3};
+ const kept=parked.child;r.decks[1]=parked;r.standby=parked;
+ const descriptor={contextId:'new-track-context',metadata:next,drm:'fairplay',licences:[{uri:'fixture'}],segments:[{start:0,duration:10}]};
+ await realLoadDeck(r,parked,descriptor,0);
+ assert.equal(parked.child,kept);assert.equal(parked.loads,3);assert.equal(commands.at(-1).type,'load');
+ let sourceReads=0;const oldSource=p.source;p.source=async()=>{sourceReads++;return {};};
+ p.message(r,parked,{type:'request',id:'late-segment',action:'segment',contextId:'old-track-context',index:0,offset:0});
+ assert.equal(sourceReads,0);assert.equal(commands.at(-1).error,'SPATIAL_STALE_CONTEXT');
+ p.source=oldSource;p.dropDeck(r,parked);assert.equal(kept.killed,false);assert.equal(r.idle[1],parked);assert.equal(parked.generation,0);
+ parked.loads=8;r.idle[1]=null;r.decks[1]=parked;p.dropDeck(r,parked);
+ assert.equal(kept.killed,true,'An exhausted host was retained without a capacity bound');
+ await p.stop(false);
  console.log('PASS spatial lifecycle and native Flow: quality evidence, output-clock promotion, release, cancellation, pause, seek, fallback and stale recovery');
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>{p.stop(false);fs.rmSync(root,{recursive:true,force:true});});

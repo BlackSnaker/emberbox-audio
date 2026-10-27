@@ -52,7 +52,7 @@ Ember-queue song is prepared early, even with automatic mixing switched off.
 A ready choice uses a short 220 ms envelope; an uncached choice keeps the current
 song audible while loading. Network and licence preparation can still take time.
 Rapid choices supersede obsolete preparations. Recent manifest descriptors stay
-in a four-entry, 60-second memory cache; every replay opens fresh DRM contexts.
+in a four-entry, 60-second memory cache; each selection retains its own authorized source context.
 Previous restarts the current song after three seconds; pressing it again while
 the rewind is pending selects the previous queue entry. Adding songs keeps up to
 twenty recent history entries, reclaiming them if the 200-entry limit needs room.
@@ -73,6 +73,24 @@ not certify an unchanged signal all the way to the headphones.
 Pause, seek, source changes and cancellation control the entire native path.
 Startup errors such as expired authentication or unavailable licences restore
 ordinary playback. Native seek recovery preserves quality as described below.
+
+### Manual track changes
+
+At most two isolated hosts stay available for native Apple playback. An unused
+FairPlay host can initialize while the current song plays; released hosts can
+serve another song without repeating the saved sign-in startup. Every selection
+still checks subscription/source authorization. Native opaque handles stay in the
+worker, with a maximum of 16 contexts; idle hosts are recycled after eight loads
+or earlier when capacity is low. A stale authorization gets one fresh native
+host retry while the previous song remains audible. No extra model or audio recording is introduced.
+
+The encrypted intro is prefetched in the source while authorization runs. Manual
+selection needs 160 ms of buffered PCM; automatic EmberFlow keeps its larger
+preroll. Current audio continues until the selected decoder is ready, then the
+short smooth handover follows the output clock. Catalogue requests can be
+superseded without waiting for an older lookup. The library shows Starting until
+the selected audio is confirmed. Network authorization may still take time;
+no AAC preview or lower-quality asset is used to conceal that delay.
 
 ### Seeking without a quality change
 

@@ -6,6 +6,16 @@ from spatial_mix import blend,curve,RATE,BLOCK
 from spatial_mixer import Mixer
 
 class SpatialMixTests(unittest.TestCase):
+    def test_manual_selection_releases_an_already_buffered_auto_preroll(self):
+        events=[];m=Mixer(events.append)
+        m.configure({'slot':0,'generation':1});m.configure({'slot':1,'generation':2})
+        m.received(0,1,np.zeros((RATE,2),np.float32).tobytes());m.received(1,2,np.ones((RATE//5,2),np.float32).tobytes())
+        before=m.slots[1].frames;self.assertFalse(m.slots[1].ready)
+        m.control({'type':'preroll','slot':1,'generation':2,'seconds':.16})
+        self.assertTrue(m.slots[1].ready);self.assertEqual(m.slots[1].frames,before)
+        m.control({'type':'transition','manual':True,'duration':.22,'key':'manual'})
+        self.assertIsNotNone(m.render())
+
     def test_manual_handover_uses_short_preroll_and_a_click_free_envelope(self):
         events=[];m=Mixer(events.append)
         m.configure({'slot':0,'generation':1});m.configure({'slot':1,'generation':2,'preroll':.4})

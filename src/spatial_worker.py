@@ -39,8 +39,13 @@ def listen():
             raw=sys.stdin.buffer.readline(4*1024*1024+1)
             if not raw or len(raw)>4*1024*1024:break
             value=json.loads(raw)
-            if value.get('type')=='start':
-                seeks.submit(value.get('position',0),value['generation']);bootstrap.put_nowait(value)
+            if value.get('type') in ('start','warm'):
+                if value.get('prepared'):seeks.submit(value.get('position',0),value['generation'],value)
+                bootstrap.put_nowait(value)
+            elif value.get('type')=='load':
+                seeks.submit(value.get('position',0),value['generation'],value)
+            elif value.get('type')=='park':
+                seeks.park()
             elif value.get('type')=='seek':
                 seeks.submit(value['position'],value['generation'])
                 emit({'type':'seek-state','generation':value['generation'],'stage':'requested'})
@@ -93,7 +98,7 @@ def decode_pass(args,prepared,runtime,rate,cdm,licensed,license_key,writer,origi
             segment=segments[number];key=segment['keyIndex'];license_key(key)
             encrypted=bytearray();total=1
             while len(encrypted)<total:
-                part=request('segment',cancelled=cancelled,index=number,offset=len(encrypted));total=part['total']
+                part=request('segment',cancelled=cancelled,contextId=prepared.get('contextId',''),index=number,offset=len(encrypted));total=part['total']
                 if not isinstance(total,int) or not 0<total<=18*1024*1024:raise RuntimeError('SPATIAL_SOURCE_LIMIT')
                 chunk=decode64(part['data'],393216)
                 if not chunk or len(encrypted)+len(chunk)>total:raise RuntimeError('SPATIAL_SOURCE_INVALID')
@@ -146,7 +151,7 @@ def decode_pass(args,prepared,runtime,rate,cdm,licensed,license_key,writer,origi
 
 def main():
     threading.Thread(target=listen,daemon=True).start()
-    args=bootstrap.get(timeout=10);runtime=args['runtime'];prepared=args['prepared']
+    args=bootstrap.get(timeout=10);runtime=args['runtime'];prepared=args.get('prepared')
     for key in ('host','decoder'):
         value=hashlib.sha256()
         with Path(runtime[key]).open('rb') as stream:
@@ -156,7 +161,7 @@ def main():
     if rate not in (48000,192000):raise RuntimeError('SPATIAL_PCM_FORMAT')
     cdm=None
     try:
-        fairplay=prepared.get('drm')=='fairplay'
+        fairplay=args.get('backend')=='fairplay' or bool(prepared and prepared.get('drm')=='fairplay')
         if fairplay:
             # Native vendor output must never enter the control pipe or journal.
             with open(os.devnull,'wb') as quiet:
@@ -165,29 +170,42 @@ def main():
         else:
             cdm=Cdm(runtime['host'],args['cdm']);cdm.call('certificate',decode64(prepared['certificate'],131072))
         writer=PcmWriter(3,stopping)
-        licensed={}
-        def license_key(key):
-            if key in licensed:return
-            if fairplay:
-                licensed[key]=cdm.license(prepared['metadata']['catalogId'],prepared['licences'][key]['uri']);return
-            init=decode64(prepared['licences'][key]['pssh'],131072);kid=key_identifier(init)
-            challenge=cdm.challenge(init)
-            response=request('license',index=key,challenge=base64.b64encode(challenge).decode())
-            cdm.call('update',decode64(response['license'],131072))
-            until=time.monotonic()+3
-            while not cdm.usable(cdm.handle) and time.monotonic()<until:time.sleep(.01)
-            if not cdm.usable(cdm.handle):raise RuntimeError('SPATIAL_KEY_UNUSABLE')
-            licensed[key]=kid
-        if fairplay:
-            # Confirm the full song before starting, including its rotated key.
-            for key in range(len(prepared['licences'])):license_key(key)
-        # Keep the same source context, CDM and licensed handles across seeks.
-        # Only codec state and bounded PCM queues are replaced. EOF stays warm.
-        while value:=seeks.next():
-            origin,generation,cancelled=value
-            try:decode_pass(args,prepared,runtime,rate,cdm,licensed,license_key,writer,origin,generation,cancelled)
+        emit({'type':'host-ready','backend':'fairplay' if fairplay else 'widevine','capacity':16})
+        licensed={};pass_args=args
+        while value:=seeks.next_selection():
+            origin,generation,selection,cancelled=value
+            try:
+                if selection is not None:
+                    prepared=selection['prepared'];licensed={};pass_args=selection
+                    if (prepared.get('drm')=='fairplay')!=fairplay:raise RuntimeError('SPATIAL_CODEC_MISMATCH')
+                    if fairplay:
+                        ident=str(prepared['metadata']['catalogId'])
+                        needed={('0' if '/P000000000/' in v['uri'] else ident,v['uri']) for v in prepared['licences']}-cdm.contexts.keys()
+                        if len(cdm.contexts)+len(needed)>16:
+                            emit({'type':'host-exhausted','generation':generation});seeks.park();continue
+                    def license_key(key):
+                        if key in licensed:return
+                        if cancelled.is_set():raise SeekCancelled()
+                        if fairplay:
+                            licensed[key]=cdm.license(prepared['metadata']['catalogId'],prepared['licences'][key]['uri']);return
+                        init=decode64(prepared['licences'][key]['pssh'],131072);kid=key_identifier(init)
+                        challenge=cdm.challenge(init)
+                        response=request('license',cancelled=cancelled,contextId=prepared['contextId'],index=key,challenge=base64.b64encode(challenge).decode())
+                        cdm.call('update',decode64(response['license'],131072))
+                        until=time.monotonic()+3
+                        while not cdm.usable(cdm.handle) and time.monotonic()<until and not cancelled.is_set():time.sleep(.01)
+                        if cancelled.is_set():raise SeekCancelled()
+                        if not cdm.usable(cdm.handle):raise RuntimeError('SPATIAL_KEY_UNUSABLE')
+                        licensed[key]=kid
+                    if fairplay:
+                        for key in range(len(prepared['licences'])):license_key(key)
+                        emit({'type':'host-capacity','generation':generation,'used':len(cdm.contexts)})
+                if prepared is None:raise RuntimeError('SPATIAL_SOURCE_UNSUPPORTED')
+                decode_pass(pass_args,prepared,runtime,rate,cdm,licensed,license_key,writer,origin,generation,cancelled)
             except Exception:
                 if not cancelled.is_set():raise
+            finally:
+                if fairplay:emit({'type':'host-capacity','used':len(cdm.contexts)})
     finally:
         seeks.close()
         try:os.close(3)

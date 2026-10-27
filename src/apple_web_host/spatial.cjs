@@ -5,7 +5,7 @@ const {spawn}=require('node:child_process');
 const source=fs.readFileSync(path.join(__dirname,'spatial_source.js'),'utf8');
 const errors=new Set(['SIGN_IN_REQUIRED','SUBSCRIPTION_REQUIRED','DEVICE_LIMIT','INVALID_ARGUMENTS',
  'SPATIAL_NETWORK','SPATIAL_SOURCE_LIMIT','SPATIAL_SOURCE_UNSUPPORTED','SPATIAL_NO_ATMOS_ASSET',
- 'SPATIAL_LICENSE_REJECTED','SPATIAL_STALE_CONTEXT','SPATIAL_BUSY']);
+ 'SPATIAL_LICENSE_REJECTED','SPATIAL_STALE_CONTEXT','SPATIAL_BUSY','SPATIAL_CANCELLED']);
 async function sourceRequest(win,params){
  if(!win||win.isDestroyed()||!win.webContents.getURL().startsWith('https://music.apple.com/'))throw Error('SIGN_IN_REQUIRED');
  const result=await win.webContents.executeJavaScript('(async()=>{'+source+';try{return {result:await emberboxSpatialSource('+JSON.stringify(params)+')}}catch(e){return {error:'+JSON.stringify([...errors])+'.includes(e.message)?e.message:"SPATIAL_SOURCE_UNSUPPORTED",appleStatus:Number.isInteger(e.appleStatus)?e.appleStatus:null}}})()');
@@ -55,7 +55,7 @@ class SpatialPlayback {
   const deck={metadata:{...metadata},slot:0,generation:++this.generation,quality:null,ready:false,context:null,child:null};
   const nativeRuntime=runtime();
   const r={win,nativeRuntime,rate:nativeRuntime?.fairplay?192000:48000,active:deck,decks:[deck,null],standby:null,mixer:null,paused,
-   state:{phase:'preparing',position:Number(position)||0,playing:!paused},lastAdvance:Date.now(),flowRevision:0,preparation:Promise.resolve()};
+   state:{phase:'preparing',position:Number(position)||0,playing:!paused},lastAdvance:Date.now(),flowRevision:0,preparation:Promise.resolve(),idle:[null,null]};
   this.session=r;this.error='';this.switchError=null;this.workerHint='';this.workerExit=null;this.fragmentDebug=null;
   this.blocked.add(String(metadata.id));if(this.blocked.size>32)this.blocked.delete(this.blocked.values().next().value);
   r.stall=setInterval(()=>{if(this.session===r&&r.active.quality&&!r.paused&&r.state.phase!=='ended'&&Date.now()-r.lastAdvance>15000)this.failed(r,'SPATIAL_BUFFER_TIMEOUT');},1000);
@@ -107,22 +107,42 @@ class SpatialPlayback {
   await this.loadDeck(r,r.active,await this.source(r.win,{action:'prepare',id,kind:String(id).startsWith('i.')?'library-songs':'songs',allowStereo:true,fairplay:!!r.nativeRuntime?.fairplay}),r.state.position);
  }
  async loadDeck(r,deck,prepared,position=0){
-  deck.context=prepared.contextId;
+  deck.context=prepared.contextId;deck.prepared=prepared;
   if(this.session!==r||!r.decks.includes(deck)){this.source(r.win,{action:'close',contextId:deck.context}).catch(()=>{});return;}
   if(deck===r.active&&Number.isFinite(r.pendingSeek)){position=r.pendingSeek;delete r.pendingSeek;}
-  this.send(r.mixer,{type:'slot',slot:deck.slot,generation:deck.generation,position,preroll:deck.manual?.4:2});
+  this.send(r.mixer,{type:'slot',slot:deck.slot,generation:deck.generation,position,preroll:deck.manual?.16:2});
+  // Download encrypted first-segment bytes while the licensed host starts or
+  // authorizes the track. The source keeps them private in its bounded cache.
+  this.source(r.win,{action:'prefetch',contextId:deck.context,index:Math.max(0,prepared.segments?.findIndex(s=>s.start+s.duration>position)||0)}).catch(()=>{});
+  const reusable=deck.child&&!deck.child.killed&&deck.child.exitCode==null&&deck.persistent&&prepared.drm==='fairplay'&&deck.loads<8&&(deck.used||0)+prepared.licences.length<=16;
+  deck.reusedHost=!!reusable;
+  if(reusable){
+   deck.loads++;this.send(deck.child,{type:'load',prepared,position,generation:deck.generation,fullPreroll:r.nativeOnly===true});return;
+  }
+  this.destroyWorker(deck);deck.persistent=prepared.drm==='fairplay';deck.loads=1;deck.used=0;
   const child=deck.child=this.spawn(process.env.EMBERBOX_SPATIAL_WORKER,['pipe','pipe','pipe','pipe'],r.rate);
-  this.wire(child,v=>this.message(r,deck,v),code=>this.deckFailed(r,deck,code));
+  this.wire(child,v=>{if(deck.child===child)this.message(r,deck,v);},code=>{if(deck.child===child)this.deckFailed(r,deck,code);});
   this.pipePcm(r,deck,child);
   this.send(child,{type:'start',runtime:r.nativeRuntime,outputRate:r.rate,cdm:process.env.EMBERBOX_WIDEVINE,prepared,position,pcm:true,generation:deck.generation,fullPreroll:r.nativeOnly===true});
  }
  message(r,deck,value){
-  if(this.session!==r||!r.decks.includes(deck))return;
+  if(this.session!==r)return;
+  if(value.type==='host-ready'){
+   deck.hostReady=true;
+   if(deck===r.active)this.warm(r,1-deck.slot);
+   return;
+  }
+  if(value.type==='host-capacity'){if(Number.isInteger(value.used)&&value.used>=0&&value.used<=16)deck.used=value.used;return;}
+  if(!r.decks.includes(deck))return;
   if(value.generation!==undefined&&value.generation!==deck.generation)return;
+  if(value.type==='host-exhausted'){
+   this.destroyWorker(deck);this.loadDeck(r,deck,deck.prepared,deck.position||0).catch(()=>this.deckFailed(r,deck,'SPATIAL_PLAYBACK_FAILED'));return;
+  }
   if(value.type==='request'){
    if(typeof value.id!=='string'||value.id.length>100||!['license','segment'].includes(value.action))return;
    const params=value.action==='license'?{index:value.index,challenge:value.challenge}:{index:value.index,offset:value.offset};
-   this.source(r.win,{action:value.action,contextId:deck.context,...params}).then(result=>{
+   if(value.contextId&&value.contextId!==deck.context){this.send(deck.child,{type:'response',id:value.id,error:'SPATIAL_STALE_CONTEXT'});return;}
+   this.source(r.win,{action:value.action,contextId:value.contextId||deck.context,...params}).then(result=>{
     if(this.session===r&&r.decks.includes(deck)){
      if(value.action==='segment'&&deck===r.active)this.fragmentDebug={index:value.index,total:result.total,initBytes:result.initBytes,originalOffset:result.originalOffset};
      this.send(deck.child,{type:'response',id:value.id,result});}
@@ -185,23 +205,48 @@ class SpatialPlayback {
   }
  }
  deckFailed(r,deck,code){
-  if(this.session!==r||!r.decks.includes(deck))return;
+  if(this.session!==r)return;
+  if(r.idle[deck.slot]===deck){r.idle[deck.slot]=null;this.destroyWorker(deck);return;}
+  if(!r.decks.includes(deck))return;
   if(deck===r.active||r.transition){this.failed(r,code);return;}
+  if(deck.reusedHost&&!deck.retried&&deck.prepared&&['SPATIAL_LICENSE_REJECTED','SPATIAL_FAIRPLAY_SIGN_IN_REQUIRED'].includes(code)){
+   deck.retried=true;deck.ready=false;deck.quality=null;this.destroyWorker(deck);
+   this.loadDeck(r,deck,deck.prepared,deck.position||0).catch(()=>this.deckFailed(r,deck,'SPATIAL_PLAYBACK_FAILED'));return;
+  }
   deck.error=code;this.flowError=code;this.dropDeck(r,deck);this.send(r.mixer,{type:'cancel'});
  }
- dropDeck(r,deck){
+ destroyWorker(deck){
   deck.closePcm?.();
   if(deck.child){deck.child.stdio[3]?.unpipe();this.send(deck.child,{type:'stop'});deck.child.kill('SIGTERM');}
+  deck.closePcm=null;deck.hostReady=false;
+ }
+ warm(r,slot){
+  if(this.session!==r||!r.nativeRuntime?.fairplay||r.decks[slot]||r.idle[slot])return;
+  const deck={slot,generation:0,metadata:{},persistent:true,loads:0,used:0};r.idle[slot]=deck;
+  const child=deck.child=this.spawn(process.env.EMBERBOX_SPATIAL_WORKER,['pipe','pipe','pipe','pipe'],r.rate);
+  this.wire(child,v=>{if(deck.child===child)this.message(r,deck,v);},code=>{if(deck.child===child)this.deckFailed(r,deck,code);});this.pipePcm(r,deck,child);
+  this.send(child,{type:'warm',backend:'fairplay',runtime:r.nativeRuntime,outputRate:r.rate,cdm:process.env.EMBERBOX_WIDEVINE});
+ }
+ dropDeck(r,deck){
+  if(deck.requestKey)this.source(r.win,{action:'cancel-prepare',requestKey:deck.requestKey}).catch(()=>{});
   if(deck.context)this.source(r.win,{action:'close',contextId:deck.context}).catch(()=>{});
   if(r.standby===deck)r.standby=null;if(r.decks[deck.slot]===deck)r.decks[deck.slot]=null;
+  const park=this.session===r&&deck.persistent&&!deck.error&&deck.child&&!deck.child.killed&&deck.loads<8&&(deck.used||0)<=12;
+  if(park){
+   this.send(deck.child,{type:'park'});deck.context=null;deck.prepared=null;deck.generation=0;r.idle[deck.slot]=deck;
+  }else{
+   this.destroyWorker(deck);
+   if(this.session===r&&r.active.persistent)this.warm(r,deck.slot);
+  }
  }
  async prepareDeck(r,p,position=0,manual=false){
   const revision=r.flowRevision;
-  const deck={metadata:{id:p.id},kind:p.kind,requestedId:p.id,key:p.key,position,manual,
-   slot:1-r.active.slot,generation:++this.generation,quality:null,ready:false};
+  const slot=1-r.active.slot,deck=r.idle[slot]||{};r.idle[slot]=null;
+  Object.assign(deck,{metadata:{id:p.id},kind:p.kind,requestedId:p.id,key:p.key,position,manual,
+   slot,generation:++this.generation,quality:null,ready:false,error:null,retried:false,requestKey:'native-'+(++this.generation)});
   r.standby=deck;
-  // Only source negotiation is serialized. It must not create a third lease
-  // when an obsolete click or an earlier automatic preload is still in flight.
+  // Descriptor requests can supersede a slow catalogue read. Cancellation
+  // keys keep obsolete results from allocating a third source/decoder slot.
   const prepare=async()=>{
    if(this.session!==r||revision!==r.flowRevision||r.standby!==deck)throw Error('FLOW_CANCELLED');
    const freeUntil=Date.now()+2000;
@@ -209,15 +254,15 @@ class SpatialPlayback {
    if(this.session!==r||revision!==r.flowRevision||r.standby!==deck)throw Error('FLOW_CANCELLED');
    if(r.decks[deck.slot])throw Error('FLOW_NOT_READY');
    r.decks[deck.slot]=deck;
-   const prepared=await this.source(r.win,{action:'prepare',id:p.id,kind:p.kind,allowStereo:true,fairplay:!!r.nativeRuntime?.fairplay});
+   const prepared=await this.source(r.win,{action:'prepare',requestKey:deck.requestKey,id:p.id,kind:p.kind,allowStereo:true,fairplay:!!r.nativeRuntime?.fairplay});
    if(this.session!==r||revision!==r.flowRevision||r.standby!==deck){
     await this.source(r.win,{action:'close',contextId:prepared.contextId}).catch(()=>{});throw Error('FLOW_CANCELLED');}
    deck.metadata=prepared.metadata;
    await this.loadDeck(r,deck,prepared,position);
    return deck;
   };
-  deck.loading=r.preparation.catch(()=>{}).then(prepare).catch(error=>{
-   if(r.standby===deck)this.dropDeck(r,deck);
+  deck.loading=prepare().catch(error=>{
+   if(revision===r.flowRevision&&r.standby===deck)this.dropDeck(r,deck);
    throw error;
   });
   r.preparation=deck.loading.catch(()=>{});
@@ -233,7 +278,7 @@ class SpatialPlayback {
   throw Error(deck.error||'FLOW_NOT_READY');
  }
  select(r,p,position=0){
-  r.seeking=false;clearTimeout(r.seekTimer);
+  r.seeking=false;r.nativeOnly=false;r.requiredQuality=null;clearTimeout(r.seekTimer);
   const request={id:p.id,kind:p.kind,position};r.manual=request;this.error='';this.switchError=null;
   // Finish a cancelled overlap before reusing its slot. A new Play command
   // may arrive while that output clock is paused.
@@ -248,6 +293,7 @@ class SpatialPlayback {
     deck=await this.prepareDeck(r,{...p,key:'manual-'+(++this.generation)},position,true);
    }else if(deck.loading)await deck.loading;
    const valid=()=>r.manual===request;
+   this.send(r.mixer,{type:'preroll',slot:deck.slot,generation:deck.generation,seconds:.16});
    await this.waitReady(r,deck,valid,20000);
    if(!valid()||this.session!==r)return;
    r.paused=false;this.send(r.mixer,{type:'pause',paused:false});
@@ -297,7 +343,7 @@ class SpatialPlayback {
    try{
     deck=await this.prepareDeck(r,p);
     await this.waitReady(r,deck,()=>revision===r.flowRevision);return {ready:true};
-   }catch(e){if(deck&&r.standby===deck)this.dropDeck(r,deck);throw e;}
+   }catch(e){if(revision===r.flowRevision&&deck&&r.standby===deck)this.dropDeck(r,deck);throw e;}
   }
   if(p.operation==='transition'){
    const deck=r.standby;if(!deck?.ready||!deck.quality||deck.key!==p.key||r.transition||r.paused||r.active.metadata.duration-r.state.position>23)throw Error('FLOW_NOT_READY');
@@ -337,6 +383,7 @@ class SpatialPlayback {
   clearTimeout(r.watchdog);clearTimeout(r.seekTimer);clearInterval(r.stall);r.flowRevision++;
   clearTimeout(r.transition?.timer);r.transition?.reject(Error('FLOW_CANCELLED'));r.transition=null;
   for(const deck of [...r.decks])if(deck)this.dropDeck(r,deck);
+  for(const deck of r.idle)if(deck)this.destroyWorker(deck);r.idle=[null,null];
   if(r.mixer){this.send(r.mixer,{type:'stop'});r.mixer.kill('SIGTERM');}
   if(restore)await this.restore(r,revision);
  }

@@ -73,7 +73,7 @@ class MusicRepository:
             # Catalogue reads never own the transport. A slow artist or
             # discography request must not delay Next or Previous.
             player=h.apple_web if h.apple_mode=='native' else h.apple
-            if alive():player.request('play',kind=item['kind'],id=item['id'])
+            if alive():return player.request('play',kind=item['kind'],id=item['id'])
             return
         with self.locks[source]:
             if not alive():return
@@ -114,6 +114,7 @@ class MusicService:
         self.listeners=[];self.closed=False;self.browse_generation=0;self.play_generation=0
         self.loading=False;self.error='';self.started=0.;self.source=host.source
         self.browse_future=None;self.play_future=None
+        self.awaiting_native=None
         self.pause_after=set()
         self.previous_restart=None
         self.browse_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-collection')
@@ -246,6 +247,7 @@ class MusicService:
 
     def start(self,index=None):
         self.flow.cancel(preserve_apple=True)
+        self.awaiting_native=None
         self.previous_restart=None
         source=self.host.source
         if source=='youtube' and self.host.youtube_mode!='native':
@@ -272,7 +274,10 @@ class MusicService:
                 self.pause_after.discard(generation)
                 return False
             self.loading=False
-            try:result.result()
+            try:
+                ack=result.result()
+                if source=='apple-music' and self.host.apple_mode=='native' and isinstance(ack,dict) and 'preparing' in ack:
+                    self.awaiting_native=(generation,item);self.loading=True
             except Exception as error:
                 self.error=str(error);self.book.active=None
             self.changed();return False
@@ -308,6 +313,7 @@ class MusicService:
 
     def stop(self,pause_pending=False):
         self.flow.cancel()
+        self.awaiting_native=None
         self.previous_restart=None
         if self.loading and pause_pending:self.pause_after.add(self.play_generation)
         self.play_generation+=1;self.loading=False;self.book.active=None;self.error='';self.watch.reset();self.changed()
@@ -325,6 +331,13 @@ class MusicService:
             if isinstance(failed,dict) and item and self.book.active==source and failed.get('id')==item['id']:
                 self.stop();self.error=text('This track could not start. Try it again; your previous song is still available.',
                     'Не удалось включить этот трек. Попробуй ещё раз — предыдущая песня остаётся доступной.');self.changed();return True
+            pending=self.awaiting_native
+            if pending and pending[0]==self.play_generation:
+                state=snapshot(self.host);spatial=self.host.apple_web.state.get('spatial') or {}
+                if matches(pending[1],state) and not spatial.get('switching') and spatial.get('phase')=='playing':
+                    self.awaiting_native=None;self.loading=False;self.changed()
+                elif time.monotonic()-self.started>25:
+                    self.stop();self.error=text('Playback was not confirmed. Try this track again.','Запуск трека не подтверждён. Попробуй включить его ещё раз.');self.changed();return True
         if self.previous_restart:
             item=self.book.current(source);state=snapshot(self.host)
             if item and matches(item,state) and state['position']<=3:self.previous_restart=None

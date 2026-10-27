@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.18.4 — 2026-10-27
+
+- Keep up to two licensed native hosts ready across Apple track selections. Reuse the isolated FairPlay host without repeating sign-in initialization for each song; retain per-song authorization, source quality and the native output clock. Recycle idle hosts after eight selections or near their 16-context capacity. A stale warm-host authorization receives one fresh native retry.
+- Fetch the encrypted intro while the selected track is authorized. Overlap independent catalogue/subscription and manifest/certificate reads. Manual choices use a shorter preroll, while automatic EmberFlow retains its larger buffer.
+- Let a new catalogue choice supersede an unfinished descriptor request immediately. Abort obsolete downloads, reject late results and isolate source contexts across reused workers. Keep the current song audible while the chosen track loads.
+- Keep the library's Starting status until the audible handover is confirmed, including for rapid choices. Preserve pause/cancellation and the original ALAC / Hi-Res / Atmos rendition. Apple integration 20.
+
 ## 0.18.3 — 2026-10-26
 
 - Seek inside an already open Apple track without restarting its licensed host, negotiating the asset again or recreating the output device. Keep the original ALAC / Hi-Res / Atmos asset and decoder-confirmed quality.

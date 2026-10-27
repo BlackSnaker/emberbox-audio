@@ -85,6 +85,27 @@ class Playback(unittest.TestCase):
         self.host=host();self.service=MusicService(self.host,Path(self.folder.name)/'queue.json')
         self.addCleanup(self.service.close)
         self.calls=[];self.service.repository.play=lambda item,alive:self.calls.append(item['id']) if alive() else None
+    def test_native_selection_keeps_starting_state_until_audible_confirmation(self):
+        s=self.service;h=self.host;h.source='apple-music';s.source_changed()
+        h.title.value='Outgoing';h.apple_web.state={'id':'old','spatial':{'phase':'playing','switching':True}}
+        s.add([{'uri':'apple:songs:123','title':'Chosen','artist':'Artist','duration_ms':180000}])
+        s.repository.play=lambda *_:{'ok':True,'preparing':True}
+        s.start();self.assertTrue(drain(lambda:s.awaiting_native is not None));self.assertTrue(s.loading)
+        s.poll();self.assertTrue(s.loading)
+        h.apple_web.state={'id':'123','spatial':{'phase':'playing','switching':True}}
+        s.poll();self.assertTrue(s.loading,'Metadata acknowledgement is not an audible handover')
+        h.apple_web.state['spatial']['switching']=False;s.poll()
+        self.assertFalse(s.loading);self.assertIsNone(s.awaiting_native)
+
+    def test_later_native_choice_replaces_pending_indicator_and_pause_clears_it(self):
+        s=self.service;h=self.host;h.source='apple-music';s.source_changed()
+        h.apple_web.state={'id':'old','spatial':{'phase':'playing','switching':True}}
+        s.add([{'uri':'apple:songs:'+i,'title':'Chosen '+i,'artist':'Artist'} for i in ('123','456')])
+        s.repository.play=lambda *_:{'ok':True,'preparing':True}
+        s.start(0);self.assertTrue(drain(lambda:s.awaiting_native is not None))
+        s.start(1);self.assertTrue(drain(lambda:s.awaiting_native is not None));self.assertEqual(s.awaiting_native[1]['id'],'456')
+        h.apple_web.state={'id':'123','spatial':{'phase':'playing','switching':False}};s.poll();self.assertTrue(s.loading)
+        s.stop(pause_pending=True);self.assertFalse(s.loading);self.assertIsNone(s.awaiting_native)
     def test_add_does_not_play_natural_end_advances_without_a_view(self):
         s=self.service;s.add([song('A'),song('B')]);self.assertFalse(self.calls)
         s.start();self.assertTrue(drain(lambda:not s.loading));self.assertEqual(self.calls,['A'])

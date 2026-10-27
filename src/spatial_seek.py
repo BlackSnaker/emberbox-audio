@@ -14,13 +14,17 @@ class Seeks:
         self.condition=threading.Condition();self.pending=None;self.active=None;self.closed=False
         self.processes=[]
 
-    def submit(self,position,generation):
+    def submit(self,position,generation,selection=None):
         position=float(position);generation=int(generation)
         if not 0<=position<86400 or not 0<generation<2**32:raise ValueError('Invalid spatial seek')
         with self.condition:
             if self.closed:return
-            self.pending=(position,generation)
+            self.pending=(position,generation,selection)
             self._cancel();self.condition.notify_all()
+
+    def park(self):
+        with self.condition:
+            self.pending=None;self._cancel();self.condition.notify_all()
 
     def _cancel(self):
         if self.active:self.active.set()
@@ -42,6 +46,10 @@ class Seeks:
                 except ProcessLookupError:pass
 
     def next(self):
+        value=self.next_selection()
+        return (value[0],value[1],value[3]) if value is not None else None
+
+    def next_selection(self):
         with self.condition:
             while not self.closed and self.pending is None:self.condition.wait()
             if self.closed:return None

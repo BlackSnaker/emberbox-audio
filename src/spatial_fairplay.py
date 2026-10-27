@@ -43,11 +43,12 @@ class FairPlay:
     def license(self,ident,uri):
         if not re.fullmatch(r'\d{1,20}',str(ident)) or not isinstance(uri,str) or len(uri)>512 or not re.fullmatch(r'skd://itunes\.apple\.com/[A-Za-z0-9/_=.-]+',uri):
             raise ValueError('Invalid FairPlay license identifier')
-        key=(str(ident),uri)
+        owner='0' if '/P000000000/' in uri else str(ident)
+        key=(owner,uri)
         if key not in self.contexts:
             if len(self.contexts)>=16:raise ValueError('FairPlay context limit')
             epoch=C.c_uint()
-            handle=self.open_fn(b'0' if '/P000000000/' in uri else str(ident).encode(),uri.encode(),C.byref(epoch))
+            handle=self.open_fn(owner.encode(),uri.encode(),C.byref(epoch))
             if not handle:raise RuntimeError('SPATIAL_LICENSE_REJECTED')
             self.contexts[key]=(handle,epoch.value)
         return self.contexts[key]

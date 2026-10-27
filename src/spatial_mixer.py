@@ -18,7 +18,7 @@ class Slot:
     def __init__(self,generation,origin,preroll=2):
         self.generation=generation;self.origin=float(origin);self.parts=collections.deque()
         self.frames=0;self.received=0;self.consumed=0;self.total=None;self.start=0;self.ready=False;self.padding=0
-        self.preroll=max(.4,min(2.,float(preroll)))
+        self.preroll=max(.12,min(2.,float(preroll)))
         self.seeking=False;self.attack=0
     def take(self,n):
         parts=[]
@@ -58,6 +58,14 @@ class Mixer:
     def control(self,p):
         action=p['type']
         if action=='slot':self.configure(p)
+        elif action=='preroll':
+            with self.condition:
+                slot=int(p['slot']);target=self.slots[slot]
+                if target and target.generation==p['generation']:
+                    target.preroll=max(.12,min(2.,float(p['seconds'])))
+                    if not target.ready and target.received>=RATE*target.preroll:
+                        target.ready=True;self.emit({'type':'ready','slot':slot,'generation':target.generation})
+                self.condition.notify_all()
         elif action=='seek':
             slot=int(p['slot']);generation=int(p['generation']);position=float(p['position'])
             if slot not in (0,1) or not 0<generation<2**32 or not 0<=position<86400:raise ValueError('Invalid spatial slot')
@@ -82,7 +90,7 @@ class Mixer:
         elif action=='transition':
             with self.condition:
                 other=1-self.current;target=self.slots[other]
-                minimum=RATE*(.4 if p.get('manual') is True else 1.)
+                minimum=RATE*(.12 if p.get('manual') is True else 1.)
                 if self.fade or not target or target.frames<minimum:raise ValueError('Spatial next not ready')
                 duration=max(.15,min(8.,float(p['duration'])))
                 outgoing=self.slots[self.current]
