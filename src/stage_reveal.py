@@ -22,7 +22,7 @@ class StageReveal(Gtk.GLArea):
         self.window,self.background,self.layout=window,background,layout
         self.cover,self.art_shell=cover,art_shell
         self.current_art=current_art or cover.get_pixbuf
-        self.active=False;self.started=None;self.progress=1.;self.handed_off=False
+        self.active=False;self.started=None;self.last_now=None;self.progress=1.;self.handed_off=False
         self.origin=(0,0,1,1);self.cover_origin=None;self.cover_pixels=None
         self.driver=None;self.error='';self.fallback=False
         self.fallback_tick=0
@@ -107,7 +107,15 @@ class StageReveal(Gtk.GLArea):
 
     def advance(self,now):
         if not self.active:return
+        if self.last_now is not None:
+            now=max(now,self.last_now)
+            # A slow first GTK paint must not consume the entire entrance.
+            # Keep normal frame timing, but spend at most 50 ms of animation
+            # on a frame delivered after a rendering or scheduling stall.
+            gap=now-self.last_now
+            if gap>50_000:self.started+=gap-50_000
         if self.started is None:self.started=now
+        self.last_now=now
         duration=(.32 if self.morphing else .24) if self.fallback else .66 if self.morphing else self.DURATION
         raw=max(0.,min(1.,(now-self.started)/1_000_000/duration))
         self.progress=1.-raw if self.reversing else raw
@@ -193,7 +201,7 @@ class StageReveal(Gtk.GLArea):
 
     def finish(self):
         if self.fallback_tick:GLib.source_remove(self.fallback_tick);self.fallback_tick=0
-        self.active=False;self.started=None;self.progress=1.;self.handed_off=False
+        self.active=False;self.started=None;self.last_now=None;self.progress=1.;self.handed_off=False
         self.hide();self.cover_origin=None;self.cover_pixels=None;self.room=None;self.previous=None
         self.reversing=self.morphing=False;self.completed=self.change=None
         for widget in (self.background,self.layout):

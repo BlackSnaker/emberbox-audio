@@ -344,6 +344,7 @@ def run():
                 settle()
                 assert stage.window.get_size() == (width,height), 'Controls must not force a wider window'
                 assert_controls_fit(stage)
+            wait_transition(stage)
             assert not stage.reveal.active and not stage.reveal.get_visible()
             assert any(0 < value < 1 for value in entrance_frames), 'Entrance must animate across frames'
             assert stage.layout.get_opacity()==stage.background.get_opacity()==1.

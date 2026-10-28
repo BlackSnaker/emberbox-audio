@@ -4,6 +4,8 @@
 
 ## 0.19.0 — 2026-10-28
 
+- Keep intermediate fullscreen animation frames after a slow first paint or scheduling stall; an overloaded system must not jump straight to the finished entrance.
+
 - Spotify inside Ember: official-site sign-in in an isolated profile, protected web playback, typed metadata and transport, personal shelves, collection tracks, catalogue search, artists and releases. The desktop client is optional; no developer keys or public debugging endpoint are needed for native playback.
 - Connect through Accounts, switch sources, use the shared queue, mini/fullscreen controls, live tubes, app-scoped volume and the Ember media card. Browsing stays off GTK and separate from transport; source changes pause the previous player.
 - Reuse compatible installed playback components without sharing signed-in profiles. Normalize the runtime's Chromium user agent for website compatibility, keep account navigation inside Spotify domains and report only sanitized diagnostics. Preserve the optional MPRIS desktop fallback.
