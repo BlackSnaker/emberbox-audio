@@ -7,7 +7,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 from accounts import Accounts
 from music_library import MusicRepository,snapshot,MusicService
 from artist_catalog import ArtistRepository,artist_ref,album_ref
-from spotify_web import SpotifyClient,prepare
+from spotify_web import SpotifyClient,SpotifyWeb,prepare
 from stream_target import Target,matches
 
 class SpotifyWebTests(unittest.TestCase):
@@ -42,6 +42,16 @@ class SpotifyWebTests(unittest.TestCase):
         props={'application.name':'Spotify','application.process.id':'456'}
         with patch('stream_target.descendant',return_value=False):self.assertFalse(matches(props,target))
         with patch('stream_target.descendant',return_value=True):self.assertTrue(matches(props,target))
+    def test_artist_response_replaces_a_decorative_image_with_the_owned_portrait(self):
+        player=SpotifyWeb.__new__(SpotifyWeb);player.closed=False;player.ensure_started=Mock()
+        player.bridge=SimpleNamespace(connected=True,request=Mock(return_value={'artist':{'id':'ARTIST','name':'Artist','image':'https://cdn.invalid/loading-strip.png'},'sections':[]}))
+        with patch('spotify_web.artist_image',return_value='https://i.scdn.co/image/portrait') as photo:
+            result=player._request('artist',id='ARTIST')
+            self.assertEqual(result['artist']['image'],'https://i.scdn.co/image/portrait')
+            self.assertEqual(result['artist']['name'],'Artist')
+            photo.assert_called_once_with('ARTIST','https://cdn.invalid/loading-strip.png')
+            player._request('status');self.assertEqual(photo.call_count,1)
+
     def test_shelves_interface_uses_typed_requests_only(self):
         h=self.host();c=SpotifyClient(h.spotify_web);c.home();h.spotify_web.request.assert_called_with('browse',category='home')
         c.play('spotify:track:TRACK');h.spotify_web.request.assert_called_with('play',uri='spotify:track:TRACK')

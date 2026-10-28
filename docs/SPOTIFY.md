@@ -37,6 +37,9 @@ available again from Accounts if the service needs attention.
   are never copied. There is no Ember account server.
 
 This is an experimental website adapter: Spotify UI updates can require fixes.
+Artist photographs use the exact artist's public page metadata, with a bounded
+lookup and an in-memory cache. Decorative page backgrounds are excluded; this
+lookup does not use the signed-in profile or account headers.
 The quality badge uses decoder evidence when available; it does not assume
 Lossless from an account plan. Native Spotify does not currently support
 EmberFlow or beat matching; these controls keep their existing source support.

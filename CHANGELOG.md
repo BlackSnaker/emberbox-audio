@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.19.1 — 2026-10-28
+
+- Fix Spotify artist photographs: use the public artist page's image only after its canonical identity matches the requested artist. Loading strips, decorative CSS textures and album covers are excluded from portrait fallbacks.
+- Cache successful photograph lookups, retry temporary failures, read only a bounded public HTML head, and keep image lookup off the GTK and transport paths. No signed-in profile or account headers are used.
+- Add identity, timeout, cache recovery, redirect, decorative-image and native-response regressions.
+
 ## 0.19.0 — 2026-10-28
 
 - Keep intermediate fullscreen animation frames after a slow first paint or scheduling stall; an overloaded system must not jump straight to the finished entrance.

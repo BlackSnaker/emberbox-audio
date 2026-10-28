@@ -138,13 +138,9 @@ async function emberboxSpotifyCommand(request) {
  function entityImage(root){
   const direct=root?.querySelector('[data-testid="artist-image"] img,[data-testid="entity-image"] img,[data-testid="entityImage"] img,[data-testid="entity-header"] img');
   if(direct?.src)return image(direct.src);
-  const header=root?.querySelector('[data-testid="entity-header"]');
-  for(const node of [header,root,...Array.from(root?.querySelectorAll('div')||[]).slice(0,100)]){
-   if(!node)continue;
-   const background=[getComputedStyle(node).backgroundImage,getComputedStyle(node,'::before').backgroundImage,node.style?.getPropertyValue('--background-image')].join(' ');
-   const url=background.match(/url\(["']?(https:[^"')]+)["']?\)/)?.[1];
-   if(url)return image(url);
-  }
+  // Arbitrary page backgrounds include loading strips and UI textures. The
+  // native adapter resolves artist portraits from identity-checked public
+  // Spotify metadata instead of treating those decorations as photographs.
   return '';
  }
  const offset=Number(p.offset||0);if(!Number.isInteger(offset)||offset<0||offset>50000)throw Error('INVALID_ARGUMENTS');

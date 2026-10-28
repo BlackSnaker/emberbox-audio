@@ -8,7 +8,7 @@ const provider={getRegistry:()=>({_map:new Map([[Symbol('PlayerAPI'),true]]),res
 // The registry key is matched by its public symbol description, not identity.
 const main={__reactFiberFixture:{memoizedProps:{value:provider}},querySelector:()=>null,querySelectorAll:()=>[]};
 const doc={readyState:'complete',querySelector:q=>q==='main'?main:q==='audio,video'?media:q.includes('user-widget')?(signed?{}:null):q.includes('control-button')?{disabled:false,click(){calls.push(['button']);}}:null,querySelectorAll:()=>[]};
-const context=vm.createContext({document:doc,location:{origin:'https://open.spotify.com',pathname:'/'},navigator:{mediaSession:{}},window:{__emberboxPlaybackAllowed:true},URL,Map,Set,Date,console,setTimeout,getComputedStyle:node=>({fontSize:String(node.size||0),backgroundImage:'none'})});
+const context=vm.createContext({document:doc,location:{origin:'https://open.spotify.com',pathname:'/'},navigator:{mediaSession:{}},window:{__emberboxPlaybackAllowed:true},URL,Map,Set,Date,console,setTimeout,getComputedStyle:node=>({fontSize:String(node.size||0),backgroundImage:node.background||'none'})});
 vm.runInContext(fs.readFileSync('src/apple_web_host/spotify.js','utf8')+'\nglobalThis.command=emberboxSpotifyCommand;',context);
 (async()=>{
  let s=await context.command({method:'status'});assert.equal(s.authorized,true);assert.equal(s.id,'TRACK123');assert.equal(s.duration,240);assert.equal(s.position,34);assert.equal(s.albumId,'ALBUM123');assert.equal(s.capabilities.player,true);assert(!JSON.stringify(s).includes('PRIVATE-SENTINEL'));assert.equal(s.emberFlow,false);
@@ -37,12 +37,13 @@ vm.runInContext(fs.readFileSync('src/apple_web_host/spotify.js','utf8')+'\ngloba
 
  // New web artist headers are display spans. A sidebar h1 is not the artist.
  context.location.pathname='/artist/ARTIST123';
+ const decoration={background:'url("https://open.spotifycdn.com/cdn/images/loading-strip.png")'};
  const display={textContent:'Fixture artist',size:80},header={querySelectorAll:q=>q==='span,div,h1,h2,p'?[display]:[]};
  const card={querySelector:q=>q.includes('cardTitle')?{textContent:'Fixture release'}:null};
  const album={getAttribute:()=>'/album/ALBUM123',closest:()=>card,textContent:'Fixture release'};
  main.querySelector=q=>q==='[data-testid="entity-header"]'?header:null;
- main.querySelectorAll=q=>q==='a[href*="/album/"]'?[album]:q==='a[href]'?[album]:[];
- const a=await context.command({method:'artist',params:{id:'ARTIST123'}});assert.equal(a.artist.name,'Fixture artist');assert.equal(a.sections[0].items.length,1);
+ main.querySelectorAll=q=>q==='a[href*="/album/"]'?[album]:q==='a[href]'?[album]:q==='div'?[decoration]:[];
+ const a=await context.command({method:'artist',params:{id:'ARTIST123'}});assert.equal(a.artist.name,'Fixture artist');assert.equal(a.sections[0].items.length,1);assert.equal(a.artist.image,'','Page decorations are not artist portraits');
  context.location.pathname='/';
  signed=false;await assert.rejects(context.command({method:'browse',params:{category:'home'}}),/SIGN_IN_REQUIRED/);
  context.location.origin='https://accounts.spotify.com';await assert.rejects(context.command({method:'status'}),/NOT_READY/);

@@ -12,6 +12,7 @@ import apple_setup
 from paths import APP_ID,CONFIG_DIR
 from source_picker import text
 from gui_session import systemd_environment
+from spotify_artwork import artist_image
 
 ENGINE_CONFIG=CONFIG_DIR/'spotify-engine.json'
 
@@ -65,7 +66,12 @@ class SpotifyWeb(AppleWeb):
         while not self.connected and not self.closed and time.monotonic()<until:
             if self.error:raise BridgeUnavailable(self.error)
             time.sleep(.1)
-        try:return self.bridge.request(method,**params)
+        try:
+            result=self.bridge.request(method,**params)
+            if method=='artist' and isinstance(result,dict) and isinstance(result.get('artist'),dict):
+                artist=result['artist']
+                result={**result,'artist':{**artist,'image':artist_image(artist.get('id'),artist.get('image',''))}}
+            return result
         except BridgeUnavailable as error:
             messages={
                 'SIGN_IN_REQUIRED':text('Sign in to Spotify in Accounts.','Войди в Spotify в разделе Аккаунты.'),
