@@ -58,6 +58,7 @@ class DummyAppleWeb:
     def close(self):pass
 widget.AppleWeb=DummyAppleWeb
 widget.YandexWeb=DummyAppleWeb
+widget.SpotifyWeb=DummyAppleWeb
 app=widget.Widget()
 try:
     settle()
@@ -105,7 +106,9 @@ try:
     app.accounts.spotify=['fixture-spotify'];app.accounts.spotify_checked=True
     with patch.object(app.accounts,'open_spotify') as open_spotify, patch('accounts.launch') as external:
         app.accounts.connect('spotify')
-        open_spotify.assert_called_once()
+        open_spotify.assert_not_called()
+        assert app.spotify_web.calls[-1]==('show',{})
+        assert 'desktop client' in app.accounts.state('spotify')['description']
         external.assert_not_called()
     before=app.source
     app.accounts.connect('apple-music')
@@ -118,12 +121,12 @@ try:
     assert app.account_panel.cards['apple-music']['listen'].get_visible()
     app.account_panel.cards['apple-music']['listen'].clicked()
     assert app.apple_native() and not app.accounts_visible
-    app.select_source('spotify')
     spotify=Session('org.mpris.MediaPlayer2.spotify', 'Spotify', 'spotify', 1,
         {'PlaybackStatus':'Playing','CanSeek':True,'Metadata':{'xesam:title':'Spotify track',
         'mpris:trackid':'/org/fixture/spotify','mpris:length':200000000}})
     browser=Session('org.mpris.MediaPlayer2.firefox.instance123', 'Firefox', 'firefox', 2,
         {'PlaybackStatus':'Paused','Metadata':{'xesam:title':'Apple track'}})
+    app.select_source('spotify',spotify)
     app.on_sessions([spotify,browser])
     assert app.title.get_text()=='Spotify track'
     assert not app.album_button.get_sensitive()
@@ -169,7 +172,7 @@ try:
     app.source_picker.popover.popdown()
     app.toggle_compact(None)
     settle(.6)
-    app.select_source('spotify')
+    app.select_source('spotify',spotify)
     assert app.title.get_text()=='Spotify track'
     assert not app.source_picker.popover.get_visible()
     app.expanded=True;app.apply_layout()

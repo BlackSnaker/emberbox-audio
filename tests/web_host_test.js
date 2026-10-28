@@ -5,13 +5,14 @@ const fixture=fs.mkdtempSync(path.join(os.tmpdir(),'emberbox-web-host-'));
 const folder=path.resolve('src/apple_web_host');
 const hostRequire=require('node:module').createRequire(path.join(folder,'main.cjs'));
 function host(yandex){
-  const profile=path.join(fixture,yandex?'yandex':'apple');
+  const spotify=yandex==='spotify';yandex=yandex===true;
+  const profile=path.join(fixture,spotify?'spotify':yandex?'yandex':'apple');
   const app={getPath:()=>profile,setPath(){},setName(){},setDesktopName(){},enableSandbox(){},
     commandLine:{appendSwitch(){}},whenReady:()=>new Promise(()=>{}),on(){}};
   const context=vm.createContext({require:name=>name==='electron'?{app}:hostRequire(name),__dirname:folder,
-    process:{env:{EMBERBOX_APPLE_PROFILE:profile,EMBERBOX_WEB_SERVICE:yandex?'yandex':'apple'},versions:process.versions,on(){}},
+    process:{env:{EMBERBOX_APPLE_PROFILE:profile,EMBERBOX_WEB_SERVICE:spotify?'spotify':yandex?'yandex':'apple'},versions:process.versions,on(){}},
     URL,setTimeout,clearTimeout,console});
-  vm.runInContext(fs.readFileSync(path.join(folder,'main.cjs'),'utf8')+'\nglobalThis.api={command,yandexRoute};',context);
+  vm.runInContext(fs.readFileSync(path.join(folder,'main.cjs'),'utf8')+'\nglobalThis.api={command,yandexRoute,spotifyRoute};',context);
   return context.api;
 }
 (async()=>{
@@ -37,5 +38,13 @@ function host(yandex){
   assert.equal((await apple.command(win,{method:'status'})).integrationVersion,21);
   responses.push({ready:true,id:'123'});win.emberboxQuality={snapshot:id=>({codec:'aac',track:id,evidence:'decoder'})};
   assert.equal((await apple.command(win,{method:'status'})).audioQuality.track,'123');
+  const spotify=host('spotify');
+  for(const route of ['/','/collection/albums','/collection/playlists','/album/ABC','/artist/ABC/discography/all','/search/Original%20fixture'])assert.equal(spotify.spotifyRoute(route),route);
+  for(const route of ['https://evil.invalid/album/ABC','/account','/album/ABC?access_token=secret','/playlist/../account','//evil.invalid/'])assert.equal(spotify.spotifyRoute(route),'');
+  win.webContents.getURL=()=> 'https://open.spotify.com/';responses.push({ready:true,authorized:true});
+  assert.equal((await spotify.command(win,{method:'status'})).integrationVersion,1);
+  responses.push({__emberboxNavigate:'/collection/albums'},{items:[]});await spotify.command(win,{method:'browse'});
+  assert.equal(loaded.at(-1),'https://open.spotify.com/collection/albums');
+  responses.push({__emberboxNavigate:'https://evil.invalid/'});await assert.rejects(spotify.command(win,{method:'browse'}),/ADAPTER_UNAVAILABLE/);
   console.log('PASS bounded official-site navigation, adapter update version and decoder quality');
 })().catch(error=>{console.error(error);process.exitCode=1;}).finally(()=>fs.rmSync(fixture,{recursive:true,force:true}));

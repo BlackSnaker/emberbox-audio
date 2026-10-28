@@ -6,11 +6,11 @@ Open **Settings → Accounts · Spotify / Apple / Yandex**, or **Connect account
 
 ## Spotify
 
-1. Click **Sign in to Spotify**. The official Spotify desktop app opens; complete its sign-in there.
-2. Play any song. Emberbox detects the player and shows **Connected** automatically.
-3. Click **Listen** to return to music. **Connect personal picks** enables the optional collections drawer; this may restart Spotify once.
+1. Choose **Sign in to Spotify**. Its official website opens in an Ember window.
+2. Complete sign-in and any verification on Spotify's page. The account status updates automatically.
+3. Choose **Listen** for personal shelves, tracks, catalogue search and the Ember queue. **No separate Spotify client is required.**
 
-If Spotify is missing, **Get Spotify** opens its official Linux download page. The Emberbox installer can prepare its own dependencies, but the Spotify client is installed separately. Both native and Flatpak installations are detected.
+The same compatible DRM-capable engine used for Apple/Yandex can be reused, with a separate Spotify profile. Website playback follows your Spotify account's subscription and regional restrictions. An already running desktop client remains an optional source-menu fallback. [Spotify setup](SPOTIFY.md).
 
 ## Apple Music
 
@@ -27,8 +27,8 @@ Choose **Sign in to Yandex Music**, complete Yandex ID sign-in in the separate E
 ## Connection behaviour
 
 - Opening the account panel or signing in does not switch or autoplay a music source. **Listen** explicitly chooses that source.
-- Spotify sign-in remains in Spotify's official client. Apple sign-in remains on Apple's website in an Emberbox-owned profile.
+- Spotify and Apple sign-in stay on their official websites in separate Ember-owned profiles.
 - Existing Apple sign-in survives widget restarts and engine updates. Credentials are not exported to the GTK interface.
-- The desktop's media card for native Apple Music, Yandex Music and YouTube playback is named **Ember**, with playback, seeking and volume controls.
+- The desktop's media card for native Spotify, Apple Music, Yandex Music and YouTube playback is named **Ember**, with playback, seeking and volume controls.
 
 [Spotify details](SPOTIFY.md) · [Apple Music details](APPLE_MUSIC.md)

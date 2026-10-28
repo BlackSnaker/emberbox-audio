@@ -42,7 +42,7 @@ def matches(props, target):
         return False
     values = [str(props.get(key, '')).lower() for key in
               ('application.name', 'application.process.binary', 'application.id', 'node.name')]
-    if target.source == 'spotify':
+    if target.source == 'spotify' and target.player!='spotify-native':
         return any(value in ('spotify', 'com.spotify.client') or
                    re.fullmatch(r'spotify-\d+', value) for value in values)
     try:

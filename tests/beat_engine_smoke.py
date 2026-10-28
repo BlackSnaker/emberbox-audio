@@ -11,7 +11,7 @@ with tempfile.TemporaryDirectory(prefix='ember-beat-check-') as directory:
     for item in installed.parent.iterdir():
         if item.name not in ('resources',installed.name): (root/item.name).symlink_to(item)
     source=root/'source';source.mkdir();(root/'resources').mkdir()
-    for name in ('package.json','main.cjs','page.js','yandex.js','media_quality.cjs','flow.cjs','rhythm.cjs','spatial.cjs','spatial_source.js'):
+    for name in ('package.json','main.cjs','page.js','yandex.js','spotify.js','media_quality.cjs','flow.cjs','rhythm.cjs','spatial.cjs','spatial_source.js'):
         if name=='main.cjs':shutil.copy2(repo/'tests/beat_engine_smoke.cjs',source/name)
         else:shutil.copy2(repo/'src/apple_web_host'/name,source/name)
     pack(source,root/'resources/app.asar')

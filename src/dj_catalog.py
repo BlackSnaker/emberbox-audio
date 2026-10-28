@@ -5,6 +5,7 @@ from contextlib import nullcontext
 from dj_lookups import Lookups
 from dj_intent import artist_key,same_artist
 from discovery import LocalSpotify,cached_home
+from spotify_web import client_for
 from listening_queue import track
 from music_library import youtube_item
 from youtube_search import yt_dlp_executable,js_runtime_args
@@ -63,9 +64,9 @@ class DJCatalog:
         player=(h.apple_web if h.apple_mode=='native' else h.apple) if source=='apple-music' else None
         if source=='apple-music':feed=player.request('browse',category='dj')
         elif source=='spotify':
-            feed=cached_home()
+            feed=cached_home() if getattr(h,'spotify_mode','desktop')!='native' else None
             if not feed:
-                with LocalSpotify() as client:feed=client.home(deadline=time.monotonic()+2.5)
+                with (client_for(h) if getattr(h,'spotify_mode','desktop')=='native' else LocalSpotify()) as client:feed=client.home(deadline=time.monotonic()+2.5)
             feed={'items':[v for shelf in feed.get('shelves',[]) for v in shelf.get('items',[])][:40]}
         elif source=='yandex-music':feed=h.yandex_web.request('browse',category='collection')
         else:return {'tracks':[],'recent':[]}
@@ -79,7 +80,7 @@ class DJCatalog:
             try:
                 if source=='apple-music':result=player.request('tracks',kind=collection.get('kind',''),id=collection['id'])
                 elif source=='spotify':
-                    with LocalSpotify() as client:result=client.tracks(collection,deadline=time.monotonic()+2.)
+                    with (client_for(h) if getattr(h,'spotify_mode','desktop')=='native' else LocalSpotify()) as client:result=client.tracks(collection,deadline=time.monotonic()+2.)
                 else:result=h.yandex_web.request('tracks',id=collection['id'])
                 values.extend(dict(v,_personal=True,_context=collection.get('title','')[:200])
                     for v in (result.get('tracks') or result.get('items') or [])[:100] if isinstance(v,dict))

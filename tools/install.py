@@ -154,8 +154,8 @@ def source_summary(ui,python,target,setup=True):
         try:spotify=subprocess.run(['flatpak','info','com.spotify.Client'],stdout=subprocess.DEVNULL,
                                   stderr=subprocess.DEVNULL,timeout=4).returncode==0
         except (OSError,subprocess.SubprocessError):pass
-    ui.note('Spotify client detected.' if spotify else 'Spotify: connect an installed client, or use another music source.',
-            'Клиент Spotify найден.' if spotify else 'Spotify: подключи установленный клиент или выбери другой источник музыки.')
+    ui.note('Spotify client detected.' if spotify else 'Spotify: sign in inside Ember; the desktop client is optional.',
+            'Клиент Spotify найден.' if spotify else 'Spotify: войди прямо в Ember; настольный клиент необязателен.')
     status='not_checked'
     if setup:
         probe='''import json,sys
@@ -176,11 +176,11 @@ print(json.dumps({'status':status}))
             status=json.loads(result.stdout).get('status','not_checked') if result.returncode==0 else 'not_checked'
         except (OSError,ValueError,subprocess.SubprocessError):pass
     if status=='configured':
-        ui.item(ui.text('Apple / Yandex playback components configured. Sign in from Accounts.',
-                        'Компоненты Apple / Яндекс настроены. Войди через раздел Аккаунты.'))
+        ui.item(ui.text('Spotify / Apple / Yandex playback components configured. Sign in from Accounts.',
+                        'Компоненты Spotify / Apple / Яндекс настроены. Войди через раздел Аккаунты.'))
     else:
-        ui.warning('Apple / Yandex still need a compatible DRM engine. Open Settings → Accounts for setup.',
-                   'Apple / Яндексу ещё нужен совместимый DRM-движок. Настройка: Настройки → Аккаунты.')
+        ui.warning('Spotify / Apple / Yandex still need a compatible DRM engine. Open Settings → Accounts for setup.',
+                   'Spotify / Apple / Яндексу ещё нужен совместимый DRM-движок. Настройка: Настройки → Аккаунты.')
     if setup and os.environ.get('DISPLAY') and shutil.which('pw-dump'):
         try:
             audio=subprocess.run(['pw-dump'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=3)
@@ -347,7 +347,7 @@ def main(argv=None):
                 if checked.returncode:raise RuntimeError('Runtime import check failed:\n'+checked.stderr[-2500:])
             if was_running:
                 service('stop',APP+'.service',check=True);stopped=True
-                service('stop',APP+'-apple.service');service('stop',APP+'-yandex.service')
+                service('stop',APP+'-apple.service');service('stop',APP+'-yandex.service');service('stop',APP+'-spotify.service')
             backup=stage/'previous';backup.mkdir()
             try:
                 for name in PAYLOAD:

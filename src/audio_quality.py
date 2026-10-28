@@ -68,6 +68,8 @@ def describe(state):
 def current(host):
     """Read cached state only: no IPC, socket calls, network or audio queries."""
     source=getattr(host,'source','')
+    if source=='spotify' and getattr(host,'spotify_mode','')=='native':
+        return describe(getattr(getattr(host,'spotify_web',None),'state',{}) or {})
     if source=='apple-music' and getattr(host,'apple_mode','')=='native':
         return describe(getattr(getattr(host,'apple_web',None),'state',{}) or {})
     if source=='yandex-music':
@@ -84,7 +86,9 @@ def has_track(host):
     """A pending duration must not hide quality for an already selected song."""
     if getattr(host,'length',0) or getattr(host,'playing',False):return True
     source=getattr(host,'source','')
-    if source=='apple-music' and getattr(host,'apple_mode','')=='native':
+    if source=='spotify' and getattr(host,'spotify_mode','')=='native':
+        state=getattr(getattr(host,'spotify_web',None),'state',{}) or {}
+    elif source=='apple-music' and getattr(host,'apple_mode','')=='native':
         state=getattr(getattr(host,'apple_web',None),'state',{}) or {}
     elif source=='yandex-music':
         state=getattr(getattr(host,'yandex_web',None),'state',{}) or {}

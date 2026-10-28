@@ -35,6 +35,7 @@ from apple_bridge import AppleBridge
 from apple_library import AppleLibraryPanel
 from apple_web import AppleWeb
 from yandex_web import YandexWeb
+from spotify_web import SpotifyWeb,client_for
 from yandex_panel import YandexPanel
 from accounts import Accounts
 from account_panel import AccountPanel
@@ -205,6 +206,8 @@ class Widget:
 
         self.apple = AppleBridge()
         self.apple_web = AppleWeb(self.on_apple_changed)
+        self.spotify_web = SpotifyWeb(self.on_spotify_changed)
+        self.spotify_was_connected=False
         self.yandex_web = YandexWeb(self.on_yandex_changed)
         self.apple_was_connected = False
         self.connection = Gio.bus_get_sync(Gio.BusType.SESSION, None)
@@ -228,6 +231,7 @@ class Widget:
         self.source = saved.get('source', 'spotify')
         if self.source not in ('spotify', 'apple-music', 'youtube','yandex-music'):
             self.source = 'spotify'
+        self.spotify_mode='desktop' if saved.get('spotify_mode')=='desktop' else 'native'
         self.browser_binding = str(saved.get('apple_browser', ''))
         self.apple_mode = 'browser' if saved.get('apple_mode') == 'browser' else 'native'
         self.youtube_binding = str(saved.get('youtube_browser', ''))
@@ -238,7 +242,7 @@ class Widget:
         self.monitor = Monitor(self.connection, self.on_sessions)
         self.accounts_visible = False
         self.accounts = Accounts(self.apple_web,self.on_accounts_changed,self.open_spotify_login,
-                                 self.connect_for_discovery,self.account_source,self.yandex_web)
+                                 self.connect_for_discovery,self.account_source,self.yandex_web,self.spotify_web)
         self.source_picker = SourcePicker(self.select_source, self.launch_apple,self.show_accounts)
         self.fullscreen = None
         self.kwin_desktop = None
@@ -477,7 +481,7 @@ class Widget:
         self.drawer = Gtk.Revealer()
         self.drawer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
         self.drawer.set_transition_duration(240)
-        self.panel = DiscoveryPanel(self.artwork, self.play_uri, lambda:self.show_accounts('spotify'))
+        self.panel = DiscoveryPanel(self.artwork, self.play_uri, lambda:self.show_accounts('spotify'),lambda:client_for(self))
         self.panel.layout_changed = self.reflow
         self.apple_panel = AppleLibraryPanel(self.artwork, self.apple_web if self.apple_mode == 'native' else self.apple, self.play_apple_uri, self.setup_apple_library)
         self.apple_panel.layout_changed = self.reflow
@@ -512,6 +516,7 @@ class Widget:
         self.panel.show_home()
         self.apple_panel.show_home()
         self.youtube.set_enabled(self.source == 'youtube' and self.youtube_mode == 'native')
+        self.spotify_web.set_enabled(self.spotify_native())
         self.apple_web.set_enabled(self.apple_native())
         self.yandex_web.set_enabled(self.source=='yandex-music')
         self.apply_layout()
@@ -583,6 +588,7 @@ class Widget:
         self.mpris.close()
         self.apple.close()
         self.apple_web.close()
+        self.spotify_web.close()
         self.yandex_web.close()
         self.yandex_panel.close()
         self.monitor.close()
@@ -773,10 +779,12 @@ class Widget:
         if not (self.youtube_native() and source == 'youtube' and session is None):
             self.youtube.set_enabled(False)
         self.source = source
+        if source=='spotify':self.spotify_mode='desktop' if session else 'native'
         if source == 'youtube':
             self.youtube_mode = 'browser' if session else 'native'
         if source == 'apple-music':
             self.apple_mode = 'browser' if session else 'native'
+        self.spotify_web.set_enabled(self.spotify_native())
         self.apple_web.set_enabled(self.apple_native())
         self.yandex_web.set_enabled(self.source=='yandex-music')
         apple_bridge = self.apple_web if self.apple_mode == 'native' else self.apple
@@ -851,7 +859,11 @@ class Widget:
     def apple_native(self):
         return self.source == 'apple-music' and self.apple_mode == 'native'
 
+    def spotify_native(self):
+        return self.source=='spotify' and self.spotify_mode=='native'
+
     def native_web(self):
+        if self.spotify_native():return self.spotify_web
         if self.source=='yandex-music':return self.yandex_web
         return self.apple_web if self.apple_native() else None
 
@@ -866,6 +878,20 @@ class Widget:
         self.music.stop()
         if self.source!='yandex-music':self.select_source('yandex-music')
         self.yandex_panel.request('wave')
+
+    def on_spotify_changed(self):
+        if not getattr(self,'resources_closed',True):
+            self.accounts.update(self.sessions)
+            if self.spotify_native():
+                self.render_apple()
+                if self.spotify_web.state.get('authorized') and not self.spotify_was_connected and self.expanded and not self.compact:self.panel.open()
+            self.spotify_was_connected=bool(self.spotify_web.connected and self.spotify_web.state.get('authorized'))
+
+    def show_spotify_library(self):
+        if not self.spotify_web.state.get('authorized'):
+            self.show_accounts('spotify');return
+        if self.compact:self.toggle_compact(None)
+        self.expanded=True;self.drawer.set_reveal_child(True);self.panel.open();self.save_position()
 
     def on_yandex_changed(self):
         if not getattr(self,'resources_closed',True):
@@ -894,7 +920,7 @@ class Widget:
         apple = self.native_web()
         state = apple.state
         self.session = None
-        self.player = ('yandex-native' if self.source=='yandex-music' else 'apple-native') if apple.connected else None
+        self.player = ('spotify-native' if self.source=='spotify' else 'yandex-native' if self.source=='yandex-music' else 'apple-native') if apple.connected else None
         target = Target(self.source, apple.pid, '', self.player or '')
         self.sound.refresh(target)
         self.set_meter_target(target)
@@ -904,13 +930,13 @@ class Widget:
         self.position = int(max(0, float(state.get('position') or 0))*1_000_000)
         self.track_id = None
         authorized = state.get('authorized', False)
-        self.title.set_text(state.get('title') or (text('Yandex Music','Яндекс Музыка') if self.source=='yandex-music' else 'Apple Music'))
+        self.title.set_text(state.get('title') or ('Spotify' if self.source=='spotify' else text('Yandex Music','Яндекс Музыка') if self.source=='yandex-music' else 'Apple Music'))
         self.artist.set_text(state.get('artist') or (text('Your library is inside Emberbox','Медиатека внутри плеера') if authorized else text('Connecting your music…','Подключаю твою музыку…')))
         self.album.set_text(apple.error or state.get('album') or '')
         self.quality.update(self)
         self.time.set_text(f'{stamp(self.position)}  /  {stamp(self.length)}')
         self.progress.set_fraction(max(0.,min(1.,self.position/self.length)) if self.length else 0.)
-        self.progress_event.set_sensitive(bool(authorized and self.length))
+        self.progress_event.set_sensitive(bool(authorized and self.length and state.get('canSeek',True)))
         self.previous.set_sensitive(bool(authorized and state.get('canPrevious') and state.get('title')))
         self.next.set_sensitive(bool(authorized and state.get('canNext') and state.get('title')))
         self.play.set_sensitive(True)
@@ -1039,6 +1065,7 @@ class Widget:
         launch_desktop(command)
 
     def open_spotify_login(self):
+        if self.spotify_native():self.accounts.connect('spotify');return
         session = self.accounts.spotify_session()
         if session:
             self.monitor.call(session,'Raise',root=True)
@@ -1046,6 +1073,7 @@ class Widget:
             launch_desktop(list(self.accounts.spotify))
 
     def connect_for_discovery(self):
+        if self.spotify_native():self.accounts.connect('spotify');return
         def work():
             try:
                 from discovery import LocalSpotify
@@ -1074,6 +1102,8 @@ class Widget:
             return
         if not uri.startswith(('spotify:track:', 'spotify:playlist:', 'spotify:album:')):
             return
+        if self.spotify_native():
+            self.spotify_web.action('play',uri=uri);return
         from discovery import ConnectionUnavailable, LocalSpotify
 
         self.play_request += 1
@@ -1154,7 +1184,7 @@ class Widget:
         STATE.write_text(json.dumps({'x': x, 'y': y, 'expanded': self.expanded,
                                      'compact': self.compact, 'source': self.source,
                                      'apple_browser': self.browser_binding, 'youtube_mode': self.youtube_mode,
-                                     'apple_mode': self.apple_mode,
+                                     'apple_mode': self.apple_mode, 'spotify_mode':self.spotify_mode,
                                      'youtube_browser': self.youtube_binding}) + '\n')
         return False
 
@@ -1208,6 +1238,10 @@ class Widget:
             self.music.stop(pause_pending=True);self.music.pause(self.source);return
         if self.music.book.active==self.source and action in ('next','previous'):
             self.music.step(1 if action=='next' else -1);return
+        if self.spotify_native():
+            if action=='open' or action=='toggle' and not self.spotify_web.state.get('title'):self.show_spotify_library()
+            elif action in ('toggle','previous','next'):self.spotify_web.action('transport',action=action)
+            return
         if self.source=='yandex-music':
             if action=='open':self.show_yandex()
             elif action=='toggle' and not self.yandex_web.state.get('title'):self.start_yandex_wave()
@@ -1313,6 +1347,7 @@ class Widget:
             GLib.timeout_add(150,self.refresh_once)
 
     def system_action(self,method,uri=None):
+        if method=='OpenUri' and self.spotify_native():self.play_uri(uri or '');return
         if method=='OpenUri' and self.apple_native():
             self.play_apple_uri(uri)
             return

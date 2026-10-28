@@ -75,6 +75,7 @@ jobs:
           dbus-run-session -- /usr/bin/python3 tests/widget_control_smoke.py
       - name: Apple and Yandex Music adapters
         run: |
+          node tests/spotify_web_test.js
           node tests/apple_web_test.js
           node tests/apple_browser_test.js
           node tests/yandex_web_test.js

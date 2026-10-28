@@ -60,7 +60,7 @@ class AccountPanel(Gtk.Box):
         card.pack_start(actions,False,False,0)
         details = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=6)
         details.set_no_show_all(True)
-        if source == 'spotify':
+        if source == 'spotify' and not getattr(self.accounts,'spotify_web',None):
             picks = Gtk.Button(label=text('Connect personal picks','Подключить личные подборки'))
             picks.get_style_context().add_class('filter-chip')
             picks.connect('clicked',lambda _b:self.accounts.open_picks())
@@ -112,7 +112,7 @@ class AccountPanel(Gtk.Box):
             card['listen'].set_visible(state['ready'])
             card['spinner'].set_visible(state['busy'])
             card['spinner'].start() if state['busy'] else card['spinner'].stop()
-            if state['details'] or (source=='spotify' and state['ready']):
+            if state['details'] or (source=='spotify' and not getattr(self.accounts,'spotify_web',None) and state['ready']):
                 for child in card['details'].get_children():
                     child.show_all()
                 card['details'].show()

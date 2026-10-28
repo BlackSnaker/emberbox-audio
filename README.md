@@ -117,7 +117,7 @@ pace. [Controls and source support →](docs/FLOW.md)
 
 A warm desktop companion for **Spotify, Apple Music, YouTube and Yandex Music**, with audio-reactive gas-discharge tubes and controls that feel like a small piece of hi-fi equipment.
 
-- **Choose your source.** Spotify, Apple Music, YouTube or Yandex Music, including in mini mode. Apple Music has an in-widget library, song search and playback. [Apple Music setup →](docs/APPLE_MUSIC.md)
+- **Choose your source.** Spotify, Apple Music, YouTube or Yandex Music, including in mini mode. **Spotify now signs in and plays inside Ember — no desktop client required.** [Spotify setup →](docs/SPOTIFY.md) Apple Music has an in-widget library, song search and playback. [Apple Music setup →](docs/APPLE_MUSIC.md)
 - **Music without the window juggling.** Artwork, track details, seeking and transport controls beside your work.
 - **Real sound, warm light.** Nine frequency bands from the selected application’s audio stream, with smooth, critically damped motion.
 - **Tactile controls.** A metal mute toggle, a fine-adjustable volume dial, and separated playback buttons.
@@ -214,7 +214,7 @@ To run from the checkout after dependencies are ready, use `./run.sh`.
 
 Select a source in the header. Apple Music plays through a background web engine, with playlists, albums, songs and catalogue search inside Emberbox. It requires a compatible installed DRM-capable runtime and an Apple Music subscription. [One-time setup →](docs/APPLE_MUSIC.md)
 
-Open Spotify to listen to Spotify. Basic playback uses MPRIS; the personal-picks drawer has a separate local connection. [Spotify setup →](docs/SPOTIFY.md)
+Connect Spotify in **Settings → Accounts** and listen inside Ember. The desktop client remains an optional MPRIS fallback. [Spotify setup →](docs/SPOTIFY.md)
 
 ## Grunesphism / Грунесфизм
 
@@ -238,7 +238,7 @@ Dark olive-charcoal surfaces, warm cream type, amber light behind glass, a smoot
 
 ## Early release notes
 
-This is an early source release, built from the working desktop widgets. Apple Music's in-widget integration is experimental and uses Apple's website in a separately configured local engine; compatible runtime binaries are not distributed. Browser MPRIS remains an optional fallback. Spotify personal recommendations use an optional, version-sensitive local desktop-client integration. Website and client updates may require integration fixes; see the setup notes.
+This is an early source release, built from the working desktop widgets. Apple Music's in-widget integration is experimental and uses Apple's website in a separately configured local engine; compatible runtime binaries are not distributed. Browser MPRIS remains an optional fallback. Spotify uses its official website in an isolated Ember session; a version-sensitive desktop integration remains optional. Website and client updates may require integration fixes; see the setup notes.
 
 - The widget is designed to live on the desktop, underneath ordinary app windows.
 - Position, compact mode and audio preferences are kept locally in the standard XDG directories.

@@ -24,13 +24,14 @@ def clear(container):
 
 
 class DiscoveryPanel(Gtk.Box):
-    def __init__(self, artwork, play_uri, connect_spotify):
+    def __init__(self, artwork, play_uri, connect_spotify, client_factory=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         self.artwork = artwork
+        self.client_factory=client_factory or LocalSpotify
         self.play_uri = play_uri
         self.play_tracks = None
         self.connect_spotify = connect_spotify
-        self.data = cached_home()
+        self.data = None if client_factory else cached_home()
         self.selected = None
         self.track_data = None
         self.generation = 0
@@ -106,7 +107,7 @@ class DiscoveryPanel(Gtk.Box):
         self.show_home()
 
     def open(self):
-        if not self.selected and (not self.data or time.time() - self.loaded_at > 600):
+        if not self.selected and not self.busy and (not self.data or time.time() - self.loaded_at > 600):
             self.load_home()
 
     def show_home(self):
@@ -230,7 +231,7 @@ class DiscoveryPanel(Gtk.Box):
 
     def load_home(self):
         def work():
-            with LocalSpotify() as spotify:
+            with self.client_factory() as spotify:
                 return spotify.home()
 
         def finish(result):
@@ -252,7 +253,7 @@ class DiscoveryPanel(Gtk.Box):
         clear(self.content)
 
         def work():
-            with LocalSpotify() as spotify:
+            with self.client_factory() as spotify:
                 return spotify.tracks(item)
 
         self._request(work, self.render_tracks)

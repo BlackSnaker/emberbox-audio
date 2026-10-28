@@ -34,7 +34,11 @@ def artist_ref(host,item=None):
                 'songId':str(item.get('id') or item.get('uri','').rsplit(':',1)[-1])[:200],
                 'songKind':str(item.get('kind') or ''),'songUri':str(item.get('uri') or '')[:300]}
     ref={'name':host.artist.get_text()[:300],'current':True}
-    if host.source=='apple-music' and host.apple_mode=='native':
+    if host.source=='spotify' and getattr(host,'spotify_mode','desktop')=='native':
+        state=host.spotify_web.state;ref.update(songUri=str(state.get('uri') or ''),songId=str(state.get('id') or ''))
+        artists=state.get('artists') or []
+        if len(artists)==1:ref.update(id=artists[0]['id'],name=artists[0]['name'])
+    elif host.source=='apple-music' and host.apple_mode=='native':
         state=host.apple_web.state
         ref.update(songId=str(state.get('catalogId') or state.get('id') or ''),songKind='songs')
     elif host.source=='yandex-music':
@@ -59,6 +63,10 @@ def album_ref(host):
         if state.get('album')!=title:return None  # The label may contain a connection error.
         album_id=str(state.get('albumId') or '')
         if re.fullmatch(r'\d{1,20}',album_id):ref['id']=album_id
+    elif source=='spotify' and getattr(host,'spotify_mode','desktop')=='native':
+        state=host.spotify_web.state
+        if state.get('albumId'):ref['id']=str(state['albumId'])
+        else:ref.pop('id',None)
     elif not ref.get('songUri'):
         ident=str(getattr(host,'track_id','') or '').rsplit('/',1)[-1]
         if re.fullmatch(r'[A-Za-z0-9]{1,64}',ident):ref['songUri']='spotify:track:'+ident
@@ -133,6 +141,7 @@ class ArtistRepository:
                                         'Подключи встроенную Apple Music в Аккаунтах, чтобы открыть артистов.'))
             player=self.host.apple_web
         elif source=='yandex-music':player=self.host.yandex_web
+        elif source=='spotify' and getattr(self.host,'spotify_mode','desktop')=='native':player=self.host.spotify_web
         elif source=='spotify':
             from discovery import LocalSpotify
             from spotify_artist import SpotifyArtist

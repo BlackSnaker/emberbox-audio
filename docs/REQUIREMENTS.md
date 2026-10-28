@@ -52,7 +52,7 @@ supported packaging tools. [Installation and distribution details →](INSTALL.m
 
 | Source | Additional requirement |
 | --- | --- |
-| Spotify | Separately installed Spotify desktop client, native or Flatpak, and an account. Personal recommendations use a separate experimental connection. |
+| Spotify | Spotify account and a compatible installed Chromium/Widevine engine for the in-player web session. A desktop client is optional. |
 | Apple Music | Apple Music subscription and a compatible installed Electron/Chromium runtime with working AAC/EME and Linux x64 Widevine. Setup checks capabilities; sign-in remains on Apple's site. |
 | YouTube | The YouTube dependencies above. Publicly playable media normally needs no account. |
 | Yandex Music | Yandex ID, Yandex Plus and a compatible playback/DRM runtime. Subscription playback remains experimental and awaits tester verification. |

@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.19.0 — 2026-10-28
+
+- Spotify inside Ember: official-site sign-in in an isolated profile, protected web playback, typed metadata and transport, personal shelves, collection tracks, catalogue search, artists and releases. The desktop client is optional; no developer keys or public debugging endpoint are needed for native playback.
+- Connect through Accounts, switch sources, use the shared queue, mini/fullscreen controls, live tubes, app-scoped volume and the Ember media card. Browsing stays off GTK and separate from transport; source changes pause the previous player.
+- Reuse compatible installed playback components without sharing signed-in profiles. Normalize the runtime's Chromium user agent for website compatibility, keep account navigation inside Spotify domains and report only sanitized diagnostics. Preserve the optional MPRIS desktop fallback.
+- Add native Spotify routing, profile/stream isolation, account UI, typed adapter and host navigation checks. Documentation and setup descriptions in both languages. Website capabilities and account restrictions still apply.
+
 ## 0.18.5 — 2026-10-27
 
 - Restore Atmos music level on stereo output: disable cinema dialogue attenuation and broadcast DRC, include LFE equally in both rendered channels, and retain the JOC binaural scene. The virtual speaker layout never requires a physical multichannel device.

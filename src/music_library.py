@@ -28,6 +28,11 @@ class MusicRepository:
             if category in ('artist','artist-section','release'):
                 return ArtistRepository(h).load(source,category,collection,offset)
             if source=='spotify':
+                if getattr(h,'spotify_mode','desktop')=='native':
+                    player=h.spotify_web
+                    if collection:return player.request('tracks',uri=collection.get('uri',''),offset=offset)
+                    if category=='search':return player.request('search',term=term)
+                    return player.request('browse',category='albums' if category=='albums' else 'home',offset=offset)
                 with LocalSpotify() as client:
                     if collection:return client.tracks(collection)
                     if category=='search':return client.search(term)
@@ -64,6 +69,9 @@ class MusicRepository:
     def play(self,item,alive):
         source=item['source'];h=self.host
         if source=='spotify':
+            if getattr(h,'spotify_mode','desktop')=='native':
+                if alive():return h.spotify_web.request('play',uri=item['uri'])
+                return
             # URI playback calls the desktop player's transport directly. It
             # does not navigate the UI and must not queue behind Home/Search.
             with LocalSpotify() as client:
@@ -91,7 +99,9 @@ def snapshot(host):
     source=host.source
     state={'title':host.title.get_text(),'artist':host.artist.get_text(),'playing':host.playing,
            'duration':host.length/1e6,'position':host.position/1e6,'valid':host.length>0,'id':'','uri':''}
-    if source=='apple-music' and host.apple_mode=='native':
+    if source=='spotify' and getattr(host,'spotify_mode','desktop')=='native':
+        data=host.spotify_web.state;state.update(id=str(data.get('id') or ''),uri=str(data.get('uri') or ''),ended=bool(data.get('ended')))
+    elif source=='apple-music' and host.apple_mode=='native':
         data=host.apple_web.state;state['id']=str(data.get('id') or data.get('catalogId') or '')
         state['catalogId']=str(data.get('catalogId') or '')
         state['ended']=bool(data.get('ended'))
@@ -300,6 +310,8 @@ class MusicService:
 
     def pause(self,source):
         h=self.host
+        if source=='spotify' and getattr(h,'spotify_mode','desktop')=='native':
+            h.spotify_web.action('transport',action='pause');return
         if source in ('apple-music','yandex-music'):
             player=h.yandex_web if source=='yandex-music' else h.apple_web if h.apple_mode=='native' else None
             if player:player.action('transport',action='pause');return

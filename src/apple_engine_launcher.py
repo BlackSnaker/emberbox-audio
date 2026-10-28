@@ -17,7 +17,7 @@ from asar_pack import pack
 from paths import CACHE_DIR,CONFIG_DIR
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--service', choices=('apple','yandex'), default='apple')
+parser.add_argument('--service', choices=('apple','yandex','spotify'), default='apple')
 parser.add_argument('--runtime', type=Path, required=True, help='Installed Electron/Chromium executable.')
 parser.add_argument('--cdm-module', type=Path, required=True, help='Installed Widevine version directory with manifest.json.')
 parser.add_argument('--profile', type=Path)
@@ -35,7 +35,7 @@ if not cdm.is_file():
 identity = str(args.runtime.resolve())+str(args.runtime.stat().st_mtime_ns)
 cache = Path(os.environ.get('XDG_CACHE_HOME', Path.home()/'.cache'))/f'emberbox-audio/{args.service}-web-electron-runtime'/hashlib.sha256(identity.encode()).hexdigest()[:16]
 cache.mkdir(parents=True, exist_ok=True, mode=0o700)
-binary = cache/('EmberboxYandex' if args.service=='yandex' else 'EmberboxApple')
+binary = cache/{'yandex':'EmberboxYandex','spotify':'EmberboxSpotify','apple':'EmberboxApple'}[args.service]
 if not binary.exists() or binary.stat().st_mtime_ns != args.runtime.resolve().stat().st_mtime_ns:
     shutil.copy2(args.runtime.resolve(), binary)
 for name in ('libGLESv2.so','libEGL.so','libvulkan.so.1','libvk_swiftshader.so','libffmpeg.so',

@@ -38,6 +38,9 @@ class SourcePicker:
         for key, name in [('spotify', 'Spotify'), ('apple-music', 'Apple Music · '+text('Your library','медиатека')), ('youtube', 'YouTube · '+text('Search & play', 'поиск и музыка')), ('yandex-music',text('Yandex Music · My Wave','Яндекс Музыка · Моя волна'))]:
             button(('●  ' if source == key else '○  ') + name,
                    lambda k=key: self.changed(k, None))
+        for session in sessions:
+            if session.name.startswith('org.mpris.MediaPlayer2.spotify'):
+                button(text('Spotify · desktop client (optional)','Spotify · настольный клиент (необязательно)'),lambda s=session:self.changed('spotify',s))
         browsers = [session for session in sessions if session.family]
         if browsers:
             label = Gtk.Label(label=text('Browser sessions · Apple Music / YouTube', 'Сеансы браузера · Apple Music / YouTube'))
@@ -53,12 +56,12 @@ class SourcePicker:
                 name += '\n' + title
             button(name, lambda s=session, service=site: self.changed(service, s))
         hint = Gtk.Label(label=text(
-            'Apple Music, Yandex Music and YouTube play inside Emberbox. You can also select a browser session.\n'
+            'Spotify, Apple Music, Yandex Music and YouTube play inside Emberbox. You can also select a browser session.\n'
             'Browser controls and sound may be shared with other tabs.',
-            'Apple Music, Яндекс Музыка и YouTube играют прямо в плеере. Можно также выбрать сеанс браузера.\n'
+            'Spotify, Apple Music, Яндекс Музыка и YouTube играют прямо в плеере. Можно также выбрать сеанс браузера.\n'
             'Управление и звук браузера могут быть общими для вкладок.') if browsers else text(
-                'Apple Music, Yandex Music and YouTube play inside Emberbox.',
-                'Apple Music, Яндекс Музыка и YouTube играют прямо в плеере.'))
+                'Spotify, Apple Music, Yandex Music and YouTube play inside Emberbox.',
+                'Spotify, Apple Music, Яндекс Музыка и YouTube играют прямо в плеере.'))
         hint.set_line_wrap(True)
         hint.set_max_width_chars(34)
         hint.get_style_context().add_class('caption')

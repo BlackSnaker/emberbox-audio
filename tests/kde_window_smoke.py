@@ -63,7 +63,7 @@ class DummyWeb:
 
 widget.SpotifyVolume=DummySound
 widget.Monitor=DummyMonitor
-widget.AppleWeb=widget.YandexWeb=DummyWeb
+widget.AppleWeb=widget.YandexWeb=widget.SpotifyWeb=DummyWeb
 widget.SpotifyAudioMeter.start=lambda *_args:None
 widget.Artwork.load=lambda _art,image,_url,size,*_args,**_kwargs:image.set_size_request(size,size)
 widget.STATE=runtime/'window.json'

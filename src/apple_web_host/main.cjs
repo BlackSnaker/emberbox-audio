@@ -10,8 +10,12 @@ const {attach:attachMediaQuality}=require(path.join(__dirname,'media_quality.cjs
 const {FlowDecks}=require('./flow.cjs');let flow=null;
 const {SpatialPlayback}=require('./spatial.cjs');let spatial=null;
 const yandex = process.env.EMBERBOX_WEB_SERVICE === 'yandex';
+const spotify = process.env.EMBERBOX_WEB_SERVICE === 'spotify';
+const integrationVersion = yandex?6:spotify?1:21;
 const service = yandex ? {title:'Yandex Music',origin:'https://music.yandex.ru/',
   url:'https://music.yandex.ru/',command:'emberboxYandexCommand',page:'yandex.js',error:'YANDEX_REQUEST_FAILED'} :
+  spotify ? {title:'Spotify',origin:'https://open.spotify.com/',url:'https://open.spotify.com/',
+    command:'emberboxSpotifyCommand',page:'spotify.js',error:'SPOTIFY_REQUEST_FAILED'} :
   {title:'Apple Music',origin:'https://music.apple.com/',url:'https://music.apple.com/us/new',
    command:'emberboxAppleCommand',page:'page.js',error:'APPLE_REQUEST_FAILED'};
 const methods = ['status','browse','tracks','search','play','transport','seek','artist','artistSection','release',...(yandex?['wave','feedback']:[])];
@@ -42,7 +46,7 @@ function record(changes) {
 }
 function appleHost(url) {
   try {const host=new URL(url).hostname;
-    return (yandex?['yandex.ru','yandex.com','yandex.net','yastatic.net','yastatic-net.ru']:['apple.com','applemusic.com','cdn-apple.com','mzstatic.com']).some(root=>host===root||host.endsWith('.'+root))?host:'other';
+    return (yandex?['yandex.ru','yandex.com','yandex.net','yastatic.net','yastatic-net.ru']:spotify?['spotify.com','scdn.co','spotifycdn.com']:['apple.com','applemusic.com','cdn-apple.com','mzstatic.com']).some(root=>host===root||host.endsWith('.'+root))?host:'other';
   }catch{return 'other';}
 }
 function diagnostic(kind, url='', code) {
@@ -74,13 +78,20 @@ function makeWindow(show=true) {
     webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true,
       allowRunningInsecureContent:false,webviewTag:false,safeDialogs:true,backgroundThrottling:false}});
   if(typeof win.setMenu==='function')win.setMenu(null);
+  if(spotify){
+    // Report this engine's real Chromium/Linux UA without another vendor app's
+    // product suffix. Website authentication remains Spotify's normal flow.
+    const ua=win.webContents.getUserAgent().replace(/\s(?:Electron|ChatGPT|EmberboxAudio|emberbox-audio)\/[^\s]+/g,'');
+    win.webContents.setUserAgent(ua);
+  }
   win.emberboxQuality=attachMediaQuality(win.webContents);
   win.on('page-title-updated',event=>event.preventDefault());
   if (process.env.EMBERBOX_APPLE_SOCKET) {
     win.on('close',event=>{if(!app.isQuitting){event.preventDefault();win.hide();}});
   }
   win.webContents.on('did-finish-load',()=>record({loaded:true}));
-  win.webContents.on('audio-state-changed',(_event, audible)=>record({audible,everAudible:state.everAudible||audible}));
+  if(spotify)win.webContents.on('did-navigate',(_event,url)=>{try{const u=new URL(url);record({signInLocation:u.hostname==='accounts.spotify.com'?'accounts':u.hostname==='open.spotify.com'?'player':'other'});}catch{}});
+  win.webContents.on('audio-state-changed',()=>{const audible=win.webContents.isCurrentlyAudible();record({audible,everAudible:state.everAudible||audible});});
   win.webContents.on('render-process-gone',(_event,details)=>record({rendererExitCode:details.exitCode}));
   win.webContents.on('console-message',(...args)=>{
     const details=args[1];
@@ -91,7 +102,7 @@ function makeWindow(show=true) {
     if(isMain&&code!==-3) diagnostic('page-load-failed',url,code);
   });
   win.webContents.setWindowOpenHandler(({url})=>{
-    try {const u=new URL(url);if(u.protocol==='https:'&&(yandex?['yandex.ru','yandex.com'].some(root=>u.hostname===root||u.hostname.endsWith('.'+root)):(u.hostname==='apple.com'||u.hostname.endsWith('.apple.com'))))
+    try {const u=new URL(url);if(u.protocol==='https:'&&(yandex?['yandex.ru','yandex.com'].some(root=>u.hostname===root||u.hostname.endsWith('.'+root)):spotify?(u.hostname==='spotify.com'||u.hostname.endsWith('.spotify.com')):(u.hostname==='apple.com'||u.hostname.endsWith('.apple.com'))))
       return {action:'allow',overrideBrowserWindowOptions:{autoHideMenuBar:true,
         webPreferences:{nodeIntegration:false,contextIsolation:true,sandbox:true,webSecurity:true}}};
     } catch {}
@@ -110,6 +121,15 @@ function yandexRoute(route) {
     if(!url.search&&(/^\/playlists\/[a-zA-Z0-9-]{1,100}$/.test(page)||/^\/users\/[\w.@-]{1,100}\/playlists\/\d{1,20}$/.test(page)))return page;
   }catch{}
   return '';
+}
+function spotifyRoute(route) {
+ if(typeof route!=='string'||route.length>1200)return '';
+ try{const url=new URL(route,service.origin);
+  if(url.origin!=='https://open.spotify.com'||url.hash)return '';
+  if(url.pathname==='/search'&&[...url.searchParams.keys()].every(k=>k==='q')&&url.searchParams.get('q')?.length<=200)return url.pathname+url.search;
+  if(url.search)return '';
+  return /^(\/|\/collection\/(tracks|playlists|albums)|\/(track|album|playlist)\/[A-Za-z0-9]{1,64}|\/artist\/[A-Za-z0-9]{1,64}(\/discography\/(all|album|single|compilation))?|\/search\/[^/]{1,800})$/.test(url.pathname)?url.pathname:'';
+ }catch{return '';}
 }
 async function command(win,request){
  if(spatial){const result=await spatial.intercept(flow?.current||win,request);if(result!==null)return result;}
@@ -140,37 +160,40 @@ async function pageRequest(win, request, navigations=0) {
   }
   if(!methods.includes(request.method)) throw Error('UNSUPPORTED');
   if(!win.webContents.getURL().startsWith(service.origin)) {
-    if(yandex&&request.method!=='status')throw Error('SIGN_IN_REQUIRED');
-    return {ready:false,authorized:false,integrationVersion:yandex?6:6};
+    if((yandex||spotify)&&request.method!=='status')throw Error('SIGN_IN_REQUIRED');
+    let signInError=false;
+    if(spotify&&win.webContents.getURL().startsWith('https://accounts.spotify.com/'))
+      signInError=await win.webContents.executeJavaScript("/something went wrong|try again later|что-то пошло не так/i.test(document.querySelector('h1, h2, [role=alert]')?.textContent||'')");
+    return {ready:false,authorized:false,signInError,integrationVersion:spotify?1:6};
   }
   const reasons=['CONTENT_EQUIVALENT','CONTENT_UNAVAILABLE','CONTENT_UNSUPPORTED','DEVICE_LIMIT','GEO_BLOCK',
     'INVALID_ARGUMENTS','MEDIA_LICENSE','MEDIA_KEY','MEDIA_PLAYBACK','NETWORK_ERROR','SUBSCRIPTION_ERROR','TypeError','ReferenceError','Error',
     'TOKEN_EXPIRED','UNAUTHORIZED_ERROR','UNSUPPORTED_ERROR','USER_INTERACTION_REQUIRED','WIDEVINE_CDM_EXPIRED',
-    'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND','REGION_UNAVAILABLE','SUBSCRIPTION_REQUIRED','ADAPTER_UNAVAILABLE','YANDEX_REQUEST_FAILED','FLOW_UNAVAILABLE','FLOW_CANCELLED','FLOW_NOT_READY'];
+    'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND','REGION_UNAVAILABLE','SUBSCRIPTION_REQUIRED','ADAPTER_UNAVAILABLE','YANDEX_REQUEST_FAILED','SPOTIFY_REQUEST_FAILED','PREMIUM_REQUIRED','PLAYBACK_RESTRICTED','REGION_UNAVAILABLE','FLOW_UNAVAILABLE','FLOW_CANCELLED','FLOW_NOT_READY'];
   const source='(async()=>{window.__emberboxPlaybackAllowed='+JSON.stringify(enabled)+';'+pageCommand+
     ';try{return await '+service.command+'('+JSON.stringify(request)+');}catch(e){'+
-    (yandex?'if(e.emberboxRoute)return {__emberboxNavigate:e.emberboxRoute};':'')+
-    'const code='+ (yandex?'String(e.message||e.name)': 'String(e.message||"").includes("Sign in to Apple Music")?"SIGN_IN_REQUIRED":String(e.message||"").includes("MusicKit is not ready")?"NOT_READY":e.errorCode||e.reason||e.name')+';const hints=["is not a function","Invalid queue","No playable","storefront","not writable","undefined","not supported","user interaction"];'+
+    ((yandex||spotify)?'if(e.emberboxRoute)return {__emberboxNavigate:e.emberboxRoute};':'')+
+    'const code='+ ((yandex||spotify)?'String(e.message||e.name)': 'String(e.message||"").includes("Sign in to Apple Music")?"SIGN_IN_REQUIRED":String(e.message||"").includes("MusicKit is not ready")?"NOT_READY":e.errorCode||e.reason||e.name')+';const hints=["is not a function","Invalid queue","No playable","storefront","not writable","undefined","not supported","user interaction"];'+
     'return {__emberboxError:'+JSON.stringify(reasons)+'.includes(code)?code:'+JSON.stringify(service.error)+','+
     'stage:["storefront","queue","start"].includes(e.emberboxStage)?e.emberboxStage:"other",'+
     'hint:hints.find(h=>String(e.message||"").includes(h))||"other"};}})()';
   const result=await win.webContents.executeJavaScript(source,['play','transport','wave','feedback'].includes(request.method));
-  if(yandex&&result?.__emberboxNavigate) {
-    const route=yandexRoute(result.__emberboxNavigate);
+  if((yandex||spotify)&&result?.__emberboxNavigate) {
+    const route=spotify?spotifyRoute(result.__emberboxNavigate):yandexRoute(result.__emberboxNavigate);
     if(!route||navigations>=1)throw Error('ADAPTER_UNAVAILABLE');
     await win.loadURL(new URL(route,service.origin).href);
     return pageRequest(win,request,navigations+1);
   }
   if(result?.__emberboxError){
-    diagnostic((yandex?'yandex-api-':'apple-api-')+result.stage+'-'+result.hint);
+    diagnostic((spotify?'spotify-api-':yandex?'yandex-api-':'apple-api-')+result.stage+'-'+result.hint);
     throw Error(result.__emberboxError);
   }
   if(request.method==='status')record({ready:!!result.ready,authorized:!!result.authorized,
     playing:!!result.playing,position:Number(result.position)||0,duration:Number(result.duration)||0,
     hasTrack:!!result.title,windowVisible:win.isVisible()});
   if(request.method==='status') {
-    result.integrationVersion=yandex?6:21;
-    if(!yandex){result.emberFlow=true;result.emberBeatSync=true;}
+    result.integrationVersion=integrationVersion;
+    if(!yandex&&!spotify){result.emberFlow=true;result.emberBeatSync=true;}
     result.audioQuality=win.emberboxQuality?.snapshot(String(result.id||result.title||''))||{};
     record({audioQuality:result.audioQuality,maximumQualityRequested:result.qualityPreference?.applied===true});
     if(yandex)record({capabilities:Object.fromEntries(['player','wave','navigation','metadata','store','legacy'].map(key=>[key,result.capabilities?.[key]===true]))});
@@ -199,7 +222,7 @@ function connectBridge(win) {
         const allowed=['CONTENT_EQUIVALENT','CONTENT_UNAVAILABLE','CONTENT_UNSUPPORTED','DEVICE_LIMIT','GEO_BLOCK',
           'INVALID_ARGUMENTS','MEDIA_LICENSE','MEDIA_KEY','MEDIA_PLAYBACK','NETWORK_ERROR','SUBSCRIPTION_ERROR','TypeError','ReferenceError','Error',
           'TOKEN_EXPIRED','UNAUTHORIZED_ERROR','UNSUPPORTED_ERROR','USER_INTERACTION_REQUIRED','WIDEVINE_CDM_EXPIRED',
-          'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND','REGION_UNAVAILABLE','SUBSCRIPTION_REQUIRED','ADAPTER_UNAVAILABLE','YANDEX_REQUEST_FAILED','FLOW_UNAVAILABLE','FLOW_CANCELLED','FLOW_NOT_READY'];
+          'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND','REGION_UNAVAILABLE','SUBSCRIPTION_REQUIRED','ADAPTER_UNAVAILABLE','YANDEX_REQUEST_FAILED','SPOTIFY_REQUEST_FAILED','PREMIUM_REQUIRED','PLAYBACK_RESTRICTED','REGION_UNAVAILABLE','FLOW_UNAVAILABLE','FLOW_CANCELLED','FLOW_NOT_READY'];
         const code=allowed.includes(value)||/^SPATIAL_[A-Z_]{1,50}$/.test(value)?value:value.includes('Sign in to Apple Music')?'SIGN_IN_REQUIRED':
           value.includes('MusicKit is not ready')?'NOT_READY':value==='TIMEOUT'?'TIMEOUT':service.error;
         if(!socket.destroyed)socket.write(JSON.stringify({id:request.id,error:code})+'\n');
@@ -219,17 +242,22 @@ const PROBE = `<!doctype html><meta charset="utf-8"><title>Emberbox local EME pr
  }catch(e){result.widevine=false;result.error=e.name;}
  await fetch('/result',{method:'POST',body:JSON.stringify(result)});
 })();</script>`;
+record({startupPhase:'starting'});
 app.whenReady().then(async()=>{
+  record({startupPhase:'ready'});
   if (typeof session.defaultSession.setProxy === 'function')
     await session.defaultSession.setProxy({mode:'system'});
   if (components && typeof components.whenReady==='function') await components.whenReady();
+  record({startupPhase:'components-ready'});
   const requests=session.defaultSession.webRequest;
   if(requests&&typeof requests.onErrorOccurred==='function')
-    requests.onErrorOccurred({urls:yandex?['https://*.yandex.ru/*','https://*.yandex.net/*']:['https://*.apple.com/*']},details=>{
+    requests.onErrorOccurred({urls:yandex?['https://*.yandex.ru/*','https://*.yandex.net/*']:spotify?['https://*.spotify.com/*','https://*.scdn.co/*']:['https://*.apple.com/*']},details=>{
       const errors=['net::ERR_CONNECTION_CLOSED','net::ERR_CONNECTION_RESET','net::ERR_TIMED_OUT',
         'net::ERR_NAME_NOT_RESOLVED','net::ERR_CERT_AUTHORITY_INVALID','net::ERR_FAILED'];
       diagnostic(errors.includes(details.error)?details.error:'request-error',details.url);
     });
+  if(spotify&&requests&&typeof requests.onCompleted==='function')
+    requests.onCompleted({urls:['https://*.spotify.com/*']},d=>{if(d.statusCode>=400)diagnostic('http-status',d.url,d.statusCode);});
   if (process.env.EMBERBOX_APPLE_PROBE==='1') {
     const server=http.createServer((req,res)=>{
       if(req.method==='POST'&&req.url==='/result') {
@@ -246,7 +274,7 @@ app.whenReady().then(async()=>{
   } else {
     const seconds=Number(process.env.EMBERBOX_APPLE_SMOKE_SECONDS||0);
     const win=makeWindow(!seconds && process.env.EMBERBOX_APPLE_HIDE!=='1');
-    if(!yandex){
+    if(!yandex&&!spotify){
       flow=new FlowDecks(win,makeWindow,pageRequest,service.url);
       spatial=new SpatialPlayback(pageRequest,()=>flow.cancel());
     }
