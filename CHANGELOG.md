@@ -2,6 +2,11 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.20.2 — 2026-10-29
+
+- Soften the incoming cover: a wider translucent wave edge, restrained refraction and a gradually fading warm reflection. A subtle scale settle returns to original colours and sharpness; the opening ripple is preserved.
+- The 1.35-second reveal follows presentation-frame time rather than variable GTK callback delivery. Playback never waits for the visual. Add a real-GL regression check for adjacent-frame changes.
+
 ## 0.20.1 — 2026-10-29
 
 - Fullscreen cover changes gain a water ripple: gentle photographic refraction, warm highlights and a circular incoming-image reveal. Longer preparation keeps a quiet animation; playback never waits for the visual.

@@ -19,6 +19,7 @@ import numpy as np
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'src'))
 from cover_ripple_gl import CoverRippleGL
+from cover_ripple import CoverRipple,smooth
 
 
 SIZE=320
@@ -155,6 +156,22 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected fixtu
         assert final[0,0,3]==0 and final[SIZE//2,SIZE//2,3]==255
         screenshot('outgoing-cover',baseline);screenshot('waiting-wave',wave)
         screenshot('liquid-handover',halfway);screenshot('incoming-cover',final)
+
+        # A broad liquid front must dissolve each point over many display
+        # frames. A sharp wipe can pass the endpoint tests yet feel abrupt.
+        warm=old.copy();warm.fill(0xc35032ff)
+        cool=new.copy();cool.fill(0x2d82aaff)
+        steps=[];previous=None
+        count=round(CoverRipple.REVEAL*60)+1
+        for index in range(count):
+            phase=index/(count-1)
+            current=frames.capture(warm,cool,.55+phase*CoverRipple.REVEAL,smooth(phase))
+            if previous is not None:
+                steps.append(np.max(np.abs(current[inside][...,:3].astype(int)-previous[inside][...,:3].astype(int))))
+            previous=current
+        assert max(steps)<=24,('The incoming image still has a sharp per-frame colour jump',max(steps))
+        assert sum(value>1 for value in steps)>count*.45,'The reveal must use its intermediate frames rather than hold then replace'
+        frames.capture(old,new,.68,1.)
 
         # Animation changes uniforms only: uploading a cover every frame would
         # compete with playback and animated artwork on slower machines.

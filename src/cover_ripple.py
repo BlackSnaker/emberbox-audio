@@ -9,7 +9,7 @@ def smooth(value):
 
 
 class CoverRipple(Gtk.Overlay):
-    REVEAL=.9
+    REVEAL=1.35
     MAX_WAIT=27.
 
     def __init__(self):
@@ -80,8 +80,11 @@ class CoverRipple(Gtk.Overlay):
     def advance(self,_widget,clock):
         if not self.active or not self.get_mapped():self.cancel();return False
         if not self.get_settings().get_property('gtk-enable-animations'):self.cancel();return False
-        now=GLib.get_monotonic_time()
-        if self.wait_start and now-self.wait_start>self.MAX_WAIT*1e6:self.cancel();return False
+        wall_now=GLib.get_monotonic_time()
+        if self.wait_start and wall_now-self.wait_start>self.MAX_WAIT*1e6:self.cancel();return False
+        # Sample the presentation clock, so varying GTK callback arrival times
+        # cannot jitter the optical front between otherwise regular frames.
+        now=clock.get_frame_time() if clock is not None else wall_now
         delta=max(0.,min(.05,(now-self.last_now)/1e6)) if self.last_now is not None else 0.
         self.last_now=max(now,self.last_now or now);self.age+=delta
         if self.ready and self.new is not None:
@@ -130,4 +133,3 @@ class CoverRipple(Gtk.Overlay):
     def close(self,*_):
         if self.closed:return
         self.cancel();self.closed=True
-

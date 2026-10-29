@@ -7,6 +7,11 @@ Concentric waves gently refract the photograph and catch warm grazing light.
 Once playback and the incoming artwork are ready, the new image unfolds from
 the wave's centre. Tracks sharing an album cover still receive a transition.
 
+The incoming image unfolds over 1.35 seconds through a broad translucent edge.
+Gentle optical movement settles as the warm reflection fades, leaving the
+original colours and sharpness. Timing follows presentation frames to avoid
+speed jitter from uneven UI event delivery.
+
 The visual starts immediately for queue selections and fullscreen transport
 buttons. Automatic changes follow the recording's identity rather than its
 image URL. Longer preparation leaves quiet, occasional ripples. Errors,

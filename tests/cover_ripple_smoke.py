@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 import time
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import gi
@@ -184,6 +185,17 @@ try:
         surface.last_now=GLib.get_monotonic_time()-2_000_000
         surface.advance(surface,None)
         assert 0<=surface.age-previous<=.050001,'A UI stall must clamp its animation time step'
+        surface.cancel();idle(surface)
+
+        # Delivery jitter must not move an otherwise steady presentation clock.
+        assert surface.begin(old)
+        wait(lambda:surface.last_now is not None,'The presentation-clock fixture did not tick')
+        origin=GLib.get_monotonic_time();surface.last_now=origin;start=surface.age
+        for index,jitter in enumerate((4000,17000,1000,19000,500),1):
+            frame=origin+index*16667
+            with patch.object(cover_ripple.GLib,'get_monotonic_time',return_value=frame+jitter):
+                surface.advance(surface,SimpleNamespace(get_frame_time=lambda:frame))
+            assert abs(surface.age-start-index*.016667)<.000001,'GTK callback jitter changed the reveal speed'
         surface.cancel();idle(surface)
 
         assert surface.begin(old)

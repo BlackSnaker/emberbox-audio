@@ -62,25 +62,30 @@ void main(){
   }
   slope*=strength;
 
-  // Readiness reveals the next cover through a broad liquid front, independent
-  // of how long it took to arrive. Its optical ridge joins the waiting ripple.
+  // A wide optical meniscus lets each point dissolve over several frames,
+  // rather than changing at the edge of a narrow circular wipe. The incoming
+  // photograph settles gently behind it, returning to its exact original UVs.
   vec2 farthest=max(centre,vec2(1)-centre)*viewport/max(1.0,scale);
-  float front=mix(-.20,length(farthest)+.20,reveal);
-  float blend=hasRoom==1?1.0-ease((distance-front+.125)/.25):0.0;
-  float ridge=(distance-front)/.033;
   float moving=sin(clamp(reveal,0.0,1.0)*3.14159265);
-  slope+=-.62*ridge*exp(-.5*ridge*ridge)*moving;
+  float feather=.22+.08*moving;
+  float front=mix(-.22,length(farthest)+.22,reveal);
+  float blend=hasRoom==1?1.0-ease((distance-front+feather)/(2.0*feather)):0.0;
+  float ridge=(distance-front)/.061;
+  float meniscus=exp(-.5*ridge*ridge)*moving*moving;
+  slope+=-.46*ridge*meniscus;
 
   vec2 offset=direction*slope*.0056*scale/max(viewport,vec2(1));
   vec4 oldImage=hasCover==1?premultiply(texture(cover,safeUV(uv+offset))):
                                 premultiply(texture(room,safeUV(uv+offset)));
-  vec4 newImage=hasRoom==1?premultiply(texture(room,safeUV(uv+offset*.68))):oldImage;
+  float settle=1.0+.008*(1.0-ease((reveal-.08)/.92));
+  vec2 incoming=(uv-.5)/settle+.5+offset*.55;
+  vec4 newImage=hasRoom==1?premultiply(texture(room,safeUV(incoming))):oldImage;
   vec4 image=mix(oldImage,newImage,blend);
 
   // A restrained grazing reflection catches each crest instead of drawing
   // opaque rings on the photograph. All shading fades fully with readiness.
   float light=dot(direction,normalize(vec2(-.65,-.76)))*slope;
-  float sheen=max(0.0,light)*.050;
+  float sheen=max(0.0,light)*.050+meniscus*.007;
   float shade=max(0.0,-light)*.024;
   image.rgb=image.rgb*(1.0-shade)+vec3(1.0,.84,.57)*sheen*image.a;
   float rim=exp(-pow((edgeDistance(uv*viewport)+1.15)/1.25,2.0));
