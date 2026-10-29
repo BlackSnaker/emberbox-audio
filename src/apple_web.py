@@ -35,6 +35,7 @@ class AppleWeb:
         self.spatial_preparing=False
         self.start_lock = threading.Lock()
         self.seek_timer=0;self.seek_next=None;self.seek_inflight=False;self.seek_intent=None
+        self.output_probe_at=0.;self.output_probe_busy=False;self.last_output=None
         self.timer = GLib.timeout_add(750, self.poll)
 
     @property
@@ -53,6 +54,28 @@ class AppleWeb:
         if self.closed or getattr(self,'lossless_connecting',False):return
         self.lossless_connecting=True
         self.pool.submit(self._connect_lossless).add_done_callback(lambda future:GLib.idle_add(self._lossless_connected,future))
+
+    def set_scene(self,mode,angle=None,hrtf=None):
+        self.action('spatial',operation='scene',mode=mode,**({'angle':angle} if angle is not None else {}),**({'hrtf':hrtf} if hrtf is not None else {}))
+
+    def _probe_output(self):
+        if self.closed or not self.enabled or self.upgrading or not self.state.get('spatial',{}).get('enabled'):return
+        now=time.monotonic()
+        if getattr(self,'output_probe_busy',False) or now-getattr(self,'output_probe_at',0)<3:return
+        self.output_probe_at=now;self.output_probe_busy=True
+        pid=self.pid
+        if getattr(self,'output_probe_pid',0)!=pid:self.last_output=None;self.output_probe_pid=pid
+        from spatial_output import inspect_output
+        self.pool.submit(inspect_output,pid).add_done_callback(lambda future:GLib.idle_add(self._output_done,future))
+
+    def _output_done(self,future):
+        self.output_probe_busy=False
+        if self.closed or self.upgrading:return False
+        try:output=future.result()
+        except (OSError,ValueError,subprocess.SubprocessError):return False
+        if output and self.enabled and output!=self.last_output:
+            self.last_output=output;self.action('spatial',operation='output',**output)
+        return False
 
     def _connect_lossless(self):
         enabled=self.state.get('spatial',{}).get('enabled') is True
@@ -160,7 +183,7 @@ class AppleWeb:
     def action(self, method, **params):
         if self.closed:
             return
-        if method=='spatial' and params.get('operation')=='prime':
+        if method=='spatial' and params.get('operation') in ('prime','output'):
             if self.enabled and self.connected:
                 def prepare():
                     # Speculation is optional. A slow/unavailable descriptor
@@ -248,10 +271,11 @@ class AppleWeb:
         try:
             self.state = self._seek_state(future.result())
             self.error = ''
-            if self.state.get('ready') and self.state.get('integrationVersion',0)<22 and not self.upgrade_attempted:
+            if self.state.get('ready') and self.state.get('integrationVersion',0)<23 and not self.upgrade_attempted:
                 self.upgrade_attempted = self.upgrading = True
                 self.pool.submit(self._upgrade,dict(self.state)).add_done_callback(
                     lambda item:GLib.idle_add(self._upgraded,item))
+            self._probe_output()
         except Exception:
             self.state = {}
         self.changed()
@@ -278,7 +302,7 @@ class AppleWeb:
             if self.connected:
                 try:
                     current = self.bridge.request('status')
-                    if current.get('ready') and current.get('integrationVersion',0)>=22 and (not state.get('authorized') or current.get('authorized')):
+                    if current.get('ready') and current.get('integrationVersion',0)>=23 and (not state.get('authorized') or current.get('authorized')):
                         break
                 except BridgeUnavailable:pass
             time.sleep(.3)

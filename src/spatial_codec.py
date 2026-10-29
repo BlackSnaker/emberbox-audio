@@ -107,8 +107,34 @@ class Frame(C.Structure):
         ('layout',C.c_char_p),('labels',C.c_void_p),('label_count',C.c_size_t)]
 
 
+class Speaker(C.Structure):
+    _fields_=[('size',C.c_uint32),('name',C.c_char_p),('azimuth',C.c_double),('elevation',C.c_double),('role',C.c_uint32)]
+
+
+class SpeakerLayout(C.Structure):
+    _fields_=[('size',C.c_uint32),('version',C.c_uint32),('name',C.c_char_p),('speakers',C.POINTER(Speaker)),('count',C.c_size_t)]
+
+
+def scene_profile(value=None):
+    value=value or {};mode=value.get('mode','headphones');angle=value.get('angle',30);hrtf=value.get('hrtf',0)
+    if mode not in ('speakers','headphones') or angle not in (20,30,40) or hrtf not in (0,1):raise ValueError('Invalid spatial scene')
+    return {'mode':mode,'angle':angle,'hrtf':hrtf}
+
+
+def speaker_pair(data):
+    """Fold the declared FL/FR/LFE render into two physical speaker channels."""
+    import numpy as np
+    values=np.frombuffer(data,dtype='<f4').reshape(-1,3)
+    # LFE is retained at the same equal-power dual-mono gain as the headphone
+    # path. One linked limiter follows this sum; ordinary ALAC is untouched.
+    output=values[:,:2].copy();output+=values[:,2:3]*np.float32(2**-.5)
+    if not np.isfinite(output).all():raise RuntimeError('SPATIAL_PCM_INVALID')
+    return output.astype('<f4',copy=False).tobytes()
+
+
 class Joc:
-    def __init__(self,library,output):
+    def __init__(self,library,output,scene=None):
+        self.scene=scene_profile(scene);self.labels_checked=False
         lib=C.CDLL(library);self.lib=lib;self.output=output;self.confirmed=False;self.handle=C.c_void_p()
         abi=bind(lib,'openjoc_get_abi_version',C.c_uint32)()
         if abi>>16!=1 or abi&65535<7:raise RuntimeError('SPATIAL_DECODER_VERSION')
@@ -120,6 +146,7 @@ class Joc:
         self.init_frame=bind(lib,'openjoc_pcm_frame_init',C.c_int,C.POINTER(Frame))
         self.drain=bind(lib,'openjoc_stream_decoder_drain',C.c_int,C.c_void_p)
         self.inspect=bind(lib,'openjoc_stream_decoder_copy_live_inspection_json',C.c_int,C.c_void_p,C.c_void_p,C.c_size_t,C.POINTER(C.c_size_t))
+        self.label=bind(lib,'openjoc_stream_decoder_get_channel_label',C.c_char_p,C.c_void_p,C.c_size_t)
         config=Config()
         if init(C.byref(config))!=0:raise RuntimeError('SPATIAL_DECODER_INIT')
         # The virtual speakers are rendered into two ears, never sent as a
@@ -127,6 +154,14 @@ class Joc:
         # attenuation nor broadcast DRC. Keep the LFE in both output channels;
         # the downstream linked peak limiter protects the combined stereo mix.
         config.render_mode=2;config.virtual_layout=b'7.1.4'
+        config.hrtf=self.scene['hrtf']
+        if self.scene['mode']=='speakers':
+            angle=self.scene['angle']
+            speakers=(Speaker*3)(Speaker(C.sizeof(Speaker),b'FL',angle,0,0),Speaker(C.sizeof(Speaker),b'FR',-angle,0,0),Speaker(C.sizeof(Speaker),b'LFE',0,0,1))
+            layout=SpeakerLayout(C.sizeof(SpeakerLayout),1,b'Ember stereo pair',speakers,3)
+            self.geometry=(speakers,layout)
+            config.render_mode=0;config.speaker_layout=b'2.1';config.virtual_layout=None
+            config.custom=C.cast(C.pointer(layout),C.c_void_p)
         config.drc=0;config.dialnorm=2;config.lfe=1
         if create(C.byref(config),C.byref(self.handle))!=0:raise RuntimeError('SPATIAL_DECODER_INIT')
 
@@ -135,8 +170,12 @@ class Joc:
             frame=Frame();self.init_frame(C.byref(frame));status=self.receive(self.handle,C.byref(frame))
             if status in (0,1,3):return
             if status!=2:raise RuntimeError('SPATIAL_UNSUPPORTED_JOC')
-            if frame.format!=1 or frame.channels!=2 or frame.rate!=48000 or not 0<frame.length<=1048576 or frame.length!=frame.samples*8:
+            channels=3 if self.scene['mode']=='speakers' else 2
+            if frame.format!=1 or frame.channels!=channels or frame.rate!=48000 or not 0<frame.length<=1048576 or frame.length!=frame.samples*channels*4:
                 raise RuntimeError('SPATIAL_PCM_FORMAT')
+            if not self.labels_checked and channels==3:
+                if [self.label(self.handle,i) for i in range(3)]!=[b'FL',b'FR',b'LFE']:raise RuntimeError('SPATIAL_PCM_FORMAT')
+                self.labels_checked=True
             if not self.confirmed:
                 out=C.create_string_buffer(65536);required=C.c_size_t()
                 if self.inspect(self.handle,out,len(out),C.byref(required))!=0 or json.loads(out.value).get('joc_present') is not True:
@@ -144,6 +183,7 @@ class Joc:
                 self.confirmed=True
             data=C.string_at(frame.data,frame.length);values=array.array('f');values.frombytes(data)
             if not all(map(math.isfinite,values)):raise RuntimeError('SPATIAL_PCM_INVALID')
+            if channels==3:data=speaker_pair(data)
             self.output(data,frame.samples)
 
     def feed(self,pointer,size):

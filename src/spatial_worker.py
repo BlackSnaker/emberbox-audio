@@ -12,7 +12,7 @@ import sys
 import threading
 import time
 import uuid
-from spatial_codec import Cdm,Joc,key_identifier
+from spatial_codec import Cdm,Joc,key_identifier,scene_profile
 from spatial_demux import samples
 from spatial_aac import Aac,PcmResampler,configuration
 from spatial_alac import Alac,configuration as alac_configuration
@@ -47,7 +47,8 @@ def listen():
             elif value.get('type')=='park':
                 seeks.park()
             elif value.get('type')=='seek':
-                seeks.submit(value['position'],value['generation'])
+                selection={'reconfigure':True,'scene':scene_profile(value['scene'])} if 'scene' in value else None
+                seeks.submit(value['position'],value['generation'],selection)
                 emit({'type':'seek-state','generation':value['generation'],'stage':'requested'})
             elif value.get('type')=='response':
                 target=pending.get(value.get('id'))
@@ -128,13 +129,16 @@ def decode_pass(args,prepared,runtime,rate,cdm,licensed,license_key,writer,origi
                         rendered_format={'codec':'aac','evidence':'decoder','sampleRate':source_rate,'channels':2,'outputSampleRate':rate}
                         joc=Aac(crypto['asc'],output,cancelled,output_rate=rate)
                     elif crypto.get('codec')=='eac3':
-                        rendered_format={'codec':'eac3','variant':'dolby-atmos','evidence':'decoder','sampleRate':48000,'channels':2,'renderer':'openjoc-binaural','outputSampleRate':rate}
+                        scene=scene_profile(args.get('scene'))
+                        rendered_format={'codec':'eac3','variant':'dolby-atmos','evidence':'decoder','sampleRate':48000,'channels':2,
+                            'renderer':'openjoc-speakers' if scene['mode']=='speakers' else 'openjoc-binaural',
+                            'speakerAngle':scene['angle'],'hrtfPreset':scene['hrtf'],'outputSampleRate':rate}
                         # Removing dialogue attenuation can put a correctly
                         # reconstructed stereo sum above full scale. Protect
                         # only Atmos, after binaural rendering and before Flow.
                         # Ordinary ALAC samples never pass through this limiter.
                         resampler=PcmResampler(48000,rate,output,cancelled,peak_limit=True)
-                        joc=Joc(runtime['decoder'],resampler.write)
+                        joc=Joc(runtime['decoder'],resampler.write,**({'scene':scene} if 'scene' in args else {}))
                     else:raise RuntimeError('SPATIAL_CODEC_MISMATCH')
                     seeks.attach(joc,cancelled)
                     if resampler:seeks.attach(resampler,cancelled)
@@ -183,7 +187,9 @@ def main():
         while value:=seeks.next_selection():
             origin,generation,selection,cancelled=value
             try:
-                if selection is not None:
+                if selection is not None and selection.get('reconfigure') is True:
+                    pass_args={**pass_args,'scene':scene_profile(selection.get('scene'))}
+                elif selection is not None:
                     prepared=selection['prepared'];licensed={};pass_args=selection
                     if (prepared.get('drm')=='fairplay')!=fairplay:raise RuntimeError('SPATIAL_CODEC_MISMATCH')
                     if fairplay:

@@ -6,10 +6,34 @@ import numpy as np
 from scipy.signal import resample_poly
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 from spatial_aac import PcmResampler
-from spatial_codec import Config,Joc
+from spatial_codec import Config,Joc,SpeakerLayout,speaker_pair
 
 
 class SpatialMusicConfigTests(unittest.TestCase):
+    def test_speaker_geometry_and_hrtf_are_separate_native_render_paths(self):
+        seen=[]
+        def create(pointer,handle):
+            c=ctypes.cast(pointer,ctypes.POINTER(Config)).contents
+            if c.render_mode==0:
+                layout=ctypes.cast(c.custom,ctypes.POINTER(SpeakerLayout)).contents
+                seen.append([(layout.speakers[i].name,layout.speakers[i].azimuth,layout.speakers[i].role) for i in range(layout.count)])
+            else:seen.append((c.render_mode,c.hrtf))
+            return 0
+        def bind(lib,name,*types):
+            if name=='openjoc_get_abi_version':return lambda:0x10007
+            if name=='openjoc_stream_decoder_create':return create
+            return Mock(return_value=0)
+        with patch('spatial_codec.C.CDLL'),patch('spatial_codec.bind',side_effect=bind):
+            Joc('fixture',Mock(),scene={'mode':'speakers','angle':40,'hrtf':0}).close()
+            Joc('fixture',Mock(),scene={'mode':'headphones','angle':30,'hrtf':1}).close()
+        self.assertEqual(seen,[[ (b'FL',40,0),(b'FR',-40,0),(b'LFE',0,1)],(2,1)])
+
+    def test_speaker_fold_preserves_front_channels_and_equal_power_bass(self):
+        source=np.array([[.1,.3,.2],[-.4,.2,-.1],[0,0,1]],dtype='<f4')
+        out=np.frombuffer(speaker_pair(source.tobytes()),dtype='<f4').reshape(-1,2)
+        np.testing.assert_allclose(out,source[:,:2]+source[:,2:3]/np.sqrt(2),atol=1e-7)
+        np.testing.assert_allclose(out[:,0]-out[:,1],source[:,0]-source[:,1],atol=1e-7)
+
     def test_music_overrides_native_cinema_defaults_before_creating_the_renderer(self):
         configs=[]
         def initialize(pointer):

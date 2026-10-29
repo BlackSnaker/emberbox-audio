@@ -13,6 +13,7 @@ class EmberFlow:
         self.error='';self.youtube=None;self.apple=None;self.pending_item=None
         self.last_position=None;self.last_time=None;self.mixing_until=0.;self.clock=time.monotonic
         self.quiet_since=None
+        self.scene_token=None
         try:
             if path.stat().st_size<4096:
                 saved=json.loads(path.read_text());self.enabled=saved.get('enabled') is True
@@ -82,6 +83,13 @@ class EmberFlow:
     def tick(self,state):
         if self.closed:return
         h=self.host;s=self.music;source=h.source;now=self.clock()
+        if source=='apple-music' and h.apple_mode=='native':
+            scene=getattr(h.apple_web,'state',{}).get('spatial',{}).get('scene') or {}
+            token=(scene.get('mode'),scene.get('angle') if scene.get('mode')=='speakers' else scene.get('hrtf'))
+            if token!=self.scene_token:
+                previous=self.scene_token;self.scene_token=token
+                if previous is not None:self.cancel();s.changed()
+        else:self.scene_token=None
         fast_apple=source=='apple-music' and h.apple_mode=='native' and getattr(h.apple_web,'state',{}).get('spatial',{}).get('fastSwitch') is True
         if (self.enabled or fast_apple) and self.supported and s.book.active is None and state.get('playing') and not s.loading:
             current=s.book.current(source)

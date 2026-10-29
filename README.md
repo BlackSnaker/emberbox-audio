@@ -103,6 +103,13 @@ Free-form moods and scenes use a local model; follow-ups can refine the previous
 set. Direct commands remain immediate.
 
 
+## A place in the music
+
+**Two speakers or headphones — a scene for each.** Open **Settings → Soundstage**
+for an animated Grunesphism card with physical speaker geometry, a separate
+binaural headphone path and remembered output preferences. Bluetooth codec and
+source quality remain distinct. [Explore the listening scenes →](docs/SOUNDSTAGE.md)
+
 ## EmberFlow — one song flows into the next
 
 A tactile amber switch blends the tail of one track into the opening of the next.

@@ -2,6 +2,7 @@
 const fs=require('node:fs');
 const path=require('node:path');
 const {spawn}=require('node:child_process');
+const {Scenes,signature}=require('./scene.cjs');
 const source=fs.readFileSync(path.join(__dirname,'spatial_source.js'),'utf8');
 const errors=new Set(['SIGN_IN_REQUIRED','SUBSCRIPTION_REQUIRED','DEVICE_LIMIT','INVALID_ARGUMENTS',
  'SPATIAL_NETWORK','SPATIAL_SOURCE_LIMIT','SPATIAL_SOURCE_UNSUPPORTED','SPATIAL_NO_ATMOS_ASSET',
@@ -25,21 +26,32 @@ class SpatialPlayback {
  constructor(page,cancelFlow){
   this.page=page;this.cancelFlow=cancelFlow;this.source=sourceRequest;this.session=null;
   this.blocked=new Set();this.error='';this.revision=0;this.generation=0;
-  try{this.enabled=JSON.parse(fs.readFileSync(process.env.EMBERBOX_SPATIAL_CONFIG,'utf8')).enabled===true;}catch{this.enabled=false;}
+  this.scenes=new Scenes(process.env.EMBERBOX_SPATIAL_CONFIG);this.enabled=this.scenes.enabled;
  }
  info(){const r=this.session;return {enabled:this.enabled,available:!!runtime(),losslessAvailable:!!fairplayRuntime(),fastSwitch:true,fastSeek:true,seeking:!!r?.seeking,seekStage:r?.active.seekStage||'',phase:r?.state.phase||'idle',error:this.error,switching:!!r?.manual,switchError:this.switchError||null,
-  flow:r&&(r.transition||!r.standby&&r.decks.filter(Boolean).length>1)?'mixing':r?.standby?.ready?'ready':r?.standby?'preparing':'idle',flowError:this.flowError||'',workerExit:this.workerExit||null,fragment:this.fragmentDebug||null,mix:this.mixDebug||null,switchTiming:this.switchTiming||null};}
+  flow:r&&(r.transition||!r.standby&&r.decks.filter(Boolean).length>1)?'mixing':r?.standby?.ready?'ready':r?.standby?'preparing':'idle',flowError:this.flowError||'',workerExit:this.workerExit||null,fragment:this.fragmentDebug||null,mix:this.mixDebug||null,switchTiming:this.switchTiming||null,
+  scene:{...this.scenes.snapshot(),changing:!!(r?.scenePending||r?.seeking)}};}
  async configure(enabled){
   if(typeof enabled!=='boolean')throw Error('INVALID_ARGUMENTS');
   if(enabled&&!runtime())throw Error('SPATIAL_SETUP_REQUIRED');
   this.enabled=enabled;this.blocked.clear();this.error='';this.switchError=null;
-  const file=process.env.EMBERBOX_SPATIAL_CONFIG;
-  if(file){fs.mkdirSync(path.dirname(file),{recursive:true,mode:0o700});fs.writeFileSync(file+'.tmp',JSON.stringify({enabled}),{mode:0o600});fs.renameSync(file+'.tmp',file);}
+  this.scenes.save(enabled);
   if(!enabled)await this.stop(true);return this.info();
  }
  matches(metadata,state){return String(metadata.id||'')===String(state.id||'')||!!metadata.catalogId&&String(metadata.catalogId)===String(state.catalogId||'');}
+ applyScene(){
+  const r=this.session;if(!r)return;
+  const scene=this.scenes.render();
+  if(r.active.scene&&signature(r.active.scene)===signature(scene)){r.scenePending=false;return;}
+  if(r.manual||r.transition||r.seeking||!r.active.quality){r.scenePending=true;return;}
+  r.scenePending=false;
+  this.flow(r,{operation:'cancel',force:true}).catch(()=>{});
+  if(r.active.quality.variant==='dolby-atmos')this.seek(r,r.state.position);
+  else r.active.scene=scene; // Ordinary Lossless keeps its original stereo PCM.
+ }
  merge(win,state){
   const id=String(state.id||state.catalogId||'');let r=this.session;
+  if(r?.scenePending)this.applyScene();
   if(r&&this.matches(r.active.metadata,state))r.synchronizing=false;
   // A paused MusicKit queue may retain the previous nowPlayingItem. The native
   // output owns its metadata until an explicit command or new web playback.
@@ -52,7 +64,7 @@ class SpatialPlayback {
    audioQuality:r.active.quality||state.audioQuality,ended:r.state.phase==='ended',emberFlow:!!r.active.quality&&r.state.phase!=='preparing',emberBeatSync:false}:{}),spatial:this.info()};
  }
  begin(win,metadata,position=metadata.position,paused=false){
-  const deck={metadata:{...metadata},slot:0,generation:++this.generation,requestKey:'native-'+(++this.generation),quality:null,ready:false,context:null,child:null};
+  const deck={metadata:{...metadata},slot:0,generation:++this.generation,requestKey:'native-'+(++this.generation),scene:this.scenes.render(),quality:null,ready:false,context:null,child:null};
   const nativeRuntime=runtime();
   const r={win,nativeRuntime,rate:nativeRuntime?.fairplay?192000:48000,active:deck,decks:[deck,null],standby:null,mixer:null,paused,
    state:{phase:'preparing',position:Number(position)||0,playing:!paused},lastAdvance:Date.now(),flowRevision:0,preparation:Promise.resolve(),idle:[null,null]};
@@ -133,6 +145,7 @@ class SpatialPlayback {
   await this.loadDeck(r,r.active,await this.source(r.win,{action:'prepare',requestKey:r.active.requestKey,id,kind:String(id).startsWith('i.')?'library-songs':'songs',allowStereo:true,fairplay:!!r.nativeRuntime?.fairplay}),r.state.position);
  }
  async loadDeck(r,deck,prepared,position=0){
+  deck.scene=this.scenes.render();
   deck.context=prepared.contextId;deck.prepared=prepared;
   if(this.session!==r||!r.decks.includes(deck)){this.source(r.win,{action:'close',contextId:deck.context}).catch(()=>{});return;}
   if(deck===r.active&&Number.isFinite(r.pendingSeek)){position=r.pendingSeek;delete r.pendingSeek;}
@@ -147,13 +160,13 @@ class SpatialPlayback {
   const reusable=deck.child&&!deck.child.killed&&deck.child.exitCode==null&&deck.persistent&&prepared.drm==='fairplay'&&deck.loads<8&&(deck.used||0)+prepared.licences.length<=16;
   deck.reusedHost=!!reusable;
   if(reusable){
-   deck.loads++;this.send(deck.child,{type:'load',prepared,position,generation:deck.generation,fullPreroll:r.nativeOnly===true});return;
+   deck.loads++;this.send(deck.child,{type:'load',prepared,position,generation:deck.generation,scene:deck.scene,fullPreroll:r.nativeOnly===true});return;
   }
   this.destroyWorker(deck);deck.persistent=prepared.drm==='fairplay';deck.loads=1;deck.used=0;
   const child=deck.child=this.spawn(process.env.EMBERBOX_SPATIAL_WORKER,['pipe','pipe','pipe','pipe'],r.rate);
   this.wire(child,v=>{if(deck.child===child)this.message(r,deck,v);},code=>{if(deck.child===child)this.deckFailed(r,deck,code);});
   this.pipePcm(r,deck,child);
-  this.send(child,{type:'start',runtime:r.nativeRuntime,outputRate:r.rate,cdm:process.env.EMBERBOX_WIDEVINE,prepared,position,pcm:true,generation:deck.generation,fullPreroll:r.nativeOnly===true});
+  this.send(child,{type:'start',runtime:r.nativeRuntime,outputRate:r.rate,cdm:process.env.EMBERBOX_WIDEVINE,prepared,position,pcm:true,generation:deck.generation,scene:deck.scene,fullPreroll:r.nativeOnly===true});
  }
  message(r,deck,value){
   if(this.session!==r)return;
@@ -192,8 +205,10 @@ class SpatialPlayback {
    if(required&&(q?.codec!==required.codec||q?.variant!==required.variant||Number(q?.sampleRate)<required.sampleRate||required.bitDepth&&Number(q?.bitDepth)<required.bitDepth)){
     this.deckFailed(r,deck,'SPATIAL_QUALITY_CHANGED');return;
    }
-   if(q?.codec==='eac3'&&q.variant==='dolby-atmos'&&q.evidence==='decoder'&&q.renderer==='openjoc-binaural'&&q.sampleRate===48000&&q.channels===2&&(q.outputSampleRate===undefined||q.outputSampleRate===r.rate)){
-    deck.quality={codec:'eac3',variant:'dolby-atmos',evidence:'decoder',renderer:'openjoc-binaural',sampleRate:48000,channels:2,...(r.rate!==48000?{outputSampleRate:r.rate}:{})};
+   if(q?.codec==='eac3'&&q.variant==='dolby-atmos'&&q.evidence==='decoder'&&['openjoc-binaural','openjoc-speakers'].includes(q.renderer)&&q.sampleRate===48000&&q.channels===2&&(q.outputSampleRate===undefined||q.outputSampleRate===r.rate)){
+    if(q.renderer==='openjoc-speakers'&&![20,30,40].includes(q.speakerAngle))return;
+    deck.quality={codec:'eac3',variant:'dolby-atmos',evidence:'decoder',renderer:q.renderer,sampleRate:48000,channels:2,
+     ...(q.renderer==='openjoc-speakers'?{speakerAngle:q.speakerAngle}:{hrtfPreset:q.hrtfPreset===1?1:0}),...(r.rate!==48000?{outputSampleRate:r.rate}:{})};
     if(deck===r.active){clearTimeout(r.watchdog);r.lastAdvance=Date.now();}
    }else if(q?.codec==='aac'&&q.evidence==='decoder'&&[44100,48000,32000,24000].includes(q.sampleRate)&&q.outputSampleRate===r.rate&&q.channels===2){
     deck.quality={codec:'aac',evidence:'decoder',sampleRate:q.sampleRate,channels:2,outputSampleRate:r.rate};
@@ -362,7 +377,8 @@ class SpatialPlayback {
   if(!deck.child){r.pendingSeek=position;return {ok:true,seeking:true,position};}
   deck.generation=++this.generation;deck.ready=false;deck.position=position;
   this.send(r.mixer,{type:'seek',slot:deck.slot,generation:deck.generation,position});
-  this.send(deck.child,{type:'seek',generation:deck.generation,position});
+  deck.scene=this.scenes.render();r.scenePending=false;
+  this.send(deck.child,{type:'seek',generation:deck.generation,position,scene:deck.scene});
   clearTimeout(r.seekTimer);r.seekTimer=setTimeout(()=>{
    if(this.session===r&&r.seeking)this.failed(r,'SPATIAL_SEEK_TIMEOUT');
   },12000);
@@ -432,6 +448,11 @@ class SpatialPlayback {
   if(restore)await this.restore(r,revision);
  }
  async intercept(win,request){
+  if(request.method==='spatial'&&['scene','output'].includes(request.params?.operation)){
+   if(request.params.operation==='scene')this.scenes.set(request.params);
+   else this.scenes.setOutput(request.params);
+   this.applyScene();return this.info();
+  }
   if(request.method==='spatial'&&request.params?.operation==='formats')return this.source(win,{action:'inspect',id:request.params.id,kind:request.params.kind,enhanced:request.params.enhanced,extended:request.params.extended,encryption:request.params.encryption,fairplayMetadata:request.params.fairplayMetadata});
   if(request.method==='spatial'&&request.params?.operation==='prime')return this.prime(win,request.params);
   if(['play','transport','seek','enable','spatial'].includes(request.method))this.revision++;

@@ -65,10 +65,12 @@ streaming FFmpeg resampler. This does not increase its original quality.
 unchanged. Ordinary MusicKit playback keeps its existing Beats mode.
 
 OpenJOC is an independent renderer, without Dolby certification or Apple's app
-renderer. Output is two-channel PCM for headphones; Atmos bitstream output to
+renderer. Output is two-channel PCM for speakers or headphones; Atmos bitstream output to
 an AV receiver and head tracking are not implemented. The sound server, Bluetooth
 or output device may resample or otherwise process audio. The source badge does
 not certify an unchanged signal all the way to the headphones.
+
+[Choose the physical speaker or headphone scene →](SOUNDSTAGE.md)
 
 ### Atmos volume on stereo devices
 

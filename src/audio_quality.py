@@ -35,7 +35,8 @@ def describe(state):
         frequency=f'{rate/1000:g}'.replace('.',text('.',','))
         details.append(frequency+' '+text('kHz','кГц'))
     if known and channels:
-        details.append(text('Binaural · 2-channel PCM','Пространственный · PCM, 2 канала') if name=='Dolby Atmos' and value.get('renderer')=='openjoc-binaural'
+        details.append(text('Headphones · binaural PCM, 2 ch','Наушники · бинауральный PCM, 2 канала') if name=='Dolby Atmos' and value.get('renderer')=='openjoc-binaural'
+            else text('Speaker pair · object PCM, 2 ch','Стереопара · объектный PCM, 2 канала') if name=='Dolby Atmos' and value.get('renderer')=='openjoc-speakers'
             else text('Stereo','Стерео') if channels==2 else text('Mono','Моно') if channels==1 else f'{channels} '+text('channels','каналов'))
     output_rate=bounded(value.get('outputSampleRate'),8000,768000)
     if known and output_rate and output_rate!=rate:details.append(text('Output','Выход')+': '+f'{output_rate/1000:g} '+text('kHz','кГц'))
@@ -54,6 +55,10 @@ def describe(state):
     elif preference.get('mode')=='external':
         policy=text('Choose the highest quality in the source app settings.','Выбери максимальное качество в настройках приложения-источника.')
     spatial=state.get('spatial') if isinstance(state.get('spatial'),dict) else {}
+    scene=spatial.get('scene') or {}
+    if known and scene.get('bluetooth'):
+        transport='Bluetooth'+(' · '+str(scene.get('codec')).upper().replace('_',' ') if scene.get('codec') else '')
+        details.append(transport)
     if spatial.get('enabled') and spatial.get('phase')=='preparing':
         badge=text('Preparing audio…','Готовим звук…') if spatial.get('losslessAvailable') else text('Preparing Atmos…','Готовим Atmos…');known=False;name=''
         details=[text('Preparing the best available stream','Подготовка лучшего доступного потока')]

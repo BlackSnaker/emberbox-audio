@@ -76,9 +76,20 @@ class SettingsMenu:
             toggle.set_sensitive(not getattr(apple,'spatial_preparing',False))
             toggle.connect('toggled',lambda button:(popup.popdown(),apple.set_spatial(button.get_active())))
             box.pack_start(toggle,False,False,3)
-            note=Gtk.Label(label=text('Spatial headphones with EmberFlow. Beat alignment is unavailable in this mode.','Пространственный звук и EmberFlow для наушников. Подгонка битов в этом режиме недоступна.'))
+            note=Gtk.Label(label=text('Atmos scenes with EmberFlow. Beat alignment is unavailable in this mode.','Сцена Atmos и EmberFlow. Подгонка битов в этом режиме недоступна.'))
             note.set_line_wrap(True);note.set_max_width_chars(30);note.set_xalign(0)
             note.get_style_context().add_class('caption');box.pack_start(note,False,False,2)
+            if state.get('enabled'):
+                scene=Gtk.Button(label=text('Soundstage · speakers / headphones','Звуковая сцена · колонки / наушники'))
+                scene.get_style_context().add_class('settings-action');scene.set_has_tooltip(False)
+                def open_scene(_button):
+                    from scene_control import SceneControl
+                    popup.popdown()
+                    if getattr(self,'scene_popup',None):self.scene_popup.destroy()
+                    self.scene_popup=Gtk.Popover.new(anchor);self.scene_popup.get_style_context().add_class('scene-popover')
+                    self.scene_control=SceneControl(apple);self.scene_popup.add(self.scene_control)
+                    self.scene_popup.connect('closed',lambda item:item.destroy());self.scene_popup.show_all();self.scene_popup.popup()
+                scene.connect('clicked',open_scene);box.pack_start(scene,False,False,4)
             connect=Gtk.Button(label=text('Connect Apple Lossless…','Подключить Apple Lossless…'))
             connect.set_sensitive(not getattr(apple,'lossless_connecting',False));connect.set_has_tooltip(False)
             connect.get_style_context().add_class('settings-action')

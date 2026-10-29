@@ -21,17 +21,19 @@ class SpatialHostTests(unittest.TestCase):
             def license(ident,uri):
                 key=('0' if '/P000000000/' in uri else ident,uri);host.contexts[key]='opaque';return 'opaque'
             host.license.side_effect=license
-            requests=Mock();requests.next_selection.side_effect=[(0,1,first,threading.Event()),(40,2,None,threading.Event()),(0,3,second,threading.Event()),None]
+            scene={'mode':'headphones','angle':30,'hrtf':1}
+            requests=Mock();requests.next_selection.side_effect=[(0,1,first,threading.Event()),(40,2,None,threading.Event()),(50,3,{'reconfigure':True,'scene':scene},threading.Event()),(0,4,second,threading.Event()),None]
             bootstrap=queue.Queue();bootstrap.put({'type':'warm','backend':'fairplay','runtime':runtime,'outputRate':48000})
             seen=[]
             def decode(args,prepared,runtime,rate,actual,licensed,authorize,writer,position,generation,cancelled):
                 self.assertIs(actual,host);seen.append((prepared['contextId'],position,generation))
                 self.assertNotIn(0,licensed,'Unused initialization keys delay the selected track')
+                if generation==3:self.assertEqual(args['scene'],scene)
                 authorize(1);self.assertEqual(set(licensed),{1})
             with patch.object(worker,'bootstrap',bootstrap),patch.object(worker,'seeks',requests),patch.object(worker,'listen'),patch.object(worker,'FairPlay',return_value=host) as construct,patch.object(worker,'PcmWriter'),patch.object(worker,'decode_pass',side_effect=decode),patch.object(worker,'emit'),patch('spatial_worker.os.dup2'),patch('spatial_worker.os.close'):
                 worker.main()
             construct.assert_called_once_with({});host.close.assert_called_once()
-            self.assertEqual(seen,[('context-123',0,1),('context-123',40,2),('context-456',0,3)])
+            self.assertEqual(seen,[('context-123',0,1),('context-123',40,2),('context-123',50,3),('context-456',0,4)])
             self.assertEqual(len(host.contexts),2)
             self.assertTrue(all('/P000000000/' not in call.args[1] for call in host.license.call_args_list))
 

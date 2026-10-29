@@ -179,6 +179,15 @@ p.loadDeck=async(r,deck,prepared)=>{deck.context=prepared.contextId;deck.child=c
  await new Promise(resolve=>setTimeout(resolve,400));
  assert.deepEqual(listed,['i.first','789'],'Library album rows did not prime the bounded first two songs');
  p.prime=realPrime;
+ await p.configure(true);current={...metadata};p.merge(win,metadata);r=p.session;r.active.quality=quality;r.state.phase='playing';
+ const sceneWorker=r.active.child,sceneMixer=r.mixer,scenePosition=r.state.position;
+ await p.intercept(win,{method:'spatial',params:{operation:'output',key:'a'.repeat(32),kind:'headphones',label:'Test Bluetooth pair',bluetooth:true,codec:'sbc',rate:48000}});
+ await p.intercept(win,{method:'spatial',params:{operation:'scene',mode:'speakers',angle:40}});
+ assert.equal(p.info().scene.mode,'speakers');assert.equal(r.active.child,sceneWorker);assert.equal(r.mixer,sceneMixer);
+ assert.equal(r.state.position,scenePosition);assert.equal(commands.at(-1).type,'seek');assert.equal(commands.at(-1).scene.angle,40);
+ p.message(r,r.active,{type:'quality',generation:r.active.generation,audioQuality:{...quality,renderer:'openjoc-speakers',speakerAngle:40}});
+ assert.equal(r.active.quality.renderer,'openjoc-speakers');
+ await p.configure(false);assert.equal(JSON.parse(fs.readFileSync(process.env.EMBERBOX_SPATIAL_CONFIG)).devices['a'.repeat(32)].mode,'speakers');
  const profile=path.join(root,'native-profile');fs.mkdirSync(profile);fs.writeFileSync(path.join(profile,'session-ready'),'fixture');
  process.env.EMBERBOX_FAIRPLAY_RUNTIME=path.join(root,'fairplay.json');
  fs.writeFileSync(process.env.EMBERBOX_FAIRPLAY_RUNTIME,JSON.stringify({schema:1,library:path.join(root,'host'),librarySha256:'a'.repeat(64),profile}));

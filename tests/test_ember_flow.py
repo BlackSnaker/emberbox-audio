@@ -54,6 +54,17 @@ class FlowTests(unittest.TestCase):
     def test_manual_selection_preserves_the_native_prepared_song(self):
         self.flow.apple=Mock();self.flow.cancel(preserve_apple=True)
         self.flow.apple.cancel.assert_called_once_with(preserve=True)
+    def test_output_scene_change_reprepares_the_same_upcoming_song(self):
+        self.host.source='apple-music';self.host.apple_web.state={'emberFlow':True,'spatial':{'fastSwitch':True,'scene':{'mode':'headphones','hrtf':0}}}
+        values=[dict(song(x),uri='apple:songs:'+str(i),id=str(i)) for i,x in enumerate('ABC',100)]
+        self.music.book.replace('apple-music',values);self.music.book.select('apple-music',0)
+        deck=Mock();deck.ready=True;deck.failed=False
+        with patch('flow_apple.AppleDecks',return_value=deck):
+            self.flow.tick(dict(values[0],position=2,duration=180,valid=True,playing=True))
+            self.host.apple_web.state['spatial']['scene']={'mode':'speakers','angle':30}
+            self.now=1;self.flow.tick(dict(values[0],position=3,duration=180,valid=True,playing=True))
+            self.assertEqual(deck.prepare.call_count,2);self.assertEqual(deck.prepare.call_args.args[0]['id'],'101')
+            self.assertEqual(self.music.book.indices['apple-music'],0);deck.cancel.assert_called()
     def test_off_and_unsupported_sources_do_not_prepare_players(self):
         self.flow.tick(self.state());self.decks.prepare.assert_not_called()
         self.flow.enabled=True;self.host.source='apple-music'

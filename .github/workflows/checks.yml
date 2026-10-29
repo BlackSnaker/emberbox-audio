@@ -85,6 +85,7 @@ jobs:
           node tests/media_quality_test.js
           node tests/spatial_source_test.js
           node tests/spatial_playback_test.cjs
+          node tests/scene_test.cjs
       - name: GTK layout and controls
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/gui_smoke.py
       - name: Fullscreen listening room
@@ -115,5 +116,9 @@ jobs:
           EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/dj_smoke.py
       - name: Audio quality badge
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/quality_smoke.py
+      - name: Listening scene card and finite motion
+        run: |
+          GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/scene_smoke.py
+          EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/scene_smoke.py
       - name: Silent motion artwork
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/motion_smoke.py

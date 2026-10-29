@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.20.0 — 2026-10-29
+
+- Separate native Atmos scenes for physical speaker pairs and headphones. Speaker rendering uses explicit ±20° / ±30° / ±40° geometry, retains LFE in both final channels and keeps linked peak protection. Headphones use the virtual 7.1.4 binaural scene with KU100 or KEMAR HRTFs. Ordinary ALAC / Hi-Res stereo remains unchanged.
+- Add a Grunesphism scene card with dimensional speakers/headphones, amber illumination, a finite entrance and reversible mode/spacing animations. Respect reduced animation, bound the frame cache and stop timers when hidden.
+- Detect Ember's actual audio destination off GTK. Remember manual overrides for misreported Bluetooth devices under hashed identifiers, keep other outputs automatic and show Bluetooth codec separately from source quality. No routing, codec or system-volume changes.
+- Apply Atmos scene changes through the existing licensed worker/output clock, retain the song position and reprepare EmberFlow's next deck for the new scene. Add geometry/LFE, per-device persistence, packaged-module, output routing, worker reuse and real GTK motion checks. Apple integration 23.
+
 ## 0.19.2 — 2026-10-29
 
 - Prepare Apple track manifests in the background when opening a track list and after a short hover or keyboard focus. Keep one preparation in flight, reuse it on selection, and retain only four descriptors for a minute. This does not start another decoder, download song audio or request a playback licence.
