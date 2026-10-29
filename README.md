@@ -110,6 +110,12 @@ for an animated Grunesphism card with physical speaker geometry, a separate
 binaural headphone path and remembered output preferences. Bluetooth codec and
 source quality remain distinct. [Explore the listening scenes →](docs/SOUNDSTAGE.md)
 
+## The next wave
+
+Fullscreen covers change through soft water ripples: photographic refraction,
+warm highlights and a liquid reveal. A delayed track leaves quiet waves;
+audio starts as soon as it is ready. [See how the transition works →](docs/COVER_TRANSITIONS.md)
+
 ## EmberFlow — one song flows into the next
 
 A tactile amber switch blends the tail of one track into the opening of the next.

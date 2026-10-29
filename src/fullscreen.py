@@ -24,6 +24,7 @@ from artist_view import ArtistView,CSS as ARTIST_CSS
 from dj_service import DJService
 from dj_view import DJView,CSS as DJ_CSS
 from flow_control import FlowControl,CSS as FLOW_CSS
+from cover_change import CoverChange
 
 
 CSS = b'''
@@ -223,6 +224,7 @@ class FullscreenPlayer:
         self.motion=MotionCover(self.motion_image)
         self.motion_url=''
         self.motion_lookup=AppleMotion(self.on_motion)
+        self.cover_change=CoverChange(self,art_layers)
         self.left.pack_start(art_shell,False,False,0)
         self.title=label('','stage-track-title',True);self.title.set_lines(2);self.title.set_ellipsize(Pango.EllipsizeMode.END)
         self.left.pack_start(self.title,False,False,0)
@@ -323,7 +325,7 @@ class FullscreenPlayer:
         footer.pack_start(console,False,False,0)
         self.layout.pack_end(footer,False,False,0)
         self.reveal=StageReveal(self.window,self.background,self.layout,self.cover,art_shell,
-                               lambda:self.motion_image.get_pixbuf() or self.cover.get_pixbuf())
+                               self.cover_change.current_art)
         overlay.add_overlay(self.reveal);overlay.set_overlay_pass_through(self.reveal,True)
         self.source_picker=SourcePicker(lambda source,session=None:host.select_source(source,session),lambda:None,self.open_accounts)
         self.layout.show_all()
@@ -340,6 +342,7 @@ class FullscreenPlayer:
         return b
 
     def music_changed(self):
+        self.cover_change.queue_changed()
         source=self.host.source
         count=len(self.music.book.upcoming(source))
         self.page_tabs['queue'].set_label(text('Queue','Очередь')+(f' · {count}' if count else ''))
@@ -355,6 +358,7 @@ class FullscreenPlayer:
         if self.page=='karaoke':self.karaoke.deactivate()
         self.pages.set_transition_type(Gtk.StackTransitionType.NONE if page=='artist' else Gtk.StackTransitionType.CROSSFADE)
         self.page=page;self.pages.set_visible_child_name(page)
+        if page!='playing':self.cover_change.cancel()
         self.lyrics_button.set_no_show_all(page!='playing');self.lyrics_button.set_visible(page=='playing')
         self.playing_caption.set_visible(page!='playing')
         if page=='library':self.library_view.activate()
@@ -405,6 +409,7 @@ class FullscreenPlayer:
             return
         self.set_lyrics_visible(False)
         self.show_page('playing',force=True)
+        self.cover_change.reset()
         self.visible=True
         self.current_line=-2;self.last_position=None;self.frame_time=None;self.manual_until=0.
         display=self.host.window.get_display()
@@ -443,6 +448,7 @@ class FullscreenPlayer:
 
     def hide(self):
         if getattr(self.host,'settings',None):self.host.settings.dismiss_for(self.window)
+        self.cover_change.reset()
         self.reveal.finish()
         self.dismiss_pending=False
         self.visible=False
@@ -466,11 +472,11 @@ class FullscreenPlayer:
         if not self.window.get_settings().get_property('gtk-enable-animations'):
             self.hide();return
         self.dismiss_pending=True
+        pixels=self.cover_change.current_art()
         monitor=self.host.window.get_display().get_monitor_at_window(self.host.window.get_window())
         self.reveal.prepare(self.host,monitor,self.palette,reverse=True)
         allocation=self.window.get_allocation();allocation.x=allocation.y=0
         self.reveal.capture(allocation)
-        pixels=self.motion_image.get_pixbuf() or self.cover.get_pixbuf()
         if pixels:self.reveal.cover_pixels=pixels
         self.reveal.completed=self.hide
 
@@ -494,6 +500,7 @@ class FullscreenPlayer:
                 try:room=snapshot(self.layout,allocation)
                 except (OSError,AttributeError,RuntimeError):pass
             self.motion_image.warmup()
+            self.cover_change.surface.warmup()
             self.reveal.warmup(pixels,room=room,monitor=monitor)
             if self.reveal.driver:self.artist_view.entrance.warmup()
         return False
@@ -538,6 +545,7 @@ class FullscreenPlayer:
     def close(self):
         if self.closed:return
         self.hide();self.closed=True
+        self.cover_change.close()
         self.library_view.close();self.queue_view.close();self.artist_view.close();self.music_unsubscribe()
         self.karaoke.close();self.dj_view.close();self.dj.close()
         if self.owns_music:self.music.close()
@@ -587,6 +595,7 @@ class FullscreenPlayer:
         if size!=self.art_size:
             self.art_size=size
             self.motion_image.resize(size)
+            self.cover_change.surface.resize(size)
             self.left.set_size_request(size+18,-1)
             self.title.set_max_width_chars(max(10,int(size/17)))
             self.load_art()
@@ -629,7 +638,8 @@ class FullscreenPlayer:
         if self.art_key and self.art_key[0]!=url:
             self.motion.stop();self.motion_url=''
         self.art_key=key
-        self.artwork.load(self.cover,url,self.art_size,22,preserve=True,on_loaded=self.on_art,high_quality=True)
+        self.artwork.load(self.cover,url,self.art_size,22,preserve=True,
+                          on_loaded=lambda pixels,k=key:self.on_art(pixels,k),high_quality=True)
         if self.motion_url:self.motion.set_source(self.motion_url,self.art_size,playing=self.host.playing)
 
     def motion_page(self):
@@ -649,10 +659,11 @@ class FullscreenPlayer:
     def on_motion(self,url):
         self.motion_url=url
         if self.visible and not self.closed and self.page=='playing':
-            self.motion.set_source(url,self.art_size,playing=self.host.playing)
+            self.motion.set_source(url,self.art_size,playing=self.host.playing and not self.cover_change.pending)
 
-    def on_art(self,pixbuf):
-        if self.closed:return
+    def on_art(self,pixbuf,key=None):
+        if self.closed or key is not None and key!=self.art_key:return
+        self.cover_change.art_ready(pixbuf,key[0] if key else self.host.art_url or '')
         self.palette=cover_color(pixbuf)
         self.paint_background()
 
@@ -670,6 +681,8 @@ class FullscreenPlayer:
         self.hide();self.host.show_accounts()
 
     def action(self,action):
+        if action in ('next','previous') and self.music.book.active!=self.host.source:
+            self.cover_change.request()
         self.host.on_action(None,action)
         self.update()
 
@@ -704,6 +717,7 @@ class FullscreenPlayer:
     def update(self):
         if not self.visible or self.closed:return False
         h=self.host
+        self.cover_change.observe()
         width,height=self.window.get_size()
         metadata_changed=False
         title,artist,album=h.title.get_text(),h.artist.get_text(),h.album.get_text()
@@ -754,7 +768,7 @@ class FullscreenPlayer:
         self.load_art()
         if not self.reveal.active and self.page=='playing':
             self.motion_lookup.set_track(self.motion_page() if self.motion.executable else '',h.art_url or '')
-            self.motion.set_playing(h.playing)
+            self.motion.set_playing(h.playing and not self.cover_change.pending)
         identity=(h.source,title,artist,album,round(h.length/1e6))
         if identity!=self.track and (self.page=='karaoke' or self.lyrics_visible and self.page=='playing') and not self.reveal.active:
             self.track=identity;self.current_line=-2;self.manual_until=0.;self.last_position=None

@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.20.1 — 2026-10-29
+
+- Fullscreen cover changes gain a water ripple: gentle photographic refraction, warm highlights and a circular incoming-image reveal. Longer preparation keeps a quiet animation; playback never waits for the visual.
+- Follow native Apple readiness, shared album covers, rapid selections, cancellation, errors and stale artwork responses. GPU work stays inside the cover; callbacks stop after settling or hiding. Support HiDPI, a hardware-GL fallback fade and reduced motion.
+- Fullscreen settings are reachable through the top-right gear, including soundstage controls. Long menus scroll on small screens; menu navigation does not seek or change volume.
+
 ## 0.20.0 — 2026-10-29
 
 - Separate native Atmos scenes for physical speaker pairs and headphones. Speaker rendering uses explicit ±20° / ±30° / ±40° geometry, retains LFE in both final channels and keeps linked peak protection. Headphones use the virtual 7.1.4 binaural scene with KU100 or KEMAR HRTFs. Ordinary ALAC / Hi-Res stereo remains unchanged.

@@ -90,6 +90,15 @@ jobs:
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/gui_smoke.py
       - name: Fullscreen listening room
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/fullscreen_smoke.py
+      - name: Liquid cover transitions and playback readiness
+        env:
+          LIBGL_ALWAYS_SOFTWARE: 1
+          GDK_BACKEND: x11
+        run: |
+          GDK_SCALE=1 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/ripple_gl_smoke.py
+          GDK_SCALE=1 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/cover_ripple_smoke.py
+          GDK_SCALE=2 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/cover_ripple_smoke.py
+          GDK_SCALE=1 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/cover_change_smoke.py
       - name: Karaoke timing, layout and lifecycle
         run: |
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/karaoke_smoke.py
