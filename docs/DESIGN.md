@@ -31,6 +31,22 @@ Artwork may shift the shell by at most nine RGB levels per channel. A 1.4-second
 - Transport buttons have visible breathing room, including in mini mode.
 - Glass tubes have no feet or simulated sockets. Small highlights describe the glass; the orange glow softly reaches the edge.
 
+## Records with room to read
+
+![Fullscreen record list with original fixture artwork](../assets/screenshots/record-list.en.png)
+
+Collection and Queue use a shared recessed surface with aligned record, album,
+time and action columns. Warm cream titles, quieter artist names and tabular
+durations give each line a clear hierarchy. Artist names are direct links;
+queue actions stay small and separate. A narrow amber edge and static transport
+symbol identify the current record. Hover and keyboard focus use a soft tint,
+without tooltip captions or dotted outlines.
+
+Album columns yield to titles on narrow windows. Short screens combine the
+collection toolbar and reduce decoration, keeping records visible. Playback
+state changes update the affected rows without rebuilding the collection or
+resetting its scroll position. The list has no continuous animation loop.
+
 ## Light comes from sound
 
 Nine frequency bands cover 55 Hz to 11 kHz. The live meter reads the relevant application stream through PipeWire; it does not use the microphone or animate random bars. FFT measurements drive the indicators, and a critically damped response preserves continuous velocity between samples. Light rises promptly and decays more slowly. The tubes use 384 cached vector-rendered states to keep the animation smooth.

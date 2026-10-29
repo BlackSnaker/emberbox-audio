@@ -568,6 +568,7 @@ class FullscreenPlayer:
         context=self.layout.get_style_context()
         context.add_class('small-screen') if small else context.remove_class('small-screen')
         margin=max(24,min(88,int(width*.047)))
+        self.library_view.resize(width-2*margin,height);self.queue_view.resize(width-2*margin,height)
         self.layout.set_margin_start(margin);self.layout.set_margin_end(margin)
         self.layout.set_margin_top(24 if small else 36);self.layout.set_margin_bottom(22 if small else 32)
         self.body.set_spacing(max(32,min(100,int(width*.052))) if self.lyrics_visible else 0)
@@ -704,6 +705,11 @@ class FullscreenPlayer:
         if event.state&Gdk.ModifierType.CONTROL_MASK and key.lower()=='f':
             self.show_page('library');self.library_view.select('search');self.library_view.entry.grab_focus();return True
         if isinstance(self.window.get_focus(),(Gtk.Entry,Gtk.TextView)):return False
+        focus=self.window.get_focus()
+        if focus and (isinstance(focus,Gtk.ListBoxRow) or focus.get_ancestor(Gtk.ListBox)):
+            if isinstance(focus,Gtk.ListBoxRow) and key in ('space','Return','KP_Enter'):
+                focus.activate();return True
+            if key in ('space','Return','KP_Enter','Up','Down','Left','Right'):return False
         if key in ('space','XF86AudioPlay'):self.action('toggle');return True
         if key in ('Left','Right'):
             if self.progress.get_sensitive() and self.host.length>0:
@@ -750,6 +756,7 @@ class FullscreenPlayer:
             value=text('Now playing: ','Сейчас: ')+title+'  ·  '+artist
             if self.playing_caption.get_text()!=value:self.playing_caption.set_text(value)
         if self.page=='library' and self.library_view.source!=h.source:self.library_view.activate()
+        if self.page=='library':self.library_view.update_playback()
         if self.page=='artist' and self.artist_view.source!=h.source:self.artist_view.activate()
         if self.page=='queue':self.queue_view.render()
         seconds=max(0,h.position/1e6)

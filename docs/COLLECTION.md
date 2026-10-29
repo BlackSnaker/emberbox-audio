@@ -2,15 +2,15 @@
 
 **English** · [Русский](COLLECTION.ru.md)
 
-The fullscreen header has three pages: **Listening**, **Collection**, and **Queue**. Transport, seeking, volume and the live tubes stay visible while you choose music.
+The fullscreen header includes **Listening**, **Collection**, and **Queue**. Transport, seeking, volume and the live tubes stay visible while you choose music.
 
-![Collection with original fixture artwork](../assets/collection.png)
+![Readable records with original fixture artwork](../assets/screenshots/record-list.en.png)
 
 ## Find something to play
 
 Open **Collection**, then choose **For you**, **Albums**, or **Search**. Open a cover to see its tracks. Type a song, artist or album name into the search field and press **Enter**; **Ctrl+F** opens and focuses search. Space and arrow keys inside the field edit text instead of controlling playback.
 
-**Artist ›** opens the [artist room](ARTISTS.md) inside fullscreen, with a
+The artist name below a song opens the [artist room](ARTISTS.md) inside fullscreen, with a
 photographic header, available releases, editorial information and album tracks.
 
 Click a track to play it now. **+** adds it to the selected source's queue without interrupting music. A collection's **Play N** starts the loaded tracks in order; **Queue N** appends them. **Load more** appears when the source exposes another page. Some Spotify collections expose only their first 100 loaded tracks; the displayed count makes that limit explicit.
@@ -33,7 +33,7 @@ The queue heading follows the computer's local time: morning from 05:00, daytime
 
 ![Editable listening queue](../assets/listening-queue.png)
 
-**Queue** shows the current song and the upcoming tracks. Use **↑ / ↓** to change their order, **×** to remove a pending track, or **Clear upcoming** to empty the tail. Clicking a queued row starts there. **Play queue** starts the pending list; the player advances through it while Emberbox is running. The footer and media-key Next/Previous use the managed queue during that session.
+**Queue** shows the current song and the upcoming tracks. Use **↑ / ↓** to change their order, the remove action to delete a pending track, or **Clear upcoming** to empty the tail. Clicking a queued row starts there. **Play queue** starts the pending list; the player advances through it while Emberbox is running. The footer and media-key Next/Previous use the managed queue during that session.
 
 Queues are separate for each source and contain up to **200 tracks**. They are stored privately on this device. Switching sources does not automatically start that source's saved queue. Restoring the widget also never starts a queue automatically. Adding more music discards older played history while preserving the current song and pending order.
 

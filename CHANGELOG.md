@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.21.0 — 2026-10-29
+
+- Redesign collection and queue records as one calm, recessed list. Larger titles and artist names, aligned album/duration columns, compact queue controls and a restrained amber current-track state replace the wide floating pills. Artist names open artist cards directly.
+- Keep more music visible on short screens: navigation and collection actions share a compact toolbar, album columns hide at narrow widths, and empty status footers take no space.
+- Update current/pending/paused states without rebuilding the collection or moving its scroll position. Row activation, artist links and queue edits stay independent; keyboard list navigation does not seek or change volume. Add bilingual 80-record GTK checks with original fixture artwork.
+
 ## 0.20.2 — 2026-10-29
 
 - Soften the incoming cover: a wider translucent wave edge, restrained refraction and a gradually fading warm reflection. A subtle scale settle returns to original colours and sharpness; the opening ripple is preserved.

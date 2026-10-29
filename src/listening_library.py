@@ -1,10 +1,11 @@
 """Fullscreen collection and queue pages, rendered from typed music metadata."""
 from datetime import datetime
-from gi.repository import Gtk,Pango
+from gi.repository import Gtk,Pango,GdkPixbuf
 from source_picker import text
 from discovery_panel import clear
 from listening_queue import track,LIMIT
-from music_library import NAMES
+from music_library import NAMES,snapshot
+from track_list import RecordList,RecordRow,CSS as RECORD_CSS
 
 CSS=b'''
 .stage-nav { background-color: rgba(13,21,16,.48); border-radius: 21px; padding: 3px; }
@@ -42,7 +43,16 @@ CSS=b'''
   border: 1px solid rgba(235,219,178,.06); border-radius: 19px; padding: 13px 18px; }
 .stage-queue-empty { color: #d5d4b8; font-size: 25px; font-weight: bold; }
 .ember-stage .small-screen .stage-library-title { font-size: 23px; }
+.ember-stage .library-dense .stage-library-title { font-size: 20px; }
+.ember-stage .library-dense button.stage-tab { min-height: 0; padding: 5px 9px; font-size: 10px; }
+.ember-stage .library-dense button.stage-quiet { min-height: 16px; padding: 5px 9px; font-size: 10px; }
+.ember-stage .library-dense button.stage-accent { min-height: 16px; padding: 6px 11px; font-size: 10px; }
+.ember-stage .library-dense entry.stage-search { padding: 6px 12px; }
+.library-dense .stage-queue-current { padding: 8px 12px; }
+.library-dense .record-header { padding: 6px 12px; }
+.library-dense .record-list row.record-row { padding-top: 6px; padding-bottom: 6px; }
 '''
+CSS+=RECORD_CSS
 
 
 def label(value,style,width=0):
@@ -84,6 +94,19 @@ def duration(item):
     return f'{seconds//60}:{seconds%60:02d}' if seconds else ''
 
 
+def song_count(count):
+    ending='композиция' if count%10==1 and count%100!=11 else 'композиции' if count%10 in (2,3,4) and count%100 not in (12,13,14) else 'композиций'
+    return text(f'{count} '+('track' if count==1 else 'tracks'),f'{count} {ending}')
+
+
+def fit_art(image,size,pixels=None):
+    if pixels is not None:image._record_original=pixels
+    original=getattr(image,'_record_original',None) or image.get_pixbuf()
+    if original and (image.get_pixbuf() is not original or original.get_width()!=size):
+        image.set_from_pixbuf(original.scale_simple(size,size,GdkPixbuf.InterpType.BILINEAR))
+    image.set_size_request(size,size)
+
+
 def queue_greeting():
     hour=datetime.now().hour
     if 5<=hour<12:return text('Let the morning play.','Пусть утро звучит.')
@@ -100,6 +123,7 @@ class LibraryView(Gtk.Box):
         self.source=service.host.source;self.category='home';self.selected=None;self.items=[]
         self.cache={};self.next_offset=None;self.busy=False;self.active=False;self.updating=False
         self.card_size=160;self.request=0;self.song_buttons=[];self.album_buttons=[]
+        self.track_table=None;self.playback_key=None;self.list_width=1000;self.dense=False
         hero=Gtk.Box(spacing=24);names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5)
         self.hero_image=Gtk.Image();self.hero_image.set_no_show_all(True);hero.pack_start(self.hero_image,False,False,0)
         self.title=label(text('A little more discovery.','Ещё немного открытий.'),'stage-library-title',35)
@@ -112,11 +136,12 @@ class LibraryView(Gtk.Box):
         for p in (Gtk.EntryIconPosition.PRIMARY,Gtk.EntryIconPosition.SECONDARY):self.entry.set_icon_tooltip_text(p,None)
         self.entry.connect('activate',lambda _e:self.search())
         hero.pack_end(self.entry,False,False,0);self.pack_start(hero,False,False,0)
-        filters=Gtk.Box(spacing=7);self.tabs={}
+        filters=self.filters=Gtk.Box(spacing=7);self.tabs={}
         for key,name in [('home',text('For you','Подборки')),('albums',text('Albums','Альбомы')),('search',text('Search','Поиск'))]:
             b=Gtk.ToggleButton(label=name);b.get_style_context().add_class('stage-tab');b.set_has_tooltip(False)
             b.connect('clicked',lambda _b,k=key:self.select(k));self.tabs[key]=b;filters.pack_start(b,False,False,0)
         self.source_badge=label('','stage-library-source');filters.pack_start(self.source_badge,True,True,14)
+        self.source_badge.set_no_show_all(True);self.source_badge.show()
         self.spinner=Gtk.Spinner();filters.pack_start(self.spinner,False,False,0)
         self.refresh_button=button('↻',lambda:self.load(refresh=True),accessible=text('Refresh collection','Обновить коллекцию'))
         filters.pack_end(self.refresh_button,False,False,0);self.pack_start(filters,False,False,0)
@@ -136,6 +161,8 @@ class LibraryView(Gtk.Box):
         self.scroll=scroll(self.content);self.pack_start(self.scroll,True,True,0)
         foot=Gtk.Box(spacing=12);self.notice=label('','stage-library-note',95)
         self.notice.set_line_wrap(True);self.notice.set_lines(2)
+        self.notice.set_no_show_all(True)
+        self.notice.connect('notify::label',lambda label,_p:label.set_visible(bool(label.get_text())))
         foot.pack_start(self.notice,True,True,0)
         self.connect_button=button(text('Accounts','Аккаунты'),accounts)
         self.connect_button.set_no_show_all(True);foot.pack_end(self.connect_button,False,False,0)
@@ -220,10 +247,18 @@ class LibraryView(Gtk.Box):
         self.service.stop();self.service.host.start_yandex_wave()
 
     def render(self):
-        clear(self.content);self.song_buttons=[];self.album_buttons=[]
+        clear(self.content);self.song_buttons=[];self.album_buttons=[];self.track_table=None;self.playback_key=None
         if self.selected:
-            self.artwork.load(self.hero_image,self.selected.get('image',''),68,10);self.hero_image.show()
-            self.title.set_text(self.selected['title']);self.subtitle.set_text(self.selected.get('artist') or self.selected.get('subtitle') or NAMES[self.source])
+            self.artwork.load(self.hero_image,self.selected.get('image',''),68,10,
+                              on_loaded=lambda pixels:fit_art(self.hero_image,48 if self.dense else 68,pixels));self.hero_image.show()
+            self.title.set_text(self.selected['title'])
+            seconds=sum(int(v.get('duration_ms') or 0) for v in self.songs())//1000
+            hours,minutes=divmod(seconds//60,60)
+            length=text(f'{hours} hr {minutes} min',f'{hours} ч {minutes} мин') if hours else text(f'{minutes} min',f'{minutes} мин')
+            count=len(self.songs())
+            owner=self.selected.get('artist') or self.selected.get('subtitle') or NAMES[self.source]
+            self.subtitle.set_text(owner+'  ·  '+song_count(count)+('  ·  '+length if seconds else ''))
+            if self.open_artist:self.artist_button.set_visible(self.selected.get('kind') in ('album','library-albums') and bool(self.selected.get('artist')))
             self.context.show();count=len(self.songs());self.add_all_button.set_label('+ '+text(f'Queue {count}',f'В очередь · {count}'))
             self.play_all_button.set_label('▶ '+text(f'Play {count}',f'Слушать · {count}'))
             self.play_all_button.set_sensitive(bool(count));self.add_all_button.set_sensitive(bool(count))
@@ -252,25 +287,18 @@ class LibraryView(Gtk.Box):
         tracks=[i for i in self.items if not collection(i)]
         context=tuple(self.songs())
         if tracks and collections:self.content.pack_start(label(text('TRACKS','ТРЕКИ'),'stage-section-label'),False,False,10)
-        for index,item in enumerate(tracks):
-            row=Gtk.Box(spacing=10);row.get_style_context().add_class('stage-track-row')
-            play=button('',lambda value=item,items=context:self.service.play_now(value,context=items),'stage-song',text('Play ','Слушать ')+item.get('title',''))
-            prime_on_hover(play,self.service,item)
-            box=Gtk.Box(spacing=12)
-            number=label(f'{index+1:02}','stage-row-number');number.set_size_request(22,-1);box.pack_start(number,False,False,0)
-            image=Gtk.Image();self.artwork.load(image,item.get('image',''),45,7);box.pack_start(image,False,False,0)
-            names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4)
-            names.pack_start(label(item.get('title',''),'stage-card-title',52),False,False,0)
-            names.pack_start(label(item.get('artist') or item.get('subtitle',''),'stage-card-subtitle',55),False,False,0)
-            box.pack_start(names,True,True,0);play.remove(play.get_child());play.add(box)
-            row.pack_start(play,True,True,0);row.pack_start(label(duration(item),'stage-card-subtitle'),False,False,0)
-            if self.open_artist:
-                artist=button(text('Artist','Артист')+' ›',lambda value=item:self.open_artist(value),'stage-artist-link',text('Open artist: ','Открыть артиста: ')+item.get('artist',''))
-                artist.set_sensitive(bool(item.get('artist')));row.pack_start(artist,False,False,2)
-            add=button('+',lambda value=item:self.add([value]),'stage-add',text('Add to queue: ','Добавить в очередь: ')+item.get('title',''))
-            valid=bool(track(item,self.source));play.set_sensitive(valid);add.set_sensitive(valid)
-            row.pack_end(add,False,False,0);self.content.pack_start(row,False,False,0)
-            self.song_buttons.append((play,add,item))
+        if tracks:
+            self.track_table=RecordList();self.content.pack_start(self.track_table,False,False,0)
+            for index,item in enumerate(tracks):
+                actions=[('list-add-symbolic',text('Add to queue: ','Добавить в очередь: ')+item.get('title',''),
+                          lambda value=item:self.add([value]),bool(track(item,self.source)))]
+                row=RecordRow(item,index,self.source,self.artwork,
+                              lambda value=item,items=context:self.service.play_now(value,context=items),
+                              (lambda value=item:self.open_artist(value)) if self.open_artist else None,actions)
+                prime_on_hover(row.play_button,self.service,item)
+                prime_on_hover(row,self.service,item)
+                self.track_table.append(row)
+                self.song_buttons.append((row.play_button,row.action_buttons[0],item))
         if not self.items:
             empty=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12);empty.set_margin_top(25)
             empty.pack_start(label('✦','stage-queue-empty'),False,False,0)
@@ -281,9 +309,36 @@ class LibraryView(Gtk.Box):
             more=button(text('Load more','Загрузить ещё'),lambda:self.load(append=True))
             more.set_halign(Gtk.Align.CENTER);self.content.pack_start(more,False,False,8)
         self.content.show_all()
+        if self.track_table:self.track_table.resize(self.list_width)
+        self.update_playback()
+
+    def update_playback(self):
+        if not self.track_table:return
+        state=snapshot(self.service.host)
+        pending=self.service.book.current(self.source) if self.service.loading and self.service.book.active==self.source else None
+        key=(self.service.host.source,state.get('id'),state.get('uri'),state.get('catalogId'),state.get('title'),state.get('artist'),state.get('playing'),state.get('valid'),pending and pending.get('entry'))
+        if key==self.playback_key:return
+        self.playback_key=key
+        self.track_table.set_state(state if self.service.host.source==self.source else {},pending)
+
+    def resize(self,width,height=1080):
+        self.list_width=width
+        dense=height<740
+        if dense!=self.dense:
+            self.dense=dense
+            context=self.get_style_context()
+            context.add_class('library-dense') if dense else context.remove_class('library-dense')
+            self.set_spacing(7 if dense else 13);self.context.set_spacing(5 if dense else 9)
+            self.context.get_parent().remove(self.context)
+            if dense:self.filters.pack_end(self.context,False,False,4)
+            else:self.pack_start(self.context,False,False,0);self.reorder_child(self.context,2)
+            self.source_badge.set_visible(not dense)
+            fit_art(self.hero_image,48 if dense else 68)
+        if self.track_table:self.track_table.resize(width)
 
     def service_changed(self):
         if self.active and self.service.error:self.notice.set_text(self.service.error)
+        if self.active:self.update_playback()
 
     def close(self):self.deactivate();self.unsubscribe()
 
@@ -292,6 +347,7 @@ class QueueView(Gtk.Box):
     def __init__(self,service,artwork,open_artist=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL,spacing=14)
         self.service,self.artwork=service,artwork;self.active=False;self.rows=[];self.key=None
+        self.track_table=None;self.list_width=1000;self.dense=False
         self.open_artist=open_artist
         hero=Gtk.Box(spacing=15);names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5)
         self.title=label(queue_greeting(),'stage-library-title',40)
@@ -318,6 +374,8 @@ class QueueView(Gtk.Box):
         self.content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8)
         self.scroll=scroll(self.content);self.pack_start(self.scroll,True,True,0)
         self.notice=label('','stage-library-note',95);self.notice.set_line_wrap(True);self.pack_end(self.notice,False,False,0)
+        self.notice.set_no_show_all(True)
+        self.notice.connect('notify::label',lambda label,_p:label.set_visible(bool(label.get_text())))
         self.unsubscribe=service.subscribe(self.changed)
         self.show_all()
 
@@ -342,29 +400,24 @@ class QueueView(Gtk.Box):
         self.subtitle.set_text(NAMES[source]+' · '+text(f'{len(pending)} up next',f'Далее: {len(pending)}')+' · '+text('Saved on this device','Сохраняется на этом устройстве'))
         self.current_status.set_text(text('STARTING…','ЗАПУСКАЮ…') if self.service.loading else text('NOW PLAYING','СЕЙЧАС ИГРАЕТ') if h.playing else text('CURRENT TRACK','ТЕКУЩИЙ ТРЕК'))
         self.current_title.set_text(title);self.current_artist.set_text(artist)
-        self.artwork.load(self.current_image,h.art_url or '',58,9)
+        self.artwork.load(self.current_image,h.art_url or '',58,9,
+                          on_loaded=lambda pixels:fit_art(self.current_image,44 if self.dense else 58,pixels))
         running=book.active==source
         self.play_button.set_label(text('Playing in order','Играет по порядку') if running and h.playing else
                                    '▶ '+text('Play queue','Слушать очередь'))
         self.play_button.set_sensitive(bool(pending or self.service.error) and not self.service.loading and not (running and h.playing))
         self.clear_button.set_sensitive(bool(pending));self.notice.set_text(self.service.error)
         clear(self.content);self.rows=[]
+        table=self.track_table=RecordList(action_count=3) if pending else None
+        if table:self.content.pack_start(table,False,False,0)
         for number,(index,item) in enumerate(pending):
-            row=Gtk.Box(spacing=8);row.get_style_context().add_class('stage-track-row')
-            play=button('',lambda i=index:self.service.start(i),'stage-song',text('Play ','Слушать ')+item['title'])
-            names=Gtk.Box(spacing=12);n=label(f'{number+1:02}','stage-row-number');n.set_size_request(22,-1)
-            names.pack_start(n,False,False,0);image=Gtk.Image();self.artwork.load(image,item.get('image',''),42,7);names.pack_start(image,False,False,0)
-            info=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4)
-            info.pack_start(label(item['title'],'stage-card-title',60),False,False,0)
-            info.pack_start(label(item['artist'],'stage-card-subtitle',65),False,False,0)
-            names.pack_start(info,True,True,0);play.remove(play.get_child());play.add(names);row.pack_start(play,True,True,0)
-            row.pack_start(label(duration(item),'stage-card-subtitle'),False,False,6)
-            up=button('↑',lambda i=index:self.edit(i,-1),'stage-add',text('Move up','Выше'))
-            down=button('↓',lambda i=index:self.edit(i,1),'stage-add',text('Move down','Ниже'))
-            remove=button('×',lambda i=index:self.edit(i,0),'stage-add',text('Remove from queue','Убрать из очереди'))
-            up.set_sensitive(number>0);down.set_sensitive(number<len(pending)-1)
-            for v in (up,down,remove):row.pack_start(v,False,False,0)
-            self.content.pack_start(row,False,False,0);self.rows.append((play,up,down,remove,item))
+            actions=[('go-up-symbolic',text('Move up','Выше'),lambda i=index:self.edit(i,-1),number>0),
+                     ('go-down-symbolic',text('Move down','Ниже'),lambda i=index:self.edit(i,1),number<len(pending)-1),
+                     ('list-remove-symbolic',text('Remove from queue','Убрать из очереди'),lambda i=index:self.edit(i,0),True)]
+            row=RecordRow(item,number,source,self.artwork,lambda i=index:self.service.start(i),
+                          (lambda value=item:self.open_artist(value)) if self.open_artist else None,actions)
+            table.append(row);up,down,remove=row.action_buttons
+            self.rows.append((row.play_button,up,down,remove,item))
         if not pending:
             box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12);box.set_margin_top(25)
             box.pack_start(label('＋','stage-queue-empty'),False,False,0)
@@ -373,5 +426,16 @@ class QueueView(Gtk.Box):
                 'Нажимай + у треков в Коллекции. Добавление не прерывает музыку.'),'stage-library-note',95),False,False,0)
             self.content.pack_start(box,False,False,0)
         self.content.show_all()
+        if table:table.resize(self.list_width)
+
+    def resize(self,width,height=1080):
+        self.list_width=width
+        dense=height<740
+        if dense!=self.dense:
+            self.dense=dense;context=self.get_style_context()
+            context.add_class('library-dense') if dense else context.remove_class('library-dense')
+            self.set_spacing(8 if dense else 14)
+            fit_art(self.current_image,44 if dense else 58)
+        if self.track_table:self.track_table.resize(width)
 
     def close(self):self.unsubscribe()
