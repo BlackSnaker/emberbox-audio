@@ -125,6 +125,7 @@ class MusicService:
         self.loading=False;self.error='';self.started=0.;self.source=host.source
         self.browse_future=None;self.play_future=None
         self.awaiting_native=None
+        self.prime_timer=0
         self.pause_after=set()
         self.previous_restart=None
         self.browse_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-collection')
@@ -174,6 +175,23 @@ class MusicService:
 
     def add(self,items):
         count=self.book.add(self.host.source,[dict(item,origin='manual') for item in items]);self.error='';self.changed();return count
+
+    def cancel_prime(self):
+        if self.prime_timer:GLib.source_remove(self.prime_timer);self.prime_timer=0
+
+    def prime(self,item):
+        self.cancel_prime()
+        h=self.host
+        if self.closed or self.loading or h.source!='apple-music' or h.apple_mode!='native':return
+        value=track(item,h.source)
+        if not value:return
+        generation=self.play_generation
+        def prepare():
+            self.prime_timer=0
+            if not self.closed and not self.loading and h.source=='apple-music' and generation==self.play_generation:
+                h.apple_web.action('spatial',operation='prime',kind=value['kind'],id=value['id'])
+            return False
+        self.prime_timer=GLib.timeout_add(180,prepare)
 
     def play_now(self,item,context=None):
         source=self.host.source;value=track(item,source)
@@ -256,6 +274,7 @@ class MusicService:
         self.book.save();self.changed()
 
     def start(self,index=None):
+        self.cancel_prime()
         self.flow.cancel(preserve_apple=True)
         self.awaiting_native=None
         self.previous_restart=None
@@ -331,6 +350,7 @@ class MusicService:
         self.play_generation+=1;self.loading=False;self.book.active=None;self.error='';self.watch.reset();self.changed()
 
     def source_changed(self):
+        self.cancel_prime()
         self.stop();self.cancel_browse();self.source=self.host.source
 
     def poll(self):
@@ -364,6 +384,6 @@ class MusicService:
         return True
 
     def close(self):
-        self.closed=True;self.flow.close();self.play_generation+=1;self.cancel_browse()
+        self.cancel_prime();self.closed=True;self.flow.close();self.play_generation+=1;self.cancel_browse()
         GLib.source_remove(self.timer);self.youtube.close();self.listeners.clear()
         self.browse_pool.shutdown(wait=False,cancel_futures=True);self.play_pool.shutdown(wait=False,cancel_futures=True)

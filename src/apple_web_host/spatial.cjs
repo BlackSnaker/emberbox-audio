@@ -28,7 +28,7 @@ class SpatialPlayback {
   try{this.enabled=JSON.parse(fs.readFileSync(process.env.EMBERBOX_SPATIAL_CONFIG,'utf8')).enabled===true;}catch{this.enabled=false;}
  }
  info(){const r=this.session;return {enabled:this.enabled,available:!!runtime(),losslessAvailable:!!fairplayRuntime(),fastSwitch:true,fastSeek:true,seeking:!!r?.seeking,seekStage:r?.active.seekStage||'',phase:r?.state.phase||'idle',error:this.error,switching:!!r?.manual,switchError:this.switchError||null,
-  flow:r&&(r.transition||!r.standby&&r.decks.filter(Boolean).length>1)?'mixing':r?.standby?.ready?'ready':r?.standby?'preparing':'idle',flowError:this.flowError||'',workerExit:this.workerExit||null,fragment:this.fragmentDebug||null,mix:this.mixDebug||null};}
+  flow:r&&(r.transition||!r.standby&&r.decks.filter(Boolean).length>1)?'mixing':r?.standby?.ready?'ready':r?.standby?'preparing':'idle',flowError:this.flowError||'',workerExit:this.workerExit||null,fragment:this.fragmentDebug||null,mix:this.mixDebug||null,switchTiming:this.switchTiming||null};}
  async configure(enabled){
   if(typeof enabled!=='boolean')throw Error('INVALID_ARGUMENTS');
   if(enabled&&!runtime())throw Error('SPATIAL_SETUP_REQUIRED');
@@ -52,7 +52,7 @@ class SpatialPlayback {
    audioQuality:r.active.quality||state.audioQuality,ended:r.state.phase==='ended',emberFlow:!!r.active.quality&&r.state.phase!=='preparing',emberBeatSync:false}:{}),spatial:this.info()};
  }
  begin(win,metadata,position=metadata.position,paused=false){
-  const deck={metadata:{...metadata},slot:0,generation:++this.generation,quality:null,ready:false,context:null,child:null};
+  const deck={metadata:{...metadata},slot:0,generation:++this.generation,requestKey:'native-'+(++this.generation),quality:null,ready:false,context:null,child:null};
   const nativeRuntime=runtime();
   const r={win,nativeRuntime,rate:nativeRuntime?.fairplay?192000:48000,active:deck,decks:[deck,null],standby:null,mixer:null,paused,
    state:{phase:'preparing',position:Number(position)||0,playing:!paused},lastAdvance:Date.now(),flowRevision:0,preparation:Promise.resolve(),idle:[null,null]};
@@ -77,6 +77,32 @@ class SpatialPlayback {
   });
  }
  send(child,value){if(child&&!child.killed&&child.stdin.writable)child.stdin.write(JSON.stringify(value)+'\n');}
+ cancelPrime(keep){
+  clearTimeout(this.primeTimer);this.primeTimer=null;
+  const job=this.primeJob;
+  if(job&&(!keep||job.id!==keep.id||job.kind!==keep.kind)){
+   this.primeJob=null;this.source(job.win,{action:'cancel-prepare',requestKey:job.requestKey}).catch(()=>{});
+  }
+ }
+ prime(win,p){
+  if(!['songs','library-songs'].includes(p.kind)||!/^\w[\w.-]{0,199}$/.test(String(p.id)))throw Error('INVALID_ARGUMENTS');
+  if(!this.enabled||!this.session?.active.quality||this.session.manual||this.session.standby&&!this.session.standby.ready)return Promise.resolve({ready:false});
+  if(this.primeJob?.id===p.id&&this.primeJob.kind===p.kind)return this.primeJob.promise;
+  this.cancelPrime();
+  const job={win,id:p.id,kind:p.kind,requestKey:'native-'+(++this.generation)};this.primeJob=job;
+  // Manifests only: no extra decoder, licensed host, audio download or output.
+  job.promise=this.source(win,{action:'prime',id:p.id,kind:p.kind,requestKey:job.requestKey,allowStereo:true,fairplay:!!this.session.nativeRuntime?.fairplay})
+   .finally(()=>{if(this.primeJob===job)this.primeJob=null;});
+  return job.promise;
+ }
+ primeList(win,result){
+  if(this.primeJob||this.session?.manual)return;
+  clearTimeout(this.primeTimer);
+  const items=(result?.items||[]).filter(p=>['songs','library-songs'].includes(p.kind)&&/^\w[\w.-]{0,199}$/.test(String(p.id))).slice(0,2),revision=this.revision;
+  const next=()=>{if(this.revision!==revision||!items.length)return;
+   this.prime(win,items.shift()).catch(()=>{}).finally(()=>{if(this.revision===revision&&items.length)this.primeTimer=setTimeout(next,150);});};
+  if(items.length)this.primeTimer=setTimeout(next,200);
+ }
  pipePcm(r,deck,child){
   const source=child.stdio[3],input=r.mixer.stdio[3+deck.slot];let buffer=Buffer.alloc(0),waiting=false,closed=false;
   const drain=()=>{waiting=false;flush();if(!waiting&&!closed)source.resume();};
@@ -104,12 +130,16 @@ class SpatialPlayback {
   this.wire(mixer,v=>this.mixerMessage(r,v),code=>this.failed(r,code));
   this.send(mixer,{type:'pause',paused:r.paused});
   const metadata=r.active.metadata,id=/^\d{1,20}$/.test(String(metadata.catalogId||''))?metadata.catalogId:metadata.id;
-  await this.loadDeck(r,r.active,await this.source(r.win,{action:'prepare',id,kind:String(id).startsWith('i.')?'library-songs':'songs',allowStereo:true,fairplay:!!r.nativeRuntime?.fairplay}),r.state.position);
+  await this.loadDeck(r,r.active,await this.source(r.win,{action:'prepare',requestKey:r.active.requestKey,id,kind:String(id).startsWith('i.')?'library-songs':'songs',allowStereo:true,fairplay:!!r.nativeRuntime?.fairplay}),r.state.position);
  }
  async loadDeck(r,deck,prepared,position=0){
   deck.context=prepared.contextId;deck.prepared=prepared;
   if(this.session!==r||!r.decks.includes(deck)){this.source(r.win,{action:'close',contextId:deck.context}).catch(()=>{});return;}
   if(deck===r.active&&Number.isFinite(r.pendingSeek)){position=r.pendingSeek;delete r.pendingSeek;}
+  if(deck===r.active){
+   deck.metadata=prepared.metadata;
+   this.page(r.win,{method:'play',params:{kind:String(prepared.metadata.id).startsWith('i.')?'library-songs':'songs',id:prepared.metadata.id,native:true,metadata:prepared.metadata}}).catch(()=>{});
+  }
   this.send(r.mixer,{type:'slot',slot:deck.slot,generation:deck.generation,position,preroll:deck.manual?.16:2});
   // Download encrypted first-segment bytes while the licensed host starts or
   // authorizes the track. The source keeps them private in its bounded cache.
@@ -152,6 +182,10 @@ class SpatialPlayback {
    });
   }else if(value.type==='seek-state'){
    if(['requested','decoding','codec-ready'].includes(value.stage))deck.seekStage=value.stage;
+  }else if(value.type==='timing'){
+   if(['licenseMs','fragmentMs','pcmMs'].includes(value.stage)&&Number.isInteger(value.ms)&&value.ms>=0&&value.ms<120000){
+    deck.timing||={};deck.timing[value.stage]=value.ms;
+   }
   }else if(value.type==='quality'){
    const q=value.audioQuality;
    const required=r.requiredQuality;
@@ -180,7 +214,7 @@ class SpatialPlayback {
  mixerMessage(r,value){
   if(this.session!==r)return;
   const deck=r.decks[value.slot];
-  if(value.type==='ready'&&deck?.generation===value.generation)deck.ready=true;
+  if(value.type==='ready'&&deck?.generation===value.generation){deck.ready=true;deck.readyAt=Date.now();}
   else if(value.type==='state'&&deck===r.active&&(value.generation===undefined?!r.seeking:value.generation===deck.generation)){
    if(Array.isArray(value.buffers))this.mixDebug={buffers:value.buffers.slice(0,2).map(row=>Array.isArray(row)?row.slice(0,4).map(v=>Number.isSafeInteger(v)?v:0):[]),frame:Number.isSafeInteger(value.mixFrame)?value.mixFrame:0,played:Number.isSafeInteger(value.playedFrame)?value.playedFrame:0,paused:value.paused===true,fade:Array.isArray(value.fade)?value.fade.slice(0,2).map(v=>Number.isSafeInteger(v)?v:0):[]};
    if(Number.isFinite(value.position)&&value.position>=0&&value.position<=Number(deck.metadata.duration||0)+1){
@@ -193,6 +227,8 @@ class SpatialPlayback {
    this.blocked.add(String(deck.metadata.id));if(this.blocked.size>32)this.blocked.delete(this.blocked.values().next().value);
    r.active=deck;r.standby=null;r.synchronizing=true;r.state={phase:'playing',position:deck.position||0,playing:!r.paused};r.lastAdvance=Date.now();
    const pending=r.transition;r.transition=null;clearTimeout(pending?.timer);
+   if(pending?.manual)this.switchTiming={...deck.timing,reusedDeck:pending.manual.reusedDeck===true,reusedHost:deck.reusedHost===true,
+    readyMs:Math.max(0,(deck.readyAt||Date.now())-pending.manual.started),audibleMs:Date.now()-pending.manual.started};
    if(r.manual===pending?.manual)r.manual=null;
    pending?.resolve({started:true,duration:Math.min(8,Number(value.duration)||8),overlap:true,beatSync:null,recovery:0});
    // Keep the website's metadata in step without setQueue/play: that would
@@ -243,7 +279,7 @@ class SpatialPlayback {
   const revision=r.flowRevision;
   const slot=1-r.active.slot,deck=r.idle[slot]||{};r.idle[slot]=null;
   Object.assign(deck,{metadata:{id:p.id},kind:p.kind,requestedId:p.id,key:p.key,position,manual,
-   slot,generation:++this.generation,quality:null,ready:false,error:null,retried:false,requestKey:'native-'+(++this.generation)});
+   slot,generation:++this.generation,quality:null,ready:false,readyAt:0,timing:{},error:null,retried:false,requestKey:'native-'+(++this.generation)});
   r.standby=deck;
   // Descriptor requests can supersede a slow catalogue read. Cancellation
   // keys keep obsolete results from allocating a third source/decoder slot.
@@ -254,7 +290,12 @@ class SpatialPlayback {
    if(this.session!==r||revision!==r.flowRevision||r.standby!==deck)throw Error('FLOW_CANCELLED');
    if(r.decks[deck.slot])throw Error('FLOW_NOT_READY');
    r.decks[deck.slot]=deck;
+   const started=Date.now();
+   const prime=this.primeJob;
+   if(prime?.id===p.id&&prime.kind===p.kind)await prime.promise.catch(()=>{});
+   if(this.session!==r||revision!==r.flowRevision||r.standby!==deck)throw Error('FLOW_CANCELLED');
    const prepared=await this.source(r.win,{action:'prepare',requestKey:deck.requestKey,id:p.id,kind:p.kind,allowStereo:true,fairplay:!!r.nativeRuntime?.fairplay});
+   deck.timing.sourceMs=Date.now()-started;
    if(this.session!==r||revision!==r.flowRevision||r.standby!==deck){
     await this.source(r.win,{action:'close',contextId:prepared.contextId}).catch(()=>{});throw Error('FLOW_CANCELLED');}
    deck.metadata=prepared.metadata;
@@ -278,13 +319,15 @@ class SpatialPlayback {
   throw Error(deck.error||'FLOW_NOT_READY');
  }
  select(r,p,position=0){
+  this.cancelPrime(p);
   r.seeking=false;r.nativeOnly=false;r.requiredQuality=null;clearTimeout(r.seekTimer);
-  const request={id:p.id,kind:p.kind,position};r.manual=request;this.error='';this.switchError=null;
+  const request={id:p.id,kind:p.kind,position,started:Date.now()};r.manual=request;this.error='';this.switchError=null;
   // Finish a cancelled overlap before reusing its slot. A new Play command
   // may arrive while that output clock is paused.
   if(r.paused&&r.decks.filter(Boolean).length>1){r.paused=false;this.send(r.mixer,{type:'pause',paused:false});}
   const reusable=r.standby&&!r.transition&&position===0&&
    (r.standby.requestedId===p.id||this.matches(r.standby.metadata,{id:p.id,catalogId:p.id}))?r.standby:null;
+  request.reusedDeck=!!reusable;
   r.manualTask=(async()=>{
    let deck=reusable;
    if(!deck){
@@ -379,6 +422,7 @@ class SpatialPlayback {
    position:r.state.position,paused:r.paused||r.state.phase==='ended'}});
  }
  async stop(restore=false){
+  this.cancelPrime();
   const r=this.session;if(!r)return;this.session=null;const revision=++this.revision;
   clearTimeout(r.watchdog);clearTimeout(r.seekTimer);clearInterval(r.stall);r.flowRevision++;
   clearTimeout(r.transition?.timer);r.transition?.reject(Error('FLOW_CANCELLED'));r.transition=null;
@@ -389,9 +433,26 @@ class SpatialPlayback {
  }
  async intercept(win,request){
   if(request.method==='spatial'&&request.params?.operation==='formats')return this.source(win,{action:'inspect',id:request.params.id,kind:request.params.kind,enhanced:request.params.enhanced,extended:request.params.extended,encryption:request.params.encryption,fairplayMetadata:request.params.fairplayMetadata});
+  if(request.method==='spatial'&&request.params?.operation==='prime')return this.prime(win,request.params);
   if(['play','transport','seek','enable','spatial'].includes(request.method))this.revision++;
   if(request.method==='spatial')return this.configure(request.params?.enabled);
-  const r=this.session;if(!r)return null;
+  const r=this.session,p=request.params||{};
+  if((!r||!r.mixer||!r.active.quality)&&this.enabled&&runtime()&&request.method==='play'&&['songs','library-songs'].includes(p.kind)&&/^\w[\w.-]{0,199}$/.test(String(p.id))&&p.paused!==true){
+   // Start the chosen native asset directly. Warming a second browser AAC
+   // queue first adds a network/DRM startup and can stall setQueue/play.
+   // A second click during cold preparation must supersede that selection,
+   // too, rather than falling through into MusicKit's other audio pipeline.
+   let revision=this.revision;
+   if(r){const stopping=this.stop(false);revision=this.revision;await stopping;}
+   if(revision!==this.revision)return {ok:true,superseded:true};
+   await this.page(win,{method:'transport',params:{action:'pause'}});
+   if(revision!==this.revision)return {ok:true,superseded:true};
+   if(this.session)return this.select(this.session,{kind:p.kind,id:String(p.id)},Math.max(0,Number(p.position)||0));
+   this.begin(win,{id:String(p.id),catalogId:p.kind==='songs'?String(p.id):''},Math.max(0,Number(p.position)||0));
+   this.session.nativeOnly=true;
+   return {ok:true,preparing:true};
+  }
+  if(!r)return null;
   if(request.method==='flow')return this.flow(r,request.params||{});
   if(request.method==='seek'){
    const position=Number(request.params?.position);if(!Number.isFinite(position)||position<0)throw Error('INVALID_ARGUMENTS');

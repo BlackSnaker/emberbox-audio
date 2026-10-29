@@ -160,6 +160,15 @@ class AppleWeb:
     def action(self, method, **params):
         if self.closed:
             return
+        if method=='spatial' and params.get('operation')=='prime':
+            if self.enabled and self.connected:
+                def prepare():
+                    # Speculation is optional. A slow/unavailable descriptor
+                    # must not show an account error or disturb playback.
+                    try:self.bridge.request(method,**params)
+                    except BridgeUnavailable:pass
+                self.pool.submit(prepare)
+            return
         if method=='seek':
             position=float(params.get('position',0))
             if not 0<=position<86400:return
@@ -239,7 +248,7 @@ class AppleWeb:
         try:
             self.state = self._seek_state(future.result())
             self.error = ''
-            if self.state.get('ready') and self.state.get('integrationVersion',0)<21 and not self.upgrade_attempted:
+            if self.state.get('ready') and self.state.get('integrationVersion',0)<22 and not self.upgrade_attempted:
                 self.upgrade_attempted = self.upgrading = True
                 self.pool.submit(self._upgrade,dict(self.state)).add_done_callback(
                     lambda item:GLib.idle_add(self._upgraded,item))
@@ -269,7 +278,7 @@ class AppleWeb:
             if self.connected:
                 try:
                     current = self.bridge.request('status')
-                    if current.get('ready') and current.get('integrationVersion',0)>=21 and (not state.get('authorized') or current.get('authorized')):
+                    if current.get('ready') and current.get('integrationVersion',0)>=22 and (not state.get('authorized') or current.get('authorized')):
                         break
                 except BridgeUnavailable:pass
             time.sleep(.3)

@@ -11,7 +11,7 @@ const {FlowDecks}=require('./flow.cjs');let flow=null;
 const {SpatialPlayback}=require('./spatial.cjs');let spatial=null;
 const yandex = process.env.EMBERBOX_WEB_SERVICE === 'yandex';
 const spotify = process.env.EMBERBOX_WEB_SERVICE === 'spotify';
-const integrationVersion = yandex?6:spotify?1:21;
+const integrationVersion = yandex?6:spotify?1:22;
 const service = yandex ? {title:'Yandex Music',origin:'https://music.yandex.ru/',
   url:'https://music.yandex.ru/',command:'emberboxYandexCommand',page:'yandex.js',error:'YANDEX_REQUEST_FAILED'} :
   spotify ? {title:'Spotify',origin:'https://open.spotify.com/',url:'https://open.spotify.com/',
@@ -137,6 +137,7 @@ async function command(win,request){
  if(flow&&(['play','seek'].includes(request.method)||request.method==='enable'&&request.params?.enabled!==true||
    request.method==='transport'))await flow.cancel();
  const result=await pageRequest(flow?.current||win,request);
+ if(spatial&&['release','tracks','search'].includes(request.method))spatial.primeList(flow?.current||win,result);
  if(request.method==='status'){
   const value=flow?await flow.status()||result:result;
   const merged=spatial?spatial.merge(flow?.current||win,value):value;

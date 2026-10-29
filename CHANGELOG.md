@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.19.2 — 2026-10-29
+
+- Prepare Apple track manifests in the background when opening a track list and after a short hover or keyboard focus. Keep one preparation in flight, reuse it on selection, and retain only four descriptors for a minute. This does not start another decoder, download song audio or request a playback licence.
+- Authorize the media keys actually used by each segment instead of waiting for unused initialization keys. Retain key rotation, original ALAC / Hi-Res / Atmos selection and the existing stable audio buffers.
+- Start native selections directly, including a new choice during initial preparation, without first warming a separate MusicKit AAC queue. Cancel superseded work and retain the latest choice across delayed responses.
+- Add bounded timing diagnostics containing durations only, plus preparation, cold-start cancellation, native-host and hover regressions. Apple integration 22.
+
 ## 0.19.1 — 2026-10-28
 
 - Fix Spotify artist photographs: use the public artist page's image only after its canonical identity matches the requested artist. Loading strips, decorative CSS textures and album covers are excluded from portrait fallbacks.

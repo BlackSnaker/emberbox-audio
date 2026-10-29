@@ -85,6 +85,19 @@ class Playback(unittest.TestCase):
         self.host=host();self.service=MusicService(self.host,Path(self.folder.name)/'queue.json')
         self.addCleanup(self.service.close)
         self.calls=[];self.service.repository.play=lambda item,alive:self.calls.append(item['id']) if alive() else None
+    def test_hover_is_debounced_and_selection_cancels_it(self):
+        s=self.service;h=self.host;h.source='apple-music';s.source_changed()
+        first={'uri':'apple:songs:123','title':'First','artist':'Artist'}
+        second={'uri':'apple:songs:456','title':'Second','artist':'Artist'}
+        s.prime(first);s.prime(second)
+        self.assertTrue(drain(lambda:h.apple_web.action.called))
+        h.apple_web.action.assert_called_once_with('spatial',operation='prime',kind='songs',id='456')
+        h.apple_web.action.reset_mock();s.prime(first);s.cancel_prime()
+        self.assertFalse(drain(lambda:h.apple_web.action.called,.25))
+        s.prime(first);s.play_now(second)
+        self.assertTrue(drain(lambda:not s.loading));self.assertEqual(s.prime_timer,0)
+        self.assertFalse(h.apple_web.action.called)
+
     def test_native_selection_keeps_starting_state_until_audible_confirmation(self):
         s=self.service;h=self.host;h.source='apple-music';s.source_changed()
         h.title.value='Outgoing';h.apple_web.state={'id':'old','spatial':{'phase':'playing','switching':True}}

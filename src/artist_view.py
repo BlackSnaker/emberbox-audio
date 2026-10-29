@@ -2,7 +2,7 @@
 import time
 from gi.repository import Gtk,Pango,GdkPixbuf,GLib
 from source_picker import text
-from listening_library import label,button,scroll,duration
+from listening_library import label,button,scroll,duration,prime_on_hover
 from listening_queue import track
 from discovery_panel import clear
 from music_library import NAMES
@@ -613,6 +613,7 @@ class ArtistView(Gtk.Box):
             image=Gtk.Image();self.artwork.load(image,value.get('image',''),30 if compact else 42,6 if compact else 7);row.pack_start(image,False,False,0)
             names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=1)
             play=button(value.get('title',''),lambda v=value:self.service.play_now(v,context=context),'stage-song')
+            prime_on_hover(play,self.service,value)
             play.get_child().set_xalign(0);play.get_child().set_ellipsize(Pango.EllipsizeMode.END);play.get_child().set_max_width_chars(65)
             play.get_style_context().add_class('stage-card-title');names.pack_start(play,False,False,0)
             if compact:play.get_style_context().add_class('stage-song-compact')

@@ -59,6 +59,14 @@ def button(value,action,style='stage-quiet',accessible=''):
     return item
 
 
+def prime_on_hover(widget,service,item):
+    if not hasattr(service,'prime'):return
+    widget.connect('enter-notify-event',lambda *_:service.prime(item))
+    widget.connect('focus-in-event',lambda *_:service.prime(item))
+    widget.connect('leave-notify-event',lambda *_:service.cancel_prime())
+    widget.connect('focus-out-event',lambda *_:service.cancel_prime())
+
+
 def scroll(content):
     item=Gtk.ScrolledWindow();item.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
     item.set_overlay_scrolling(True);item.set_min_content_height(0);item.set_propagate_natural_height(False)
@@ -247,6 +255,7 @@ class LibraryView(Gtk.Box):
         for index,item in enumerate(tracks):
             row=Gtk.Box(spacing=10);row.get_style_context().add_class('stage-track-row')
             play=button('',lambda value=item,items=context:self.service.play_now(value,context=items),'stage-song',text('Play ','Слушать ')+item.get('title',''))
+            prime_on_hover(play,self.service,item)
             box=Gtk.Box(spacing=12)
             number=label(f'{index+1:02}','stage-row-number');number.set_size_request(22,-1);box.pack_start(number,False,False,0)
             image=Gtk.Image();self.artwork.load(image,item.get('image',''),45,7);box.pack_start(image,False,False,0)

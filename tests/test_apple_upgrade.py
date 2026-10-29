@@ -4,14 +4,22 @@ from pathlib import Path
 from unittest import TestCase
 from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
-from apple_web import AppleWeb
+from apple_web import AppleWeb,BridgeUnavailable
 
 class AppleUpgrade(TestCase):
+    def test_optional_preparation_failure_does_not_report_a_playback_error(self):
+        app=AppleWeb.__new__(AppleWeb);app.closed=False;app.enabled=True;app.error='';app.changed=Mock()
+        app.pool=Mock();app.pool.submit.side_effect=lambda task:task()
+        app.bridge=Mock(connected=True);app.bridge.request.side_effect=BridgeUnavailable('SPATIAL_NETWORK')
+        app.action('spatial',operation='prime',kind='songs',id='123')
+        app.bridge.request.assert_called_once_with('spatial',operation='prime',kind='songs',id='123')
+        self.assertEqual(app.error,'');app.changed.assert_not_called()
+
     def test_restore_waits_for_the_authorized_new_engine(self):
         app=AppleWeb.__new__(AppleWeb)
         app.closed=False;app.enabled=True;app._start_engine=Mock()
-        states=[{'ready':True,'authorized':False,'integrationVersion':21},
-                {'ready':True,'authorized':True,'integrationVersion':21}]
+        states=[{'ready':True,'authorized':False,'integrationVersion':22},
+                {'ready':True,'authorized':True,'integrationVersion':22}]
         observed=[]
         def request(method,**params):
             if method=='status':observed.append(states.pop(0));return observed[-1]
@@ -30,7 +38,7 @@ class AppleUpgrade(TestCase):
             app=AppleWeb.__new__(AppleWeb)
             app.closed=False;app.enabled=True;app._start_engine=Mock()
             app.bridge=Mock(connected=True)
-            app.bridge.request.side_effect=lambda method,**params:{'ready':True,'authorized':True,'integrationVersion':21} if method=='status' else {}
+            app.bridge.request.side_effect=lambda method,**params:{'ready':True,'authorized':True,'integrationVersion':22} if method=='status' else {}
             with patch('apple_web.subprocess.run'),patch('apple_web.time.sleep'):
                 app._upgrade({'id':'i.library','catalogId':catalog,'authorized':True,'playing':True,'position':12})
             app.bridge.request.assert_any_call('play',kind='songs' if catalog else 'library-songs',id=catalog or 'i.library',position=12,paused=False)

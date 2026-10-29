@@ -112,6 +112,21 @@ superseded without waiting for an older lookup. The library shows Starting until
 the selected audio is confirmed. Network authorization may still take time;
 no AAC preview or lower-quality asset is used to conceal that delay.
 
+Opening a track list prepares the first two manifest descriptors serially;
+hovering or focusing a song for 180 ms prioritizes that selection. The cache
+holds at most four descriptors for 60 seconds in the signed-in page, scoped to
+its MusicKit instance and storefront. It contains no decoded audio or DRM
+session. Priming does not allocate a third deck, request a licence or download
+audio; selecting the same song joins its pending preparation. Playback still
+checks subscription and authorizes each media key when needed, including key
+rotation. Unused initialization keys no longer delay the first audio.
+
+Initial native selections bypass the separate MusicKit AAC startup. A newer
+choice cancels unfinished native preparation, including delayed initial
+responses. The stable output buffers remain unchanged. Sanitized
+`spatial.switchTiming` reports stage durations and reuse flags; it contains no
+media addresses, credentials or audio. Network and device latency still apply.
+
 ### Seeking without a quality change
 
 Seeking within the current track retains its source context, CDM/licensed handles

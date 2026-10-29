@@ -25,12 +25,15 @@ class SpatialHostTests(unittest.TestCase):
             bootstrap=queue.Queue();bootstrap.put({'type':'warm','backend':'fairplay','runtime':runtime,'outputRate':48000})
             seen=[]
             def decode(args,prepared,runtime,rate,actual,licensed,authorize,writer,position,generation,cancelled):
-                self.assertIs(actual,host);seen.append((prepared['contextId'],position,generation));self.assertEqual(set(licensed),{0,1})
+                self.assertIs(actual,host);seen.append((prepared['contextId'],position,generation))
+                self.assertNotIn(0,licensed,'Unused initialization keys delay the selected track')
+                authorize(1);self.assertEqual(set(licensed),{1})
             with patch.object(worker,'bootstrap',bootstrap),patch.object(worker,'seeks',requests),patch.object(worker,'listen'),patch.object(worker,'FairPlay',return_value=host) as construct,patch.object(worker,'PcmWriter'),patch.object(worker,'decode_pass',side_effect=decode),patch.object(worker,'emit'),patch('spatial_worker.os.dup2'),patch('spatial_worker.os.close'):
                 worker.main()
             construct.assert_called_once_with({});host.close.assert_called_once()
             self.assertEqual(seen,[('context-123',0,1),('context-123',40,2),('context-456',0,3)])
-            self.assertEqual(len(host.contexts),3)
+            self.assertEqual(len(host.contexts),2)
+            self.assertTrue(all('/P000000000/' not in call.args[1] for call in host.license.call_args_list))
 
     def test_shared_initialization_license_does_not_consume_a_context_for_each_song(self):
         host=FairPlay.__new__(FairPlay);host.contexts={};host.open_fn=Mock(return_value=123)

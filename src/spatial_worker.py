@@ -78,6 +78,7 @@ def decode64(value,max_size):
     return result
 
 def decode_pass(args,prepared,runtime,rate,cdm,licensed,license_key,writer,origin,generation,cancelled):
+    started=time.monotonic()
     emit({'type':'seek-state','generation':generation,'stage':'decoding'})
     segments=prepared['segments'];index=next((i for i,s in enumerate(segments) if s['start']+s['duration']>origin),len(segments)-1)
     skip=round(max(0.,origin-segments[index]['start'])*rate)
@@ -91,11 +92,13 @@ def decode_pass(args,prepared,runtime,rate,cdm,licensed,license_key,writer,origi
         if not data:return
         if not verified:
             verified=True;emit({'type':'quality','generation':generation,'audioQuality':rendered_format})
+            emit({'type':'timing','generation':generation,'stage':'pcmMs','ms':round((time.monotonic()-started)*1000)})
         writer.write(data,generation,cancelled);emitted+=len(data)//8
     try:
         for number in range(index,len(segments)):
             if cancelled.is_set():raise SeekCancelled()
             segment=segments[number];key=segment['keyIndex'];license_key(key)
+            if number==index:emit({'type':'timing','generation':generation,'stage':'licenseMs','ms':round((time.monotonic()-started)*1000)})
             encrypted=bytearray();total=1
             while len(encrypted)<total:
                 part=request('segment',cancelled=cancelled,contextId=prepared.get('contextId',''),index=number,offset=len(encrypted));total=part['total']
@@ -103,6 +106,7 @@ def decode_pass(args,prepared,runtime,rate,cdm,licensed,license_key,writer,origi
                 chunk=decode64(part['data'],393216)
                 if not chunk or len(encrypted)+len(chunk)>total:raise RuntimeError('SPATIAL_SOURCE_INVALID')
                 encrypted.extend(chunk)
+            if number==index:emit({'type':'timing','generation':generation,'stage':'fragmentMs','ms':round((time.monotonic()-started)*1000)})
             for packet,crypto in samples(encrypted,part['initBytes'],part['originalOffset']):
                 if cancelled.is_set():raise SeekCancelled()
                 # E-AC-3 access units are independently encrypted. Keep half a
@@ -201,9 +205,11 @@ def main():
                         if cancelled.is_set():raise SeekCancelled()
                         if not cdm.usable(cdm.handle):raise RuntimeError('SPATIAL_KEY_UNUSABLE')
                         licensed[key]=kid
-                    if fairplay:
-                        for key in range(len(prepared['licences'])):license_key(key)
-                        emit({'type':'host-capacity','generation':generation,'used':len(cdm.contexts)})
+                    # Authorize each media key when its segment is needed.
+                    # An EXT-X-KEY before EXT-X-MAP can be replaced before the
+                    # first media segment; licensing that unused key delays
+                    # every selection. Key rotation still goes through the
+                    # same per-key authorization in decode_pass().
                 if prepared is None:raise RuntimeError('SPATIAL_SOURCE_UNSUPPORTED')
                 decode_pass(pass_args,prepared,runtime,rate,cdm,licensed,license_key,writer,origin,generation,cancelled)
             except Exception:

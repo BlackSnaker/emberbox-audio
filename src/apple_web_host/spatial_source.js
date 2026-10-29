@@ -26,7 +26,8 @@ async function emberboxSpatialSource(params) {
   return {cancelled:true};
  }
  let job=null;
- if(params.action==='prepare'&&params.requestKey!==undefined){
+ const playback=params.action==='prepare',priming=params.action==='prime';
+ if((playback||priming)&&params.requestKey!==undefined){
   if(typeof params.requestKey!=='string'||!/^native-[0-9]{1,16}$/.test(params.requestKey))throw Error('INVALID_ARGUMENTS');
   for(const older of preparing.values())cancel(older);
   job={cancelled:false,controllers:new Set()};preparing.set(params.requestKey,job);
@@ -58,14 +59,15 @@ async function emberboxSpatialSource(params) {
   if(!Number.isSafeInteger(start)||!Number.isSafeInteger(length)||!Number.isSafeInteger(start+length)||length<1||length>16777216)throw Error('SPATIAL_SOURCE_LIMIT');
   return {start,length};
  }
- if(params.action==='prepare'||params.action==='inspect') {
+ if(playback||priming||params.action==='inspect') {
   try{
   if(params.action==='prepare'&&contexts.size>=2)throw Error('SPATIAL_BUSY');
   for(const [key,value] of recent.items)if(Date.now()-value.time>60000)recent.items.delete(key);
-  const cached=params.action==='prepare'&&params.id!==undefined?recent.items.get(cacheKey):null;
+  const cached=(playback||priming)&&params.id!==undefined?recent.items.get(cacheKey):null;
   if(cached){
    if(await music._playbackController?.services?.store?.storekit?.hasMusicSubscription?.()!==true){recent.items.clear();throw Error('SUBSCRIPTION_REQUIRED');}
-   check();if(contexts.size>=2)throw Error('SPATIAL_BUSY');
+   check();if(priming)return {ready:true};
+   if(contexts.size>=2)throw Error('SPATIAL_BUSY');
    const contextId=crypto.randomUUID(),c=cached.context;
    contexts.set(contextId,{...c,licences:c.licences.map(v=>({...v})),cache:null,controllers:new Set(),requestKey:params.requestKey});
    return {...cached.prepared,contextId};
@@ -94,7 +96,7 @@ async function emberboxSpatialSource(params) {
   const extended=current.attributes?.extendedAssetUrls?.enhancedHls;
   const hints=[current.attributes?.audioVariants,current.attributes?.audioTraits].flatMap(v=>Array.isArray(v)?v:[]);
   const masterReady=bytes(asset.assetURL);
-  const extendedReady=params.action==='prepare'&&params.fairplay===true&&typeof extended==='string'&&!hints.some(v=>['atmos','dolby-atmos'].includes(v))?
+  const extendedReady=(playback||priming)&&params.fairplay===true&&typeof extended==='string'&&!hints.some(v=>['atmos','dolby-atmos'].includes(v))?
    (extended===asset.assetURL?masterReady:bytes(extended)).catch(()=>null):null;
   const lines=new TextDecoder().decode(await masterReady).split(/\r?\n/).map(s=>s.trim()),variants=[],offered=[];
   let lossless=null;
@@ -105,7 +107,7 @@ async function emberboxSpatialSource(params) {
   }
   // Atmos keeps priority. A signed-in native FairPlay session can fetch ALAC
   // when the web asset has no spatial stream. No signed media URL leaves here.
-  if(params.action==='prepare'&&params.fairplay===true&&!variants.some(v=>v.a.CODECS.includes('ec-3'))){
+  if((playback||priming)&&params.fairplay===true&&!variants.some(v=>v.a.CODECS.includes('ec-3'))){
    const url=current.attributes?.extendedAssetUrls?.enhancedHls;
    if(typeof url==='string'){
     const base=safeUrl(url).href,master=new TextDecoder().decode(await extendedReady||await bytes(base)).split(/\r?\n/).map(s=>s.trim()),candidates=[];
@@ -171,10 +173,10 @@ async function emberboxSpatialSource(params) {
    }
   }
   if(!segments.length)throw Error('SPATIAL_SOURCE_UNSUPPORTED');
-  check();if(contexts.size>=2)throw Error('SPATIAL_BUSY');
-  const item=Object.create(current),contextId=crypto.randomUUID();
+  check();if(playback&&contexts.size>=2)throw Error('SPATIAL_BUSY');
+  const item=Object.create(current),contextId=playback?crypto.randomUUID():undefined;
   Object.defineProperty(item,'keyURLs',{value:{'hls-key-server-url':asset.keyServerURL,'widevine-cert-url':asset.keyCertURL}});
-  contexts.set(contextId,{item,asset,licences,segments,cache:null,controllers:new Set(),requestKey:params.requestKey});
+  if(playback)contexts.set(contextId,{item,asset,licences,segments,cache:null,controllers:new Set(),requestKey:params.requestKey});
   const a=current.attributes||{},art=a.artwork?.url||'';
   const names={'atmos':'dolby-atmos','surround':'dolby-audio','hiResLossless':'hi-res-lossless'};
   const formats=[...new Set([...(Array.isArray(a.audioVariants)?a.audioVariants:[]),...(Array.isArray(a.audioTraits)?a.audioTraits:[])].map(v=>names[v]||v).filter(v=>['dolby-atmos','dolby-audio','hi-res-lossless','lossless','lossy-stereo'].includes(v)))];
@@ -185,7 +187,7 @@ async function emberboxSpatialSource(params) {
    recent.items.set(cacheKey,{time:Date.now(),context:{item,asset,licences:licences.map(v=>({...v})),segments},prepared:{...prepared,contextId:undefined}});
    while(recent.items.size>4)recent.items.delete(recent.items.keys().next().value);
   }
-  return prepared;
+  return priming?{ready:true}:prepared;
   }finally{if(job&&preparing.get(params.requestKey)===job)preparing.delete(params.requestKey);}
  }
  const ctx=contexts.get(params.contextId);if(!ctx)throw Error('SPATIAL_STALE_CONTEXT');

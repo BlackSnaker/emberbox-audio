@@ -77,6 +77,24 @@ const call=params=>context.emberboxSpatialSource(params);
  assert.equal(lossless.licences[1].uri,'skd://itunes.apple.com/P123456789/s1/e1');
  assert(!JSON.stringify(lossless).includes('NEVER_EXPORT'));assert.equal(requests.length,count);
  await call({action:'close',contextId:lossless.contextId});
+ // Browsing/hover primes the exact maximum-quality descriptor without a
+ // decoder context, licence request or audio download, even with both decks
+ // occupied. Playback still gets a fresh context and checks subscription.
+ context.window.__emberSpatialRecent.items.clear();
+ const slotA=await call({action:'prepare',fairplay:true,allowStereo:true,kind:'songs',id:'789'});
+ const slotB=await call({action:'prepare',fairplay:true,kind:'songs',id:'789'});
+ context.window.__emberSpatialRecent.items.clear();
+ const audioBefore=fetches.filter(u=>new URL(u).pathname==='/audio.mp4').length;
+ const primed=await call({action:'prime',requestKey:'native-90',fairplay:true,allowStereo:true,kind:'songs',id:'789'});
+ assert.equal(primed.ready,true);assert.deepEqual(Object.keys(primed),['ready']);
+ assert.equal(context.window.__emberSpatialContexts.size,2);assert.equal(requests.length,count);
+ assert.equal(fetches.filter(u=>new URL(u).pathname==='/audio.mp4').length,audioBefore);
+ await call({action:'close',contextId:slotA.contextId});await call({action:'close',contextId:slotB.contextId});
+ const primeFetches=fetches.length;
+ const primedPlay=await call({action:'prepare',fairplay:true,allowStereo:true,kind:'songs',id:'789'});
+ assert.equal(primedPlay.codec,'alac','Manifest priming must never cache web AAC in place of Lossless');
+ assert.equal(primedPlay.drm,'fairplay');assert.equal(fetches.length,primeFetches);
+ await call({action:'close',contextId:primedPlay.contextId});
  noAtmos=false;
  const spatial=await call({action:'prepare',fairplay:true,kind:'songs',id:'789'});
  assert.equal(spatial.codec,'eac3','Atmos retains priority over the optional stereo Lossless path');

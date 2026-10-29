@@ -135,6 +135,44 @@ p.loadDeck=async(r,deck,prepared)=>{deck.context=prepared.contextId;deck.child=c
  assert.equal(r.decks.filter(Boolean).length,1);p.source=goodSource;
  await assert.rejects(p.intercept(win,{method:'spatial',params:{enabled:'true'}}),/INVALID_ARGUMENTS/);
  await p.stop(false);
+ await p.configure(true);current={...metadata};p.merge(win,metadata);r=p.session;r.active.quality=quality;r.state.phase='playing';const hoverOutgoing=r.active;
+ // Hover preparation is coalesced, and clicking that same song joins its
+ // descriptor negotiation rather than cancelling/repeating the network work.
+ const ordinarySource=p.source;let primeRelease,primeCalls=0;
+ p.source=async(w,request)=>{
+  if(request.action==='prime'){primeCalls++;await new Promise(resolve=>primeRelease=resolve);return {ready:true};}
+  return ordinarySource(w,request);
+ };
+ const hover=p.prime(win,{kind:'songs',id:'123'});
+ const sameHover=p.prime(win,{kind:'songs',id:'123'});assert.equal(hover,sameHover);assert.equal(primeCalls,1);
+ await p.intercept(win,{method:'play',params:{kind:'songs',id:'123'}});await tick();
+ assert.equal(r.standby.metadata.id,'123');assert.equal(r.standby.ready,false);
+ primeRelease();await hover;await tick();await tick();
+ const hovered=r.standby;
+ assert.equal(commands.at(-1).type,'transition');
+ p.mixerMessage(r,{type:'flow-started',key:hovered.key,slot:hovered.slot,duration:.22});await r.manualTask;
+ p.mixerMessage(r,{type:'released',slot:hoverOutgoing.slot,generation:hoverOutgoing.generation});
+ p.source=ordinarySource;
+ await p.stop(false);
+ const playCount=calls.filter(c=>c.method==='play'&&c.params.native!==true).length;
+ const coldNative=await p.intercept(win,{method:'play',params:{kind:'songs',id:'456',position:10}});
+ assert.equal(coldNative.preparing,true);assert.equal(p.session.active.metadata.id,'456');
+ assert.equal(p.session.state.position,10);assert.equal(p.session.nativeOnly,true);
+ const pendingCold=p.session;
+ await p.intercept(win,{method:'play',params:{kind:'songs',id:'123'}});
+ assert.notEqual(p.session,pendingCold);assert.equal(p.session.active.metadata.id,'123');
+ assert.equal(calls.filter(c=>c.method==='play'&&c.params.native!==true).length,playCount,'Native startup warmed an unnecessary browser AAC queue');
+ await p.stop(false);
+ const realPage=p.page;let pauseRelease,firstPause=true;
+ p.page=async(w,request)=>{
+  if(firstPause&&request.method==='transport'){firstPause=false;await new Promise(resolve=>pauseRelease=resolve);}
+  return realPage(w,request);
+ };
+ const lateCold=p.intercept(win,{method:'play',params:{kind:'songs',id:'123'}});await tick();
+ await p.intercept(win,{method:'play',params:{kind:'songs',id:'456'}});
+ pauseRelease();assert.equal((await lateCold).superseded,true);
+ assert.equal(p.session.active.metadata.id,'456','An older pause acknowledgement replaced the latest cold selection');
+ p.page=realPage;await p.stop(false);
  const profile=path.join(root,'native-profile');fs.mkdirSync(profile);fs.writeFileSync(path.join(profile,'session-ready'),'fixture');
  process.env.EMBERBOX_FAIRPLAY_RUNTIME=path.join(root,'fairplay.json');
  fs.writeFileSync(process.env.EMBERBOX_FAIRPLAY_RUNTIME,JSON.stringify({schema:1,library:path.join(root,'host'),librarySha256:'a'.repeat(64),profile}));

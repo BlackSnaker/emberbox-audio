@@ -35,7 +35,7 @@ function host(yandex){
   assert.equal((await yandex.command(win,{method:'status'})).integrationVersion,6);
   const apple=host(false);win.webContents.getURL=()=> 'https://music.apple.com/us/new';
   responses.push({ready:true,authorized:true});
-  assert.equal((await apple.command(win,{method:'status'})).integrationVersion,21);
+  assert.equal((await apple.command(win,{method:'status'})).integrationVersion,22);
   responses.push({ready:true,id:'123'});win.emberboxQuality={snapshot:id=>({codec:'aac',track:id,evidence:'decoder'})};
   assert.equal((await apple.command(win,{method:'status'})).audioQuality.track,'123');
   const spotify=host('spotify');
