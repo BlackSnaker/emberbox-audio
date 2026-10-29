@@ -197,6 +197,13 @@ class FullscreenPlayer:
         header.pack_start(self.lyrics_button,False,False,0)
         self.source_button=self.button('',self.show_sources,'stage-quiet')
         header.pack_start(self.source_button,False,False,0)
+        self.settings_button=self.button('',self.show_settings,'stage-quiet','stage-exit')
+        settings_icon=Gtk.Image.new_from_icon_name('emblem-system-symbolic',Gtk.IconSize.MENU)
+        settings_icon.set_pixel_size(16);self.settings_button.set_image(settings_icon)
+        self.settings_button.set_always_show_image(True)
+        self.settings_button.set_valign(Gtk.Align.CENTER)
+        self.settings_button.get_accessible().set_name(text('Player settings','Настройки плеера'))
+        header.pack_start(self.settings_button,False,False,0)
         self.exit_button=self.button('↙',self.dismiss,'stage-quiet','stage-exit')
         self.source_button.set_valign(Gtk.Align.CENTER)
         self.exit_button.set_valign(Gtk.Align.CENTER)
@@ -435,6 +442,7 @@ class FullscreenPlayer:
         GLib.timeout_add(40,select)
 
     def hide(self):
+        if getattr(self.host,'settings',None):self.host.settings.dismiss_for(self.window)
         self.reveal.finish()
         self.dismiss_pending=False
         self.visible=False
@@ -452,6 +460,7 @@ class FullscreenPlayer:
 
     def dismiss(self):
         if not self.visible:return
+        if getattr(self.host,'settings',None):self.host.settings.dismiss_for(self.window)
         self.artist_view.cancel_intro()
         if self.reveal.active:self.hide();return
         if not self.window.get_settings().get_property('gtk-enable-animations'):
@@ -651,6 +660,12 @@ class FullscreenPlayer:
         h=self.host
         self.source_picker.show(self.source_button,h.source,h.sessions,h.browser_binding,h.youtube_binding,h.youtube_mode)
 
+    def show_settings(self):
+        if self.reveal.active:return
+        h=self.host
+        names={'spotify':'Spotify','apple-music':'Apple Music','youtube':'YouTube','yandex-music':text('Yandex Music','Яндекс Музыка')}
+        h.settings.show(self.settings_button,h.compact,names.get(h.source,h.source),stage=self)
+
     def open_accounts(self):
         self.hide();self.host.show_accounts()
 
@@ -669,6 +684,7 @@ class FullscreenPlayer:
         self.elapsed.set_text(clock_text(self.position))
 
     def on_key(self,_window,event):
+        if getattr(self.host,'settings',None) and self.host.settings.is_open_for(self.window):return False
         key=Gdk.keyval_name(event.keyval)
         if key in ('Escape','F11'):self.dismiss();return True
         if key=='Left' and event.state&Gdk.ModifierType.MOD1_MASK and self.page=='artist':self.artist_view.back();return True

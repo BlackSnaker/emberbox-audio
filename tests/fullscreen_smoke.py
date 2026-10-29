@@ -30,6 +30,7 @@ from lyrics import LyricLine, LyricsState
 from lyrics import LyricsClient as RealLyricsClient
 import numpy as np
 from audio_meter import FRAMES, RATE, SpotifyAudioMeter
+from widget_settings import SettingsMenu
 
 
 def settle(seconds=.2):
@@ -151,6 +152,14 @@ class FixtureHost:
         self.apple_web=SimpleNamespace(state={})
         self.yandex_web=SimpleNamespace(state={})
         self.youtube=SimpleNamespace(current=None,eof=False)
+        self.settings=SettingsMenu(self.toggle_compact,lambda:None,lambda:None,
+                                   self.show_accounts,self.show_fullscreen)
+
+    def toggle_compact(self):
+        self.compact=not self.compact
+
+    def show_fullscreen(self):
+        self.fullscreen.open()
 
     def on_action(self, _button, action):
         self.calls.append((self.source, action))
@@ -173,7 +182,7 @@ class FixtureHost:
 
 def assert_controls_fit(stage):
     width, height = stage.window.get_size()
-    for child in (stage.exit_button, stage.lyrics_button, stage.progress, stage.play_button,
+    for child in (stage.exit_button, stage.settings_button, stage.lyrics_button, stage.progress, stage.play_button,
                   stage.volume_meter, stage.knob, stage.mute,
                   stage.previous_button, stage.next_button):
         assert child.get_mapped(), f'{type(child).__name__} is not mapped'
@@ -308,6 +317,7 @@ def run():
          patch.object(fullscreen, 'LyricsClient', FixtureLyrics), \
          patch.object(fullscreen.Artwork, 'load', image_load):
         stage = fullscreen.FullscreenPlayer(host)
+        host.fullscreen=stage
         stage.prewarm()
         entrance_frames=[]
         advance=stage.reveal.advance
@@ -350,6 +360,39 @@ def run():
             assert stage.layout.get_opacity()==stage.background.get_opacity()==1.
             assert stage.knob.get_allocated_width() >= 88
             assert not hasattr(stage,'volume'), 'Fullscreen volume slider must be removed'
+            # Fullscreen settings use the real menu and keep native playback running.
+            saved_source=host.source
+            host.source='apple-music'
+            host.apple_web.state={'spatial':{'enabled':True,'scene':{'mode':'speakers','preference':'speakers','angle':30,'hrtf':0}}}
+            before_settings=list(host.calls)
+            stage.settings_button.clicked();settle(.2)
+            popup=host.settings.popover
+            assert popup.get_mapped() and popup.get_relative_to() is stage.settings_button
+            assert stage.settings_button.get_image().get_mapped(),'The settings icon is hidden by the desktop button-images preference'
+            before_volume=host.sound.volume
+            key(stage.window,'Right');key(stage.window,'Down')
+            assert host.calls==before_settings and host.sound.volume==before_volume,'Menu navigation leaked into playback shortcuts'
+            scene_button=next(b for b in popup.get_children()[0].get_child().get_child().get_children()
+                              if isinstance(b,Gtk.Button) and b.get_label()==fullscreen.text('Soundstage · speakers / headphones','Звуковая сцена · колонки / наушники'))
+            scene_button.clicked();settle(.85)
+            assert host.settings.scene_popup.get_mapped()
+            assert not host.settings.scene_control.diagram.tick
+            assert host.calls==before_settings,'Opening scene settings must not change playback'
+            stage.hide();settle(.2)
+            assert not host.settings.scene_control.timer,'Closing fullscreen left scene polling alive'
+            host.source=saved_source;host.apple_web.state={}
+            stage.open();wait_transition(stage)
+            stage.settings_button.clicked();settle(.15)
+            host.settings.accounts_button.clicked();settle(.2)
+            assert not stage.visible and host.calls[-1]==('accounts',)
+            host.calls.pop()
+            stage.open();wait_transition(stage)
+            stage.settings_button.clicked();settle(.15)
+            compact=host.compact
+            host.settings.mode_button.clicked();settle(.2)
+            assert not stage.visible and host.compact!=compact
+            host.compact=compact
+            stage.open();wait_transition(stage)
             assert not stage.lyrics_visible and not stage.right.get_visible()
             assert not any(call[0] for call in stage.lyrics.calls), 'Artwork mode must not request lyrics'
             stage.lyrics_button.clicked();wait_transition(stage)

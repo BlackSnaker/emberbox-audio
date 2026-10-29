@@ -40,7 +40,18 @@ class SettingsMenu:
         if host.fullscreen is None:host.fullscreen=FullscreenPlayer(host)
         host.fullscreen.open_dj()
 
-    def show(self, anchor, compact, source):
+    def popups_for(self, window):
+        for popup in (self.popover,getattr(self,'scene_popup',None)):
+            anchor=popup.get_relative_to() if popup else None
+            if anchor and anchor.get_toplevel() is window:yield popup
+
+    def dismiss_for(self, window):
+        for popup in tuple(self.popups_for(window)):popup.popdown()
+
+    def is_open_for(self, window):
+        return any(popup.get_mapped() for popup in self.popups_for(window))
+
+    def show(self, anchor, compact, source, stage=None):
         if self.popover:
             self.popover.destroy()
         popup = self.popover = Gtk.Popover.new(anchor)
@@ -49,7 +60,12 @@ class SettingsMenu:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
         box.set_border_width(12)
         box.set_size_request(228, -1)
-        popup.add(box)
+        if stage:
+            scroll=Gtk.ScrolledWindow();scroll.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
+            scroll.set_propagate_natural_height(True)
+            scroll.set_max_content_height(max(180,stage.window.get_allocated_height()-140))
+            scroll.add(box);popup.add(scroll)
+        else:popup.add(box)
         heading = Gtk.Label(label=text('Player settings', 'Настройки плеера'))
         heading.set_xalign(0)
         heading.get_style_context().add_class('drawer-heading')
@@ -81,6 +97,7 @@ class SettingsMenu:
             note.get_style_context().add_class('caption');box.pack_start(note,False,False,2)
             if state.get('enabled'):
                 scene=Gtk.Button(label=text('Soundstage · speakers / headphones','Звуковая сцена · колонки / наушники'))
+                scene.get_style_context().add_class('filter-chip')
                 scene.get_style_context().add_class('settings-action');scene.set_has_tooltip(False)
                 def open_scene(_button):
                     from scene_control import SceneControl
@@ -91,6 +108,7 @@ class SettingsMenu:
                     self.scene_popup.connect('closed',lambda item:item.destroy());self.scene_popup.show_all();self.scene_popup.popup()
                 scene.connect('clicked',open_scene);box.pack_start(scene,False,False,4)
             connect=Gtk.Button(label=text('Connect Apple Lossless…','Подключить Apple Lossless…'))
+            connect.get_style_context().add_class('filter-chip')
             connect.set_sensitive(not getattr(apple,'lossless_connecting',False));connect.set_has_tooltip(False)
             connect.get_style_context().add_class('settings-action')
             connect.connect('clicked',lambda _button:(popup.popdown(),apple.connect_lossless()))
@@ -104,14 +122,22 @@ class SettingsMenu:
             box.pack_start(button, False, False, 0)
             return button
 
-        if self.fullscreen:
+        def desktop_action(callback):
+            def run():
+                if stage:stage.hide()
+                callback()
+            return run
+
+        if stage:
+            self.fullscreen_button=action(text('Back to widget','Вернуться к виджету'),stage.dismiss)
+        elif self.fullscreen:
             self.fullscreen_button = action(text('Listening room · Fullscreen','Комната прослушивания · На весь экран'),self.fullscreen)
         if self.dj:self.dj_button=action(text('Ember DJ · Your own radio','Ember DJ · Личное радио'),self.dj)
         if self.accounts:
-            self.accounts_button = action(text('Accounts · Spotify / Apple / Yandex','Аккаунты · Spotify / Apple / Яндекс'),self.accounts)
+            self.accounts_button = action(text('Accounts · Spotify / Apple / Yandex','Аккаунты · Spotify / Apple / Яндекс'),desktop_action(self.accounts))
         self.mode_button = action(
             text('Full player', 'Обычный режим') if compact else text('Compact player', 'Компактный режим'),
-            self.compact)
+            desktop_action(self.compact))
         self.refresh_button = action(text('Refresh connections', 'Обновить подключения'), self.refresh)
         self.restart_button = action(text('Restart widget', 'Перезапустить виджет'), self.restart, 'warm-button')
         if self.hide:self.hide_button=action(text('Hide player','Скрыть плеер'),self.hide)

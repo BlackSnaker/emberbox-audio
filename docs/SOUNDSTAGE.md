@@ -4,8 +4,10 @@
 
 ![Ember listening-scene card](../assets/screenshots/soundstage.en.png)
 
-Open **Settings → Soundstage · speakers / headphones** while native Apple
-Atmos / Lossless is enabled. The card uses Ember's warm Grunesphism surfaces,
+Open **⚙ → Soundstage · speakers / headphones** while native Apple
+Atmos / Lossless is enabled. In fullscreen, the gear is at the top right,
+between the source picker and the return-to-widget button.
+The card uses Ember's warm Grunesphism surfaces,
 recessed controls and a small animated listening-room diagram. Its entrance,
 speaker spacing and reversible headphone transition animate for about 720 ms.
 Animation respects the desktop setting, keeps a bounded 16-frame cache and
