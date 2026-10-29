@@ -173,6 +173,12 @@ p.loadDeck=async(r,deck,prepared)=>{deck.context=prepared.contextId;deck.child=c
  pauseRelease();assert.equal((await lateCold).superseded,true);
  assert.equal(p.session.active.metadata.id,'456','An older pause acknowledgement replaced the latest cold selection');
  p.page=realPage;await p.stop(false);
+ const realPrime=p.prime,listed=[];
+ p.prime=async(w,item)=>{listed.push(item.id);return {ready:true};};
+ p.primeList(win,{tracks:[{kind:'albums',id:'album'},{kind:'library-songs',id:'i.first'},{kind:'songs',id:'789'},{kind:'songs',id:'unrequested'}]});
+ await new Promise(resolve=>setTimeout(resolve,400));
+ assert.deepEqual(listed,['i.first','789'],'Library album rows did not prime the bounded first two songs');
+ p.prime=realPrime;
  const profile=path.join(root,'native-profile');fs.mkdirSync(profile);fs.writeFileSync(path.join(profile,'session-ready'),'fixture');
  process.env.EMBERBOX_FAIRPLAY_RUNTIME=path.join(root,'fairplay.json');
  fs.writeFileSync(process.env.EMBERBOX_FAIRPLAY_RUNTIME,JSON.stringify({schema:1,library:path.join(root,'host'),librarySha256:'a'.repeat(64),profile}));

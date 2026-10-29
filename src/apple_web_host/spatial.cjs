@@ -98,7 +98,7 @@ class SpatialPlayback {
  primeList(win,result){
   if(this.primeJob||this.session?.manual)return;
   clearTimeout(this.primeTimer);
-  const items=(result?.items||[]).filter(p=>['songs','library-songs'].includes(p.kind)&&/^\w[\w.-]{0,199}$/.test(String(p.id))).slice(0,2),revision=this.revision;
+  const items=(result?.items||result?.tracks||[]).filter(p=>['songs','library-songs'].includes(p.kind)&&/^\w[\w.-]{0,199}$/.test(String(p.id))).slice(0,2),revision=this.revision;
   const next=()=>{if(this.revision!==revision||!items.length)return;
    this.prime(win,items.shift()).catch(()=>{}).finally(()=>{if(this.revision===revision&&items.length)this.primeTimer=setTimeout(next,150);});};
   if(items.length)this.primeTimer=setTimeout(next,200);
