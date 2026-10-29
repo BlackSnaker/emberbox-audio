@@ -216,7 +216,9 @@ async function emberboxSpatialSource(params) {
   const cache=ctx.cache;await cache.loading;
   if(params.action==='prefetch')return {ready:true};
   const data=cache.data;if(offset>=data.length)throw Error('INVALID_ARGUMENTS');
-  return {data:encode(data.subarray(offset,offset+393216)),total:data.length,initBytes:cache.initBytes,originalOffset:cache.originalOffset,bodyKind:cache.bodyKind};
+  // Stay below the worker's 4 MiB JSON input bound after base64, while
+  // avoiding dozens of renderer round trips for a Hi-Res opening segment.
+  return {data:encode(data.subarray(offset,offset+2097152)),total:data.length,initBytes:cache.initBytes,originalOffset:cache.originalOffset,bodyKind:cache.bodyKind};
  }
  if(params.action==='close'){
   close(params.contextId,ctx);

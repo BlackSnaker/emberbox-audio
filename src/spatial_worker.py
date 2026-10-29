@@ -103,7 +103,7 @@ def decode_pass(args,prepared,runtime,rate,cdm,licensed,license_key,writer,origi
             while len(encrypted)<total:
                 part=request('segment',cancelled=cancelled,contextId=prepared.get('contextId',''),index=number,offset=len(encrypted));total=part['total']
                 if not isinstance(total,int) or not 0<total<=18*1024*1024:raise RuntimeError('SPATIAL_SOURCE_LIMIT')
-                chunk=decode64(part['data'],393216)
+                chunk=decode64(part['data'],2097152)
                 if not chunk or len(encrypted)+len(chunk)>total:raise RuntimeError('SPATIAL_SOURCE_INVALID')
                 encrypted.extend(chunk)
             if number==index:emit({'type':'timing','generation':generation,'stage':'fragmentMs','ms':round((time.monotonic()-started)*1000)})
