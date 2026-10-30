@@ -27,7 +27,7 @@ import tempfile
 LABELS = {
     'python': 'Python ≥ 3.10', 'gi': 'PyGObject', 'gtk3': 'GTK 3',
     'gdkx11': 'GdkX11', 'svg': 'SVG image loader',
-    'numpy': 'NumPy ≥ 1.24', 'pillow': 'Pillow ≥ 10',
+    'numpy': 'NumPy ≥ 1.24', 'pillow': 'Pillow ≥ 10', 'scipy': 'SciPy ≥ 1.10 · headphone DSP',
     'websocket': 'websocket-client ≥ 1.6', 'pipewire': 'PipeWire command-line tools',
     'pactl': 'PulseAudio control client', 'xwayland': 'XWayland',
     'libmpv': 'libmpv', 'python_mpv': 'python-mpv', 'yt_dlp': 'yt-dlp',
@@ -35,7 +35,7 @@ LABELS = {
     'ffmpeg': 'FFmpeg', 'cxx': 'C++17 compiler · Apple Atmos',
     'fairplay_build':'Native Apple Lossless build tools',
 }
-PURE = {'numpy': 'numpy>=1.24', 'pillow': 'Pillow>=10',
+PURE = {'numpy': 'numpy>=1.24', 'pillow': 'Pillow>=10', 'scipy': 'scipy>=1.10',
         'websocket': 'websocket-client>=1.6', 'python_mpv': 'python-mpv',
         'yt_dlp': 'yt-dlp[default]>=2025.11.12', 'ejs': 'yt-dlp[default]>=2025.11.12', 'js_runtime': 'deno>=2.3'}
 PACKAGES = {
@@ -216,6 +216,7 @@ def svg():
     return loader.get_pixbuf() is not None
 probe('svg', svg)
 probe('numpy', lambda: module('numpy','numpy',(1,24)))
+probe('scipy', lambda: module('scipy','scipy',(1,10)))
 probe('pillow', lambda: module('PIL','pillow',(10,)))
 probe('websocket', lambda: module('websocket','websocket',(1,6)))
 def libmpv():
@@ -331,6 +332,7 @@ def inspect(python=None, *, youtube=True, spatial=False, lossless=False, os_rele
         checks['yt_dlp'] = bool(shutil.which('yt-dlp', path=path))
         checks['js_runtime'], versions['js_runtime'] = _runtime(path)
     if spatial:
+        checks['scipy']=bool(probe['checks'].get('scipy'))
         checks['cxx']=any(shutil.which(name,path=path) for name in ('c++','g++','clang++'))
         checks.update({key:bool(probe['checks'].get(key)) for key in ('libmpv','python_mpv')})
     if lossless:

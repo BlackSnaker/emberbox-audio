@@ -110,6 +110,12 @@ for an animated Grunesphism card with physical speaker geometry, a separate
 binaural headphone path and remembered output preferences. Bluetooth codec and
 source quality remain distinct. [Explore the listening scenes →](docs/SOUNDSTAGE.md)
 
+**Make it yours in headphones.** Choose a head model, an independent measured
+headphone correction and gentle bass / air / balance controls. Compare with the
+original, or import your own SOFA model. Native Apple playback keeps one shared
+EQ stage after EmberFlow, with smooth changes and linked peak protection.
+[Tune the headphone sound →](docs/HEADPHONES.md)
+
 ## The next wave
 
 Fullscreen covers change through soft water ripples: photographic refraction,

@@ -30,7 +30,7 @@ class SpatialPlayback {
  }
  info(){const r=this.session;return {enabled:this.enabled,available:!!runtime(),losslessAvailable:!!fairplayRuntime(),fastSwitch:true,fastSeek:true,seeking:!!r?.seeking,seekStage:r?.active.seekStage||'',phase:r?.state.phase||'idle',error:this.error,switching:!!r?.manual,switchError:this.switchError||null,
   flow:r&&(r.transition||!r.standby&&r.decks.filter(Boolean).length>1)?'mixing':r?.standby?.ready?'ready':r?.standby?'preparing':'idle',flowError:this.flowError||'',workerExit:this.workerExit||null,fragment:this.fragmentDebug||null,mix:this.mixDebug||null,switchTiming:this.switchTiming||null,
-  scene:{...this.scenes.snapshot(),changing:!!(r?.scenePending||r?.seeking)}};}
+  scene:{...this.scenes.snapshot(),headphoneStatus:r?.headphoneStatus||null,changing:!!(r?.scenePending||r?.seeking)}};}
  async configure(enabled){
   if(typeof enabled!=='boolean')throw Error('INVALID_ARGUMENTS');
   if(enabled&&!runtime())throw Error('SPATIAL_SETUP_REQUIRED');
@@ -42,12 +42,18 @@ class SpatialPlayback {
  applyScene(){
   const r=this.session;if(!r)return;
   const scene=this.scenes.render();
+  this.applyHeadphones(r,scene);
   if(r.active.scene&&signature(r.active.scene)===signature(scene)){r.scenePending=false;return;}
   if(r.manual||r.transition||r.seeking||!r.active.quality){r.scenePending=true;return;}
   r.scenePending=false;
   this.flow(r,{operation:'cancel',force:true}).catch(()=>{});
   if(r.active.quality.variant==='dolby-atmos')this.seek(r,r.state.position);
-  else r.active.scene=scene; // Ordinary Lossless keeps its original stereo PCM.
+  else r.active.scene=scene; // Stereo geometry stays intact; voicing lives in the shared mixer.
+ }
+ applyHeadphones(r,scene=this.scenes.render()){
+  const key=JSON.stringify([scene.mode,scene.headphones]);
+  if(!r.mixer||r.headphoneKey===key)return;
+  r.headphoneKey=key;this.send(r.mixer,{type:'headphones',scene});
  }
  merge(win,state){
   const id=String(state.id||state.catalogId||'');let r=this.session;
@@ -75,7 +81,7 @@ class SpatialPlayback {
   this.load(r).catch(e=>this.failed(r,errors.has(e.message)?e.message:'SPATIAL_PLAYBACK_FAILED'));
  }
  spawn(file,stdio,rate=48000){return spawn(process.env.EMBERBOX_SPATIAL_PYTHON,[file],{stdio,
-  env:{...process.env,PYTHONUNBUFFERED:'1',PYTHONFAULTHANDLER:'1',EMBERBOX_SPATIAL_RATE:String(rate),RAYON_NUM_THREADS:'2',OMP_NUM_THREADS:'1'}});}
+  env:{...process.env,PYTHONUNBUFFERED:'1',PYTHONFAULTHANDLER:'1',EMBERBOX_SPATIAL_RATE:String(rate),RAYON_NUM_THREADS:'2',OMP_NUM_THREADS:'1',OPENBLAS_NUM_THREADS:'1',MKL_NUM_THREADS:'1'}});}
  wire(child,message,failed){
   child.stdin.on('error',()=>{});child.on('error',()=>failed('SPATIAL_WORKER_UNAVAILABLE'));
   child.stderr.on('data',chunk=>{const text=chunk.toString('utf8');
@@ -140,6 +146,7 @@ class SpatialPlayback {
   const mixer=r.mixer=this.spawn(path.join(path.dirname(process.env.EMBERBOX_SPATIAL_WORKER),'spatial_mixer.py'),['pipe','pipe','pipe','pipe','pipe'],r.rate);
   for(const input of mixer.stdio.slice(3))input.on('error',()=>{});
   this.wire(mixer,v=>this.mixerMessage(r,v),code=>this.failed(r,code));
+  this.applyHeadphones(r);
   this.send(mixer,{type:'pause',paused:r.paused});
   const metadata=r.active.metadata,id=/^\d{1,20}$/.test(String(metadata.catalogId||''))?metadata.catalogId:metadata.id;
   await this.loadDeck(r,r.active,await this.source(r.win,{action:'prepare',requestKey:r.active.requestKey,id,kind:String(id).startsWith('i.')?'library-songs':'songs',allowStereo:true,fairplay:!!r.nativeRuntime?.fairplay}),r.state.position);
@@ -228,6 +235,10 @@ class SpatialPlayback {
  }
  mixerMessage(r,value){
   if(this.session!==r)return;
+  if(value.type==='headphones'){
+   r.headphoneStatus={active:value.active===true,headroomDb:Number.isFinite(value.headroomDb)?value.headroomDb:0,
+    error:value.error==='SCIPY_REQUIRED'?value.error:'',bypass:value.bypass===true};return;
+  }
   const deck=r.decks[value.slot];
   if(value.type==='ready'&&deck?.generation===value.generation){deck.ready=true;deck.readyAt=Date.now();}
   else if(value.type==='state'&&deck===r.active&&(value.generation===undefined?!r.seeking:value.generation===deck.generation)){

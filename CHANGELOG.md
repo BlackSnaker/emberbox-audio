@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.22.0 — 2026-10-30
+
+- Add independent headphone voicing to native Apple playback: ten attributed RTINGS / AutoEq presets, transparent Galaxy Buds4 Pro original mode, strength, bass, air, balance and same-headroom dry comparison. Preferences stay with each output; speakers bypass headphone EQ.
+- Process the shared stereo mix after EmberFlow with Float64 filters, 180 ms changes, calculated headroom and linked intersample-peak protection. One bounded design thread keeps cold SciPy setup away from slot/seek commands; no extra music decoder. Preserve source quality and the existing device buffers; account for the 5 ms lookahead in the playback clock.
+- Compare KU100 / KEMAR or import compatible personal SOFA models into a private library. Validate imports in an isolated, time/memory-limited decoder before selection. Native setup and upgrades provision missing SciPy. Add bilingual guides and real GTK / DSP regression checks.
+
 ## 0.21.0 — 2026-10-29
 
 - Redesign collection and queue records as one calm, recessed list. Larger titles and artist names, aligned album/duration columns, compact queue controls and a restrained amber current-track state replace the wide floating pills. Artist names open artist cards directly.

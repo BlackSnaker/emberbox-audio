@@ -92,6 +92,12 @@ class DependencyTests(unittest.TestCase):
                 plan=deps.build_plan(report('cxx',family=family),venv_dir='/unused/runtime')
             self.assertEqual(plan.packages,(package,))
             self.assertFalse(any('libav' in value for value in plan.packages))
+
+    def test_headphone_dsp_uses_an_isolated_binary_wheel_only_when_missing(self):
+        with tempfile.TemporaryDirectory() as folder:
+            plan=deps.build_plan(report('scipy'),venv_dir=Path(folder)/'runtime')
+            self.assertEqual(plan.packages,());self.assertEqual(plan.pip_requirements,('scipy>=1.10',))
+            self.assertIn('--only-binary=:all:',plan.python_commands[-1]);self.assertNotIn('sudo',plan.python_commands[-1])
     def test_explicit_yes_is_the_only_way_to_disable_native_confirmation(self):
         for family in deps.MANAGERS:
             ordinary=deps.package_command(family,('fixture-package',),sudo=True)

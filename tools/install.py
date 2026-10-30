@@ -277,8 +277,10 @@ def main(argv=None):
     if not selected or not Path(selected).is_file():selected=None
     plan=None
     fresh_runtime=None
+    native_cache=Path(os.environ.get('XDG_CACHE_HOME',Path.home()/'.cache'))/APP/'apple-spatial/runtime.json'
+    spatial_dependencies=args.apple_atmos or args.apple_lossless or native_cache.is_file()
     if not args.skip_check:
-        report=dependencies.inspect(selected,spatial=args.apple_atmos or args.apple_lossless,lossless=args.apple_lossless)
+        report=dependencies.inspect(selected,spatial=spatial_dependencies,lossless=args.apple_lossless)
         ui.item(report.distribution.name)
         env=os.environ
         ui.note('Desktop: '+env.get('XDG_CURRENT_DESKTOP','not detected')+' · '+env.get('XDG_SESSION_TYPE','not detected'),
@@ -288,7 +290,7 @@ def main(argv=None):
         # Never repair Python packages underneath the working installed player.
         # A fresh environment is committed by switching the manifest interpreter.
         if previous and any(key in dependencies.PURE for key in report.missing):
-            report=dependencies.inspect(spatial=args.apple_atmos or args.apple_lossless,lossless=args.apple_lossless)
+            report=dependencies.inspect(spatial=spatial_dependencies,lossless=args.apple_lossless)
             runtime=target/('runtime-'+version+'-'+uuid.uuid4().hex[:8])
             fresh_runtime=runtime
         plan=dependencies.build_plan(report,venv_dir=runtime,yes=args.yes)

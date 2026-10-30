@@ -81,6 +81,12 @@ neural model is needed. The minimum CPU for this mode has not been established;
 ordinary installation checks cannot guarantee real-time spatial rendering.
 [Beta capabilities and limitations →](ATMOS_PROTOTYPE.md)
 
+Headphone voicing uses **SciPy ≥1.10** compiled filters, checked by native setup
+and updates of an already configured decoder. No neural model or extra music
+decoder is added. One EQ stage follows EmberFlow; peak protection adds a 5 ms
+lookahead. Personal SOFA files are limited to 32 MB and checked before selection.
+[Headphone sound controls →](HEADPHONES.md)
+
 ## AI karaoke: additional resources
 
 - First use downloads a SHA256-verified **30 MB UVR model** and prepares a

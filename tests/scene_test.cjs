@@ -15,9 +15,19 @@ try{
  restored.setOutput(bt);assert.equal(restored.render().angle,30);restored.set({mode:'auto'});assert.equal(restored.render().mode,'headphones');
  assert.throws(()=>s.set({mode:'speakers',angle:180}),/INVALID_ARGUMENTS/);
  assert.throws(()=>s.set({mode:'headphones',hrtf:9}),/INVALID_ARGUMENTS/);
+ s.set({mode:'headphones',headphones:{profile:'buds4-pro',bass:2,treble:-1,balance:3}});
+ assert.equal(s.render().headphones.profile,'buds4-pro');assert.equal(s.render().headphones.bass,2);
+ const signatureBefore=signature(s.render());s.set({mode:'headphones',headphones:{profile:'buds3-pro',bypass:true}});
+ assert.equal(signature(s.render()),signatureBefore,'Voicing must not rebuild the Atmos decoder');
+ const saved=new Scenes(file);saved.setOutput(bt);assert.equal(saved.render().headphones.profile,'buds3-pro');
+ saved.setOutput({...bt,key:'e'.repeat(32)});assert.equal(saved.render().headphones.profile,'none','Headphone EQ leaked to another device');
+ for(const headphones of [{profile:'unknown'}, {bass:5}, {strength:NaN}, {bypass:'true'}, {balance:99}])assert.throws(()=>s.set({mode:'headphones',headphones}),/INVALID_ARGUMENTS/);
+ assert.throws(()=>s.set({mode:'headphones',sofa:'../private'}),/INVALID_ARGUMENTS/);
  assert.throws(()=>s.setOutput({...bt,label:'bad\nlabel'}),/INVALID_ARGUMENTS/);
  assert(!fs.readFileSync(file,'utf8').includes('Bluetooth pair'),'Device names must not be persisted');
  const early=new Scenes();early.set({mode:'speakers'});early.setOutput(bt);
  assert.equal(early.render().mode,'speakers');early.setOutput({...bt,key:'c'.repeat(32)});assert.equal(early.render().mode,'headphones');
+ const earlyEq=new Scenes();earlyEq.set({mode:'auto',headphones:{profile:'buds4-pro',bass:1}});earlyEq.setOutput(bt);
+ assert.equal(earlyEq.render().headphones.profile,'buds4-pro');earlyEq.setOutput({...bt,key:'d'.repeat(32)});assert.equal(earlyEq.render().headphones.profile,'none');
  console.log('PASS scene migration, physical override, per-device memory, automatic selection and validation');
 }finally{fs.rmSync(root,{recursive:true,force:true});}

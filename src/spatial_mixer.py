@@ -3,6 +3,7 @@
 import collections,json,os,resource,struct,sys,threading,time
 import numpy as np
 from spatial_mix import RATE,BLOCK,BUFFER,blend,curve
+from headphone_dsp import HeadphoneProcessor
 # A session uses one rate for both decks; ordinary Atmos stays at 48 kHz.
 RATE=int(os.environ.get('EMBERBOX_SPATIAL_RATE',RATE))
 if RATE not in (48000,192000):raise RuntimeError('SPATIAL_PCM_FORMAT')
@@ -35,6 +36,8 @@ class Mixer:
         self.emit=emit;self.condition=threading.Condition();self.slots=[None,None]
         self.current=0;self.fade=None;self.frames=0;self.paused=False;self.stopped=False
         self.player=None;self.finished=False;self.seek_tail=None
+        self.headphones=HeadphoneProcessor(RATE)
+        self.headphone_request=None;self.headphone_thread=None
     def configure(self,p):
         slot=int(p['slot']);generation=int(p['generation'])
         if slot not in (0,1) or not 0<generation<2**32:raise ValueError('Invalid spatial slot')
@@ -58,6 +61,15 @@ class Mixer:
     def control(self,p):
         action=p['type']
         if action=='slot':self.configure(p)
+        elif action=='headphones':
+            # SciPy's first import/design must never hold up a slot/seek
+            # command: a warm decoder can already be sending its first PCM.
+            with self.condition:
+                self.headphone_request=p['scene']
+                if self.headphone_thread is None:
+                    self.headphone_thread=threading.Thread(target=self.prepare_headphones,daemon=True,name='headphone-design')
+                    self.headphone_thread.start()
+                self.condition.notify_all()
         elif action=='preroll':
             with self.condition:
                 slot=int(p['slot']);target=self.slots[slot]
@@ -113,6 +125,14 @@ class Mixer:
             if self.player:self.player.pause=self.paused
         elif action=='stop':
             with self.condition:self.stopped=True;self.condition.notify_all()
+    def prepare_headphones(self):
+        while True:
+            with self.condition:
+                while self.headphone_request is None and not self.stopped:self.condition.wait()
+                if self.stopped:return
+                scene=self.headphone_request;self.headphone_request=None
+            result=self.headphones.configure(scene)
+            if not self.stopped:self.emit({'type':'headphones',**result})
     def render(self):
         with self.condition:
             if self.seek_tail is not None:
@@ -147,7 +167,7 @@ class Mixer:
         while not self.stopped:
             time.sleep(.15)
             if not self.player:continue
-            try:played=max(0.,float(self.player.time_pos or 0))*RATE
+            try:played=max(0.,float(self.player.time_pos or 0)*RATE-self.headphones.lookahead)
             except Exception:continue
             with self.condition:
                 fade=self.fade
@@ -222,6 +242,7 @@ def main():
             if data is None:
                 with mixer.condition:mixer.condition.wait(.015)
                 continue
+            data=mixer.headphones.process(np.frombuffer(data,dtype='<f4').reshape(-1,2)).tobytes()
             view=memoryview(data)
             while view and not mixer.stopped:view=view[os.write(write_fd,view):]
     finally:

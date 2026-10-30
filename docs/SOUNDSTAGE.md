@@ -30,8 +30,10 @@ transaural crosstalk cancellation or head tracking.
 
 **Headphones** uses the virtual 7.1.4 binaural path. **KU100** and **KEMAR**
 select the renderer's bundled SADIE head/ear models. They are generic profiles;
-choose the one that localizes more naturally for you. No microphone measurement
-or model download is needed.
+choose the one that localizes more naturally for you. Built-ins need no microphone
+measurement or model download. You can import compatible personal SOFA models,
+choose independent headphone correction and compare with the original signal.
+[Headphone tuning and profile provenance →](HEADPHONES.md)
 
 ## Your output, remembered
 
@@ -46,7 +48,8 @@ these choices. Device names/addresses are not saved in the scene preferences.
 Changing an Atmos scene reuses the licensed worker and the output device at
 the current song position, with the existing short boundary envelope. A brief
 preparation interval can still occur. Upcoming EmberFlow audio is rebuilt for
-the new scene. Ordinary stereo ALAC / Hi-Res samples remain unchanged.
+the new scene. Geometry leaves ordinary stereo ALAC / Hi-Res mixes intact;
+independently selected headphone EQ processes the shared output after EmberFlow.
 
 ## Bluetooth
 

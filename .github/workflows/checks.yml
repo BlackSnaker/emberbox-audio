@@ -86,6 +86,10 @@ jobs:
           node tests/spatial_source_test.js
           node tests/spatial_playback_test.cjs
           node tests/scene_test.cjs
+      - name: Headphone voicing and small-screen controls
+        run: |
+          GDK_BACKEND=x11 LANGUAGE=en dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/headphone_smoke.py
+          GDK_BACKEND=x11 LANGUAGE=ru dbus-run-session -- xvfb-run -a -s '-screen 0 1024x600x24' /usr/bin/python3 tests/headphone_smoke.py
       - name: GTK layout and controls
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/gui_smoke.py
       - name: Fullscreen listening room

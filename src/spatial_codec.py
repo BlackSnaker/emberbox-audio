@@ -118,7 +118,12 @@ class SpeakerLayout(C.Structure):
 def scene_profile(value=None):
     value=value or {};mode=value.get('mode','headphones');angle=value.get('angle',30);hrtf=value.get('hrtf',0)
     if mode not in ('speakers','headphones') or angle not in (20,30,40) or hrtf not in (0,1):raise ValueError('Invalid spatial scene')
-    return {'mode':mode,'angle':angle,'hrtf':hrtf}
+    result={'mode':mode,'angle':angle,'hrtf':hrtf}
+    if value.get('sofa'):
+        import re
+        if not isinstance(value['sofa'],str) or not re.fullmatch('[a-f0-9]{64}',value['sofa']):raise ValueError('Invalid spatial scene')
+        result['sofa']=value['sofa']
+    return result
 
 
 def speaker_pair(data):
@@ -155,6 +160,10 @@ class Joc:
         # the downstream linked peak limiter protects the combined stereo mix.
         config.render_mode=2;config.virtual_layout=b'7.1.4'
         config.hrtf=self.scene['hrtf']
+        if self.scene['mode']=='headphones' and self.scene.get('sofa'):
+            from hrtf_store import sofa_bytes
+            data=sofa_bytes(self.scene['sofa']);self.sofa=C.create_string_buffer(data)
+            config.sofa=C.cast(self.sofa,C.c_void_p);config.sofa_size=len(data)
         if self.scene['mode']=='speakers':
             angle=self.scene['angle']
             speakers=(Speaker*3)(Speaker(C.sizeof(Speaker),b'FL',angle,0,0),Speaker(C.sizeof(Speaker),b'FR',-angle,0,0),Speaker(C.sizeof(Speaker),b'LFE',0,0,1))
