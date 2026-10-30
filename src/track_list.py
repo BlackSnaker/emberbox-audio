@@ -71,7 +71,7 @@ def fixed(widget,width):
 
 
 class RecordRow(Gtk.ListBoxRow):
-    def __init__(self,item,index,source,artwork,play,artist,actions):
+    def __init__(self,item,index,source,artwork,play,artist,actions,*,show_art=True):
         super().__init__()
         self.item=item;self.record=track(item,source);self.index=index;self.play=play;self.display_state=None
         self.get_style_context().add_class('record-row')
@@ -87,7 +87,8 @@ class RecordRow(Gtk.ListBoxRow):
         self.rank.add_named(self.indicator,'current')
         waiting=Gtk.Label(label='···');waiting.get_style_context().add_class('record-indicator')
         self.rank.add_named(waiting,'pending');box.pack_start(self.rank,False,False,0)
-        self.image=Gtk.Image();fixed(self.image,48);artwork.load(self.image,item.get('image',''),48,9)
+        self.image=Gtk.Image();fixed(self.image,48);self.image.set_no_show_all(not show_art)
+        if show_art:artwork.load(self.image,item.get('image',''),48,9)
         box.pack_start(self.image,False,False,0)
         names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=4);names.set_valign(Gtk.Align.CENTER)
         names.set_hexpand(True)
@@ -137,14 +138,16 @@ class RecordRow(Gtk.ListBoxRow):
 
 
 class RecordList(Gtk.Box):
-    def __init__(self,action_count=1):
+    def __init__(self,action_count=1,*,album=False):
         super().__init__(orientation=Gtk.Orientation.VERTICAL)
         self.get_style_context().add_class('record-panel')
-        self.rows=[];self.layout_key=None
+        self.rows=[];self.layout_key=None;self.album_mode=album
+        if album:self.get_style_context().add_class('album-records')
         self.header=Gtk.Box(spacing=14);self.header.get_style_context().add_class('record-header')
         number=Gtk.Label(label='#');number.get_style_context().add_class('record-heading')
         self.header.pack_start(fixed(number,28),False,False,0)
-        self.header.pack_start(fixed(Gtk.Label(),48),False,False,0)
+        self.art_heading=fixed(Gtk.Label(),48);self.art_heading.set_no_show_all(album)
+        self.header.pack_start(self.art_heading,False,False,0)
         title=ellipsis(text('RECORDING','КОМПОЗИЦИЯ'),'record-heading')
         self.header.pack_start(title,True,True,0)
         self.album_heading=ellipsis(text('ALBUM','АЛЬБОМ'),'record-heading');self.album_heading.set_no_show_all(True)
@@ -162,7 +165,7 @@ class RecordList(Gtk.Box):
     def append(self,row):self.rows.append(row);self.list.add(row)
 
     def resize(self,width):
-        key=(width>=1120,width<1000,max(200,min(340,round(width*.23))))
+        key=(not self.album_mode and width>=1120,width<1000,max(200,min(340,round(width*.23))))
         if key==self.layout_key:return
         self.layout_key=key;album,compact,size=key
         context=self.get_style_context()

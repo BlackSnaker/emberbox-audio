@@ -5,10 +5,13 @@ from source_picker import text
 from listening_library import label,button,scroll,duration,prime_on_hover
 from listening_queue import track
 from discovery_panel import clear
-from music_library import NAMES
-from artist_catalog import artist_ref,plain,SECTIONS,ReleaseCatalog
+from music_library import NAMES,snapshot
+from artist_catalog import artist_ref,plain,SECTIONS,ReleaseCatalog,release_details
 from artist_header import ArtistBanner,BannerCache,portrait_slot
 from artist_reveal import ArtistReveal
+from album_header import AlbumHeader,CSS as ALBUM_CSS
+from album_opening import AlbumOpening
+from track_list import RecordList,RecordRow
 
 CSS=b'''
 .stage-artist-hero { background-image: linear-gradient(to bottom right,rgba(76,73,49,.6),rgba(28,35,26,.55));
@@ -70,6 +73,20 @@ CSS=b'''
 .ember-stage .stage-artist-mini.stage-artist-banner-content { padding: 16px 20px; }
 .ember-stage .stage-artist-mini .stage-artist-chip { font-size: 10px; padding: 4px 8px; }
 '''
+CSS+=ALBUM_CSS+b'''
+.album-records { padding: 5px 8px 9px; border-radius: 23px; }
+.album-records .record-header { padding: 12px 16px 14px; }
+.album-records row.record-row { padding: 9px 14px; border-radius: 13px; }
+.album-records .record-title label { font-size: 15px; }
+.album-records .record-rank { color: #b5a67f; }
+.album-room-dense .album-records .record-header { padding-top: 1px; padding-bottom: 2px; }
+.album-room-dense .album-records row.record-row { padding-top: 2px; padding-bottom: 2px; }
+.album-room-dense .album-records .record-title label { font-size: 14px; }
+.album-notes { background-color: rgba(14,22,18,.3); border: 1px solid rgba(235,219,178,.06);
+  border-radius: 19px; padding: 20px 24px; }
+.album-notes .stage-artist-prose { color: #d4c9ad; font-size: 14px; }
+.album-imprint { padding: 10px 12px 0; }
+'''
 
 NAMES_SECTION={
     'overview':('Overview','Обзор'),'discography':('All releases','Все релизы'),'albums':('Albums','Альбомы'),
@@ -107,6 +124,9 @@ class ArtistView(Gtk.Box):
         self.wide=True;self.height=1080;self.overview_panels={};self.shelf_widgets=[]
         self.overview_columns=None;self.overview_fit_key=None;self.overview_fit_idle=0
         self.song_buttons=[];self.album_buttons=[];self.choice_buttons=[];self.filters={}
+        self.release_hero=self.release_tracks=None;self.playback_key=None;self.list_width=1744
+        self.notes_revealer=None;self.notes_open=False;self.album_intro_pending=False
+        self.album_opening=AlbumOpening(self)
         toolbar=Gtk.Box(spacing=12)
         self.back_button=button('‹ '+text('Back','Назад'),self.back)
         toolbar.pack_start(self.back_button,False,False,0)
@@ -123,12 +143,14 @@ class ArtistView(Gtk.Box):
         self.scroll=scroll(self.content);self.entrance=ArtistReveal(self.scroll,self.finish_intro)
         self.scroll.connect('size-allocate',self.queue_overview_fit)
         self.pack_start(self.entrance,True,True,0)
-        foot=Gtk.Box(spacing=12)
+        foot=self.foot=Gtk.Box(spacing=12);foot.set_no_show_all(True)
         self.notice=label('','stage-library-note');self.notice.set_line_wrap(True);self.notice.set_lines(2)
+        self.notice.show()
         self.notice.set_ellipsize(Pango.EllipsizeMode.END);foot.pack_start(self.notice,True,True,0)
         self.accounts_button=button(text('Accounts','Аккаунты'),accounts)
         self.accounts_button.set_no_show_all(True);foot.pack_end(self.accounts_button,False,False,0)
         self.pack_end(foot,False,False,0)
+        self.notice.connect('notify::label',lambda *_:foot.set_visible(bool(self.notice.get_text())))
         self.unsubscribe=service.subscribe(self.changed)
         self.show_all();self.accounts_button.hide();self.filter_bar.hide()
 
@@ -138,19 +160,22 @@ class ArtistView(Gtk.Box):
         self.request+=1;self.reference=dict(ref);self.source=self.service.host.source
         self.profile=self.release=self.release_ref=None;self.items=[];self.sections=[];self.choices=[]
         self.direct_release=False
+        self.album_intro_pending=False;self.notes_open=False
         self.section='overview';self.next_offset=None;self.note=''
         self.catalog=ReleaseCatalog();self.card_page=0;self.search_only=False
 
     def set_release_reference(self,ref):
         self.set_reference({'name':ref.get('artist','')})
         self.direct_release=True;self.release_ref=dict(ref);self.release=dict(ref)
+        self.album_intro_pending=True
 
     def activate(self):
         self.active=True
         self.intro_pending=True
         if self.source!=self.service.host.source:self.set_reference(artist_ref(self.service.host))
         if not self.reference:self.reference=artist_ref(self.service.host)
-        if self.direct_release and self.release_ref:self.load('release',self.release_ref)
+        if self.direct_release and self.release_ref:
+            self.album_intro_pending=True;self.load('release',self.release_ref)
         elif self.profile:
             self.render()
             if self.catalog_mode():self.load_catalog()
@@ -161,7 +186,7 @@ class ArtistView(Gtk.Box):
         self.active=False;self.request+=1;self.busy=False;self.spinner.stop();self.service.cancel_browse()
 
     def cancel_intro(self):
-        self.intro_pending=False;self.render_queued=False;self.entrance.finish()
+        self.intro_pending=False;self.album_intro_pending=False;self.render_queued=False;self.entrance.finish();self.album_opening.finish()
 
     def finish_intro(self):
         if self.render_queued and self.active and not self.closed:
@@ -203,6 +228,7 @@ class ArtistView(Gtk.Box):
 
     def open_release(self,value):
         self.cancel_intro()
+        self.album_intro_pending=True;self.notes_open=False
         self.saved_section=self.section;self.release_ref=dict(value);self.release=dict(value)
         self.items=[];self.next_offset=None;self.card_page=0;self.load('release',self.release_ref)
 
@@ -297,8 +323,14 @@ class ArtistView(Gtk.Box):
                     if ident and ident not in seen:seen.add(ident);self.items.append(value)
             else:self.items=list(values)
             self.next_offset=result.get('next')
+            position=self.scroll.get_vadjustment().get_value()
             self.render();self.notice.set_text(self.note)
             if not append:self.scroll.get_vadjustment().set_value(0)
+            else:
+                def restore():
+                    if self.active and not self.closed and generation==self.request:self.scroll.get_vadjustment().set_value(position)
+                    return False
+                GLib.idle_add(restore)
             if category=='artist' and self.catalog_mode():self.load_catalog()
         cached=self.cache.get(key)
         if not refresh and cached and time.monotonic()-cached[0]<900:
@@ -315,6 +347,73 @@ class ArtistView(Gtk.Box):
 
     def changed(self):
         if self.active and self.service.error:self.notice.set_text(self.service.error)
+        if self.active:self.update_playback()
+
+    def update_playback(self):
+        if not self.release_tracks:return
+        state=snapshot(self.service.host)
+        pending=self.service.book.current(self.source) if self.service.loading and self.service.book.active==self.source else None
+        key=(self.service.host.source,state.get('id'),state.get('uri'),state.get('catalogId'),state.get('title'),state.get('artist'),state.get('playing'),state.get('valid'),pending and pending.get('entry'))
+        if key==self.playback_key:return
+        self.playback_key=key
+        self.release_tracks.set_state(state if self.service.host.source==self.source else {},pending)
+
+    def album_artist(self):
+        value=release_details(self.release,self.release_ref,self.items);name=value.get('artist')
+        if not name:return
+        ref={'name':name}
+        ident=value.get('artistId') or str(value.get('artistUri') or '').rsplit(':',1)[-1]
+        if ident:ref['id']=str(ident)
+        self.set_reference(ref);self.load('artist',ref)
+
+    def toggle_album_notes(self):
+        if self.notes_revealer is None:return
+        self.notes_open=not self.notes_open
+        if self.notes_open:self.notes_revealer.show()
+        self.notes_revealer.set_reveal_child(self.notes_open)
+        if self.release_hero.notes_button:
+            self.release_hero.notes_button.set_label(text('About this album','Об альбоме')+('  ⌃' if self.notes_open else '  ⌄'))
+
+    def album_room(self):
+        value=release_details(self.release,self.release_ref,self.items)
+        value['tracks']=self.items
+        value['tracks_complete']=self.next_offset is None and not self.busy
+        if self.next_offset is not None:value['partial']=True
+        prose=plain(value.get('description') or '')
+        hero=self.release_hero=AlbumHeader(value,NAMES[self.source],self.artwork,self.artwork.pool,
+            lambda:self.service.play_all(self.songs()),lambda:self.add(self.songs()),
+            artist=self.album_artist if value.get('artist') else None,notes=self.toggle_album_notes if prose else None,
+            width=self.list_width,height=self.height)
+        self.play_all_button=hero.play_button;self.add_all_button=hero.queue_button
+        self.play_all_button.set_sensitive(bool(self.songs()));self.add_all_button.set_sensitive(bool(self.songs()))
+        self.read_button=hero.notes_button
+        self.content.pack_start(hero,False,False,0)
+        self.notes_revealer=None
+        if prose:
+            self.notes_revealer=Gtk.Revealer();self.notes_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
+            self.notes_revealer.set_no_show_all(True)
+            self.notes_revealer.set_transition_duration(420 if Gtk.Settings.get_default().get_property('gtk-enable-animations') else 0)
+            reading=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12);reading.get_style_context().add_class('album-notes')
+            reading.pack_start(label(text('INSIDE THE RECORD','ВНУТРИ АЛЬБОМА'),'stage-artist-kicker'),False,False,0)
+            reading.pack_start(paragraph(prose),False,False,0);self.notes_revealer.add(reading)
+            self.notes_revealer.set_reveal_child(self.notes_open);self.content.pack_start(self.notes_revealer,False,False,0)
+            reading.show_all();self.notes_revealer.set_visible(self.notes_open)
+            self.notes_revealer.connect('notify::child-revealed',lambda r,_p:r.hide() if not r.get_reveal_child() and not r.get_child_revealed() else None)
+        if self.items:
+            self.release_tracks=RecordList(album=True);context=tuple(self.songs())
+            for i,item in enumerate(self.items):
+                play=lambda v=item:self.service.play_now(v,context=context)
+                row=RecordRow(item,i,self.source,self.artwork,play,None,
+                    [('list-add-symbolic',text('Add to queue: ','В очередь: ')+item.get('title',''),lambda v=item:self.add([v]),bool(track(item,self.source)))],show_art=False)
+                prime_on_hover(row,self.service,item);prime_on_hover(row.play_button,self.service,item)
+                if not item.get('artist') or item.get('artist')==value.get('artist'):
+                    row.artist_label.set_no_show_all(True);row.artist_label.hide()
+                self.release_tracks.append(row);self.song_buttons.append((row.play_button,row.action_buttons[0],item))
+            self.content.pack_start(self.release_tracks,False,False,0);self.release_tracks.resize(self.list_width)
+        imprint=plain(value.get('copyright') or value.get('recordLabel') or '')
+        if imprint:
+            credit=label(imprint,'stage-artist-credit',120);credit.set_line_wrap(True);credit.get_style_context().add_class('album-imprint')
+            self.content.pack_start(credit,False,False,0)
 
     def hero(self,value,release=False):
         shell=Gtk.Box(spacing=24);shell.get_style_context().add_class('stage-artist-hero')
@@ -467,24 +566,17 @@ class ArtistView(Gtk.Box):
         animate=False
         if self.intro_pending and self.profile and not self.release_ref:
             self.intro_pending=False;animate=self.entrance.hold_loading()
-        clear(self.content);clear(self.filter_bar);self.filter_bar.hide()
+        self.album_opening.finish();clear(self.content);clear(self.filter_bar);self.filter_bar.hide()
+        self.release_hero=self.release_tracks=None;self.notes_revealer=None;self.playback_key=None
+        self.content.set_spacing(12 if self.release_ref else 18)
         self.song_buttons=[];self.album_buttons=[];self.choice_buttons=[];self.filters={}
         self.overview_panels={};self.shelf_widgets=[]
         self.overview_columns=None;self.overview_fit_key=None
         self.crumb.set_text(text('THE ALBUM ROOM','КОМНАТА АЛЬБОМА') if self.release_ref else text('THE ARTIST ROOM','КОМНАТА АРТИСТА'))
         self.refresh_button.get_accessible().set_name(text('Refresh album','Обновить альбом') if self.release_ref else text('Refresh artist','Обновить артиста'))
         if self.release_ref:
-            self.back_button.set_label('‹ '+(text('Back','Назад') if self.direct_release else text('Artist','Артист')));self.hero(self.release or self.release_ref,True)
-            prose=(self.release or {}).get('description') or ''
-            if prose:
-                reveal=Gtk.Revealer();reveal.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN);reveal.set_transition_duration(350)
-                reading=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12);reading.get_style_context().add_class('stage-artist-reading')
-                reading.pack_start(paragraph(prose),False,False,0)
-                reading.pack_start(paragraph((self.release or {}).get('copyright') or '', 'stage-artist-credit'),False,False,0)
-                reveal.add(reading)
-                self.read_button=button(text('Read the liner notes','Прочесть об альбоме')+'  ⌄',lambda:reveal.set_reveal_child(not reveal.get_reveal_child()))
-                self.content.pack_start(self.read_button,False,False,0);self.content.pack_start(reveal,False,False,0)
-            self.track_rows(self.items)
+            self.back_button.set_label('‹ '+(text('Back','Назад') if self.direct_release else text('Artist','Артист')))
+            self.album_room()
         elif self.profile:
             self.back_button.set_label('‹ '+text('Back','Назад'));self.hero(self.profile)
             if getattr(self,'search_only',False):
@@ -528,8 +620,12 @@ class ArtistView(Gtk.Box):
             retry=button(text('Continue loading the discography','Продолжить загрузку дискографии'),self.load_catalog)
             retry.set_sensitive(not self.busy);self.content.pack_start(retry,False,False,0)
         self.content.show_all()
+        if self.release_tracks:self.release_tracks.resize(self.list_width)
+        self.update_playback()
         self.fit_overview()
         if animate:self.entrance.begin(self.hero_banner)
+        if self.album_intro_pending and self.release_ref and not self.busy:
+            self.album_intro_pending=False;self.album_opening.begin(self.release_hero,self.release_tracks)
 
     def queue_overview_fit(self,*_args):
         if not self.closed and not self.overview_fit_idle:
@@ -627,6 +723,12 @@ class ArtistView(Gtk.Box):
 
     def resize(self,width,height):
         self.wide=width>=1200;self.height=height;self.crumb.set_visible(self.wide)
+        self.list_width=max(640,width-2*max(24,min(88,int(width*.047))))
+        dense=height<680
+        self.set_spacing(6 if dense else 10)
+        self.get_style_context().add_class('album-room-dense') if dense else self.get_style_context().remove_class('album-room-dense')
+        if self.release_tracks:self.release_tracks.resize(self.list_width)
+        if self.release_hero:self.release_hero.resize(self.list_width,height)
         size=(max(116,min(164,(width-160)//7-26)),88 if height<680 else 128 if height<800 else 164,self.wide,masthead_height(height))
         if self.size==size:return
         self.cancel_intro()

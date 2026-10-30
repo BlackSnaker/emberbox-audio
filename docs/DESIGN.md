@@ -47,6 +47,28 @@ collection toolbar and reduce decoration, keeping records visible. Playback
 state changes update the affected rows without rebuilding the collection or
 resetting its scroll position. The list has no continuous animation loop.
 
+## The album room
+
+![Album room with original fixture artwork](../assets/screenshots/album-room.en.png)
+
+The complete cover takes the lead in a fine gallery mount. A soft reflection
+of its colours lights the header; the title, artist and release facts sit on
+a quiet field beside it. The artist name opens the artist room. Liner notes
+unfold from a small **About this album** button into the same scrolling page.
+Dates, track counts and running time come from the release; incomplete lists
+do not claim a complete running time.
+
+The songs share one recessed record table, without repeated cover thumbnails.
+Playback and queue actions stay separate, and current, paused and preparing
+states update existing rows without moving the scroll. On short screens the
+header contracts to keep music in view; the bottom transport stays outside
+the scrolling content.
+
+The cover light is composed off the UI thread and cached. A finite 660 ms
+entrance reveals the header and records with a gentle stagger, without changing
+layout during the animation. Leaving the page cancels it; system animation
+preferences are respected.
+
 ## Light comes from sound
 
 Nine frequency bands cover 55 Hz to 11 kHz. The live meter reads the relevant application stream through PipeWire; it does not use the microphone or animate random bars. FFT measurements drive the indicators, and a critically damped response preserves continuous velocity between samples. Light rises promptly and decays more slowly. The tubes use 384 cached vector-rendered states to keep the animation smooth.

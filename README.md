@@ -6,6 +6,8 @@
   <p><a href="#get-started">Get started</a> · <a href="#system-requirements">System requirements</a> · <a href="docs/DESIGN.md">Grunesphism</a> · <a href="README.ru.md">Русский</a> · <a href="https://github.com/BlackSnaker/emberbox-video">Emberbox Video</a></p>
 </div>
 
+**Album rooms, reimagined.** Large complete artwork, softly reflected light and a clear record table. [See the album design →](docs/DESIGN.md#the-album-room)
+
 <a id="the-sound-update"></a>
 
 ## 25 October 2026 · Closer to the music

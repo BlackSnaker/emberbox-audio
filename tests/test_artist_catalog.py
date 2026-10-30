@@ -114,4 +114,22 @@ class Artists(unittest.TestCase):
         self.assertTrue(catalog.complete);self.assertEqual(len(catalog.items),2)
 
 
+class ReleaseFactsTests(unittest.TestCase):
+    def test_missing_album_artist_does_not_inherit_a_compilation_track_or_artist_room(self):
+        from artist_catalog import release_details
+        items=[{'artist':'One performer'},{'artist':'Another performer'}]
+        value=release_details({'title':'Compilation'}, {'current':True,'artist':'One performer'},items)
+        self.assertFalse(value['artist']);self.assertNotIn('artistId',value)
+
+    def test_source_release_reference_and_single_artist_facts_are_retained(self):
+        from artist_catalog import release_details
+        source={'title':'Album','artist':'Album artist','artistId':'123'}
+        value=release_details({'title':'Resolved album'},source,[{'artist':'Guest'}])
+        self.assertEqual(value['artist'],'Album artist');self.assertEqual(value['artistId'],'123')
+        value=release_details({}, {'current':True,'artist':'Stale track'},[{'artist':'Actual artist'}]*2)
+        self.assertEqual(value['artist'],'Actual artist')
+        actual=release_details({'artist':'Provider artist','artistId':'456'},source,[])
+        self.assertEqual(actual['artist'],'Provider artist');self.assertEqual(actual['artistId'],'456')
+
+
 if __name__=='__main__':unittest.main()

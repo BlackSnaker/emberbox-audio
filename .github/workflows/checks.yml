@@ -119,6 +119,12 @@ jobs:
         run: |
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/artist_smoke.py
           EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/artist_smoke.py
+      - name: Album room, artwork and finite entrance
+        run: |
+          GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/test_album_header.py
+          GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/album_opening_smoke.py
+          GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/album_room_smoke.py
+          EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/album_room_smoke.py
       - name: Artist entrance, GPU layers and cancellation
         run: |
           LIBGL_ALWAYS_SOFTWARE=1 GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/artist_reveal_smoke.py

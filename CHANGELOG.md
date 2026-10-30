@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.22.1 — 2026-10-30
+
+- Redesigned the album room around a large, complete cover, a cached artwork-coloured light field, clear release facts and an artist link. Optional liner notes open beside the main actions and remain in the shared page scroll.
+- Album songs use a single readable record table with independent play and queue controls, no repeated artwork, and stable playback highlights. Compact layouts keep records visible and the bottom transport fixed, including with long titles and queue feedback.
+- Added a finite, cancellable entrance that respects reduced motion, bilingual previews, and GTK coverage for album navigation, metadata, asynchronous artwork and layout at three screen sizes.
+
 ## 0.22.0 — 2026-10-30
 
 - Add independent headphone voicing to native Apple playback: ten attributed RTINGS / AutoEq presets, transparent Galaxy Buds4 Pro original mode, strength, bass, air, balance and same-headroom dry comparison. Preferences stay with each output; speakers bypass headphone EQ.

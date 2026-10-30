@@ -73,6 +73,23 @@ def album_ref(host):
     return ref
 
 
+def release_details(release,reference,items):
+    """Keep source album facts; a track/artist room isn't album-artist proof."""
+    release=release or {};reference=reference or {};value={**reference,**release}
+    for field in ('title','image'):
+        if not value.get(field) and reference.get(field):value[field]=reference[field]
+    artist=release.get('artist') or (reference.get('artist') if not reference.get('current') else '')
+    if not artist:
+        artists={item.get('artist') for item in items if item.get('artist')}
+        artist=next(iter(artists)) if len(artists)==1 else ''
+    value['artist']=artist
+    for field in ('artistId','artistUri'):
+        ident=release.get(field) or (reference.get(field) if not reference.get('current') else '')
+        if ident and artist:value[field]=ident
+        else:value.pop(field,None)
+    return value
+
+
 def sanitize(result):
     """Render provider prose as text; never interpret remote markup as GTK markup."""
     if not isinstance(result,dict):raise ValueError('Invalid artist response')

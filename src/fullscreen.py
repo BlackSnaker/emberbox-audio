@@ -758,6 +758,7 @@ class FullscreenPlayer:
         if self.page=='library' and self.library_view.source!=h.source:self.library_view.activate()
         if self.page=='library':self.library_view.update_playback()
         if self.page=='artist' and self.artist_view.source!=h.source:self.artist_view.activate()
+        if self.page=='artist':self.artist_view.update_playback()
         if self.page=='queue':self.queue_view.render()
         seconds=max(0,h.position/1e6)
         if self.last_position!=h.position or not h.playing:
