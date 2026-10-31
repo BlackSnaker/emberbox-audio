@@ -1,5 +1,5 @@
 """Offline pause pixels, frame cost, geometry and transport isolation."""
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future,ThreadPoolExecutor
 import os
 from pathlib import Path
 import sys
@@ -71,8 +71,13 @@ try:
     with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected fixture network')):
         rig=Rig();rigs.append(rig);s=rig.surface
         assert not any(isinstance(w,Gtk.GLArea) for w in s.get_children()),'Pause must not create a nested GL surface'
-        s.sync(False,art,'song')
-        assert s.tick and s.target==1 and s.depth==0
+        deferred=Future()
+        with patch.object(rig.pool,'submit',return_value=deferred):s.sync(False,art,'song')
+        settle(.06)
+        assert not s.tick and s.target==1 and s.depth==0 and s.wave==0,\
+            'Cold preparation must not consume undisplayed animation frames'
+        deferred.set_result(cover_pause.cover_frames((bytes(art.get_pixels()),SIZE,SIZE,art.get_has_alpha(),art.get_rowstride()),SIZE,22))
+        wait(lambda:s.tick,'Ready artwork did not start its presentation clock')
         wait(lambda:s.depth>.15,'Pause did not reach an intermediate depth')
         assert rig.geometry()==rig.baseline,'Pause must never resize the cover or shift transport'
         depth,velocity,crest=s.depth,s.velocity,s.wave
@@ -101,11 +106,11 @@ try:
         assert np.max(np.abs(settled.astype(int)-pressed.astype(int)))<=2,\
             'The animated endpoint must match the static paused picture exactly'
         assert pressed[0,0,3]==0 and pressed[SIZE*scale//2,SIZE*scale//2,3]==255
-        surface=s.painter.surface;well=s.painter.well;prepared=s.frame_serial;durations=[]
+        surface=s.painter.surface;well=s.painter.well;buffer=s.painter.buffer;prepared=s.frame_serial;durations=[]
         for depth in (.6,.75,.9,1):
             start=time.perf_counter();rig.capture(depth,2);durations.append(time.perf_counter()-start)
-        assert s.painter.surface==surface and s.painter.well==well and s.frame_serial==prepared,\
-            'Frames must reuse both the cached print and the molded relief'
+        assert s.painter.surface==surface and s.painter.well==well and s.painter.buffer==buffer and s.frame_serial==prepared,\
+            'Frames must reuse the cached print, relief and logical-resolution buffer'
         preview=os.environ.get('EMBERBOX_PAUSE_PREVIEW')
         if preview:
             from PIL import Image
@@ -124,7 +129,7 @@ try:
         assert s.pixels is None and not s.get_visible()
         settings.set_property('gtk-enable-animations',True)
         painter=s.painter;rig.close()
-        assert painter.closed and painter.surface is None and painter.well is None and not painter.handler
+        assert painter.closed and painter.surface is None and painter.well is None and painter.buffer is None and painter.context is None and not painter.handler
         SIZE=720;art=art.scale_simple(SIZE,SIZE,GdkPixbuf.InterpType.BILINEAR)
         large=Rig();rigs.append(large);large.surface.sync(False,art,'large-cover')
         wait(lambda:large.surface.painter.surface is not None,'Large cached print did not arrive')
@@ -133,6 +138,40 @@ try:
             start=time.perf_counter();large.capture(.5,age);costs.append(time.perf_counter()-start)
         assert large.surface.frame_serial==serial,'A large wave must not regenerate artwork every frame'
         assert max(costs)<.08,('The720px pause painter is blocking a frame',costs)
+        # Measure actual native drawing separately from the screenshot's pixel
+        # readback/copy. At 2x only the final image composite scales up.
+        painter=large.surface.painter;c=painter.cairo;scale=large.surface.get_scale_factor()
+        output=c.cairo_image_surface_create(0,SIZE*scale,SIZE*scale);context=c.cairo_create(output)
+        c.cairo_scale(context,scale,scale);native=[];buffer=painter.buffer
+        try:
+            for index in range(60):
+                large.surface.wave=.20+index*.012
+                started=time.perf_counter();painter.draw(None,context,None);c.cairo_surface_flush(output)
+                native.append(time.perf_counter()-started)
+            p95=float(np.percentile(native,95))
+            limit=.012 if os.environ.get('EMBERBOX_FPS_ASSERT')=='1' else .040
+            assert p95<limit,('Pause native drawing budget',scale,p95,limit)
+            assert painter.buffer==buffer,'The native draw must retain its buffer'
+        finally:c.cairo_destroy(context);c.cairo_surface_destroy(output)
+        print('PASS720px native draw '+str(scale)+'x: p95='+str(round(p95*1000,2))+'ms, retained buffer')
+        # Real mapped GTK frame-clock cadence, with no screenshot/readback in
+        # the loop. Strict cadence is opt-in on a quiet reference machine;
+        # shared CI CPU scheduling cannot promise monitor presentation times.
+        large.surface.sync(True,art,'large-cover');wait(lambda:not large.surface.tick,'Cadence lift did not finish')
+        clock=large.window.get_frame_clock();times=[]
+        def presented(frame_clock):
+            if large.surface.tick and large.surface.age>.08:times.append(frame_clock.get_frame_time())
+        handler=clock.connect('after-paint',presented)
+        try:
+            large.surface.sync(True,art,'large-cover');large.surface.sync(False,art,'large-cover')
+            wait(lambda:large.surface.tick,'Cadence preparation did not finish')
+            wait(lambda:not large.surface.tick,'Cadence pause did not finish')
+        finally:clock.disconnect(handler)
+        assert len(times)>20,'The mapped animation must present moving frames'
+        gaps=np.diff(times)/1000;fps=(len(times)-1)*1e6/(times[-1]-times[0]);gap95=float(np.percentile(gaps,95))
+        if os.environ.get('EMBERBOX_FPS_ASSERT')=='1':
+            assert fps>=58.5 and gap95<18.5,('60Hz presentation cadence',fps,gap95)
+        print('GTK720px '+str(scale)+'x presentation: '+str(round(fps,2))+' FPS; p95 interval='+str(round(gap95,2))+'ms')
         large.close()
         print('PASS720px cover frame budget: max='+str(round(max(costs)*1000,2))+'ms, one cached print')
         # The closed-form spring is independent of callback cadence, including
@@ -164,7 +203,8 @@ try:
                 geometry=tuple((w.get_allocated_width(),w.get_allocated_height()) for w in (stage.art_shell,stage.footer))
                 stage.play_button.clicked();assert host.calls==commands+[(host.source,'toggle')]
                 host.playing=False;stage.update()
-                assert stage.cover_pause.tick and stage.cover_pause.target==1
+                wait(lambda:stage.cover_pause.tick,'Fullscreen prepared cover did not start')
+                assert stage.cover_pause.target==1
                 settle(.3)
                 assert 0<stage.cover_pause.depth<1
                 assert geometry==tuple((w.get_allocated_width(),w.get_allocated_height()) for w in (stage.art_shell,stage.footer))

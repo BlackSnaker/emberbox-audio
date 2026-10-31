@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.22.6 — 2026-10-31
+
+- Reduced pause-wave drawing passes and clipped contact-shadow work to its visible bands. Retain one logical-resolution drawing buffer; HiDPI scales the finished image instead of repeating vector work at four times the pixel count.
+- Start the animation clock only when its first image is ready. Resizing holds the current pose until preparation completes; reduced motion also cancels pending preparation.
+- Added native drawing measurements at 720 px and 1×/2× scales, buffer-reuse checks and a mapped GTK cadence measurement. `EMBERBOX_FPS_ASSERT=1` enables the strict 12 ms draw budget and 60 Hz reference check; shared CI uses a broader regression guard. Scheduling and the desktop compositor can affect presentation.
+
 ## 0.22.5 — 2026-10-31
 
 - Gave paused artwork a more pronounced neumorphic seat: a continuous molded surface, deep upper-left contact shadow, warm reflected light along the opposite edge and a fine glass highlight. The complete picture settles deeper while its central colours and detail stay unchanged.

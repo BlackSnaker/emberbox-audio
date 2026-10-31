@@ -62,12 +62,19 @@ class CoverPause(Gtk.Overlay):
         self.pixels=None;self.key=self.playing=None
         self.depth=self.velocity=0.;self.target=0.;self.wave=self.WAVE_SECONDS
         self.last_now=None;self.wall_start=None;self.tick=0;self.age=0.
+        self.settings=self.get_settings()
+        self.animation_handler=self.settings.connect('notify::gtk-enable-animations',self.animation_changed)
+
+    def animation_changed(self,*_):
+        if not self.settings.get_property('gtk-enable-animations'):self.reset()
 
     def resize(self,size,radius=22):
         if (size,radius)==(self.size,self.radius):return
         self.size,self.radius=size,radius
         self.set_size_request(size,size);self.base.set_size_request(size,size);self.canvas.set_size_request(size,size)
         if self.get_visible():
+            if self.tick:self.remove_tick_callback(self.tick);self.tick=0
+            self.last_now=self.wall_start=None
             self.rest_image.clear();self.painter.clear()
             self.prepare_frames()
 
@@ -96,7 +103,15 @@ class CoverPause(Gtk.Overlay):
         # crest keeps travelling through a rapid direction change.
         if not playing and (not self.tick or self.wave>=self.WAVE_SECONDS):self.wave=0.
         self.age=0.;self.wall_start=None;self.present_frame()
-        if not self.tick:self.last_now=None;self.tick=self.add_tick_callback(self.advance)
+        self.start_motion()
+
+    def start_motion(self):
+        # The first displayed frame owns t=0. A cold/animated cover may still
+        # be preparing; advancing its spring behind a blank canvas causes a
+        # visible jump when the prepared image finally arrives.
+        if self.tick or self.closed or self.painter.surface is None or not self.get_visible():return
+        if self.depth==self.target and self.wave>=self.WAVE_SECONDS:return
+        self.last_now=self.wall_start=None;self.tick=self.add_tick_callback(self.advance)
 
     def set_pixels(self,pixels):
         if pixels is self.pixels:return
@@ -113,20 +128,21 @@ class CoverPause(Gtk.Overlay):
         p=self.pixels
         data=(bytes(p.get_pixels()),p.get_width(),p.get_height(),p.get_has_alpha(),p.get_rowstride())
         try:future=self.pool.submit(cover_frames,data,self.size,self.radius)
-        except RuntimeError:return
+        except RuntimeError:self.reset();return
         self.frame_job=future;owner=weakref.ref(self)
         def done(result):
             try:frames=result.result()
-            except Exception:return
+            except Exception:frames=None
             def apply():
                 target=owner()
                 if target is None or target.closed or target.frame_key!=key or target.frame_serial!=serial:return False
                 target.frame_job=None
+                if frames is None:target.reset();return False
                 target.rest_image.set_from_pixbuf(GdkPixbuf.Pixbuf.new_from_bytes(GLib.Bytes.new(frames[0]),
                     GdkPixbuf.Colorspace.RGB,True,8,key[1],key[1],key[1]*4))
                 try:target.painter.set_frame(frames[1],key[1],frames[2],frames[3])
                 except (RuntimeError,ValueError):target.reset();return False
-                target.queue_frame();return False
+                target.queue_frame();target.start_motion();return False
             GLib.idle_add(apply)
         future.add_done_callback(done)
 
@@ -172,3 +188,4 @@ class CoverPause(Gtk.Overlay):
     def close(self,*_):
         if self.closed:return
         self.reset();self.closed=True;self.painter.close()
+        self.settings.disconnect(self.animation_handler);self.animation_handler=0

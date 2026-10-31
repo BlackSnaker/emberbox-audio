@@ -88,6 +88,13 @@ well pick up a restrained tint from the artwork. Soft upper-left shadows and
 warm lower-right reflections and a fine glass edge make the relief visible; the complete photograph
 fits inside it and its interior colours stay unchanged. The smooth well is
 baked once outside GTK and reused as a second cached surface during movement.
+The motion follows GTK's display frame clock. Fewer crest passes and bounded
+shadow bands leave headroom for 60 Hz. One retained logical-resolution buffer
+keeps vector work independent of HiDPI scale; GTK composites the finished image.
+Cold preparation does not advance the spring before its first visible frame.
+The offline 1920×1080 fullscreen reference reaches 60 FPS with normal meters
+and timers active. A software-only 2× Xvfb run is slower (about 33 FPS); the
+frame clock follows the display, and 60 FPS is not guaranteed on every backend.
 Two directional reflections fade as they travel, and release lets an existing
 crest finish instead of emitting another. The settled frame is prepared with
 the same painter as the animation, so the final handoff keeps its geometry,

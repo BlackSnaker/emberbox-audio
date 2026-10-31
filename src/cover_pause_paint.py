@@ -21,6 +21,7 @@ def bindings():
         'surface_mark_dirty':(None,p),'surface_destroy':(None,p),
         'save':(None,p),'restore':(None,p),'new_path':(None,p),'new_sub_path':(None,p),
         'arc':(None,p,d,d,d,d,d),'close_path':(None,p),'clip':(None,p),
+        'rectangle':(None,p,d,d,d,d),'set_operator':(None,p,i),
         'translate':(None,p,d,d),'scale':(None,p,d,d),'paint':(None,p),'paint_with_alpha':(None,p,d),
         'set_source_surface':(None,p,p,d,d),'set_source_rgba':(None,p,d,d,d,d),
         'set_source':(None,p,p),'get_source':(p,p),'pattern_set_filter':(None,p,i),
@@ -143,8 +144,15 @@ def paint(c,cr,surface,size,radius,depth,wave,material,well):
         for x0,y0,x1,y1,alpha in ((0,top,0,top+max(2,size*.018),.40),
                 (inset,0,inset+max(1.5,size*.014),0,.28)):
             shade=gradient(c,x0,y0,x1,y1,((0,0,0,0,alpha*depth),(.35,0,0,0,alpha*.32*depth),(1,0,0,0,0)))
-            try:c.cairo_set_source(cr,shade);c.cairo_paint(cr)
-            finally:c.cairo_pattern_destroy(shade)
+            c.cairo_save(cr)
+            try:
+                # Transparent gradient tails must not shade the entire cover.
+                # Clip the work itself to the few pixels that catch a shadow.
+                c.cairo_new_path(cr)
+                if y1>y0:c.cairo_rectangle(cr,inset,top,span,y1-y0)
+                else:c.cairo_rectangle(cr,inset,top,x1-x0,span)
+                c.cairo_clip(cr);c.cairo_set_source(cr,shade);c.cairo_paint(cr)
+            finally:c.cairo_restore(cr);c.cairo_pattern_destroy(shade)
         # A fine rounded glass edge sits inside the soft body. Its opposite
         # highlight separates the held print from the concave matte well.
         glass=gradient(c,inset,top,inset+span,top+span,
@@ -165,18 +173,16 @@ def paint(c,cr,surface,size,radius,depth,wave,material,well):
             r=(.025+.64*t**.9)*size
             cx,cy=inset+span*.47,top+span*.45
             if r>size*1.4:continue
-            for width,opacity,offset,shadow in ((max(4,size*.012),.011,0,False),
-                    (max(1.8,size*.004),.035,0,False),(.8,.078,0,False),
-                    (max(1.4,size*.003),.040,max(.8,size*.002),True)):
-                if shadow:
-                    stops=((0,0,0,0,0),(.5,0,0,0,0),(1,0,0,0,opacity*strength))
-                else:
-                    stops=((0,1,.94,.80,opacity*strength),(.4,1,.94,.80,opacity*.45*strength),(.85,1,.94,.80,0),(1,1,.94,.80,0))
+            for width,light,dark in ((max(4,size*.010),.012,.004),
+                                     (max(1.2,size*.0026),.095,.040)):
+                stops=((0,1,.94,.80,light*strength),(.4,1,.94,.80,light*.45*strength),
+                       (.55,1,.94,.80,0),(.56,0,0,0,0),(1,0,0,0,dark*strength))
                 sheen=gradient(c,cx-r*.8,cy-r*.8,cx+r*.8,cy+r*.8,stops)
                 try:
                     c.cairo_set_source(cr,sheen);c.cairo_set_line_width(cr,width)
-                    c.cairo_new_path(cr);c.cairo_arc(cr,cx,cy,r+offset,0,math.tau);c.cairo_stroke(cr)
+                    c.cairo_new_path(cr);c.cairo_arc(cr,cx,cy,r,0,math.tau);c.cairo_stroke(cr)
                 finally:c.cairo_pattern_destroy(sheen)
+
         c.cairo_restore(cr)
     finally:c.cairo_restore(cr)
 
@@ -212,26 +218,40 @@ class CoverPainter:
         self.canvas=canvas;self.owner=weakref.ref(owner)
         self.cairo,self.gobject,pointer=bindings()
         self.pointer=pointer(canvas.__gpointer__,None)
-        self.surface=self.well=None;self.size=0;self.closed=False
+        self.surface=self.well=self.buffer=self.context=None;self.size=0;self.closed=False
         self.callback=C.CFUNCTYPE(C.c_int,C.c_void_p,C.c_void_p,C.c_void_p)(self.draw)
         self.handler=self.gobject.g_signal_connect_data(self.pointer,b'draw',self.callback,None,None,0)
 
     def clear(self):
+        if self.context:self.cairo.cairo_destroy(self.context)
+        if self.buffer:self.cairo.cairo_surface_destroy(self.buffer)
         if self.surface:self.cairo.cairo_surface_destroy(self.surface)
         if self.well:self.cairo.cairo_surface_destroy(self.well)
-        self.surface=self.well=None;self.size=0
+        self.surface=self.well=self.buffer=self.context=None;self.size=0
 
     def set_frame(self,raw,size,material,well_raw):
         if self.closed:return
         self.clear();self.size=size;self.material=tuple(material)
         self.surface=image_surface(self.cairo,raw,size)
-        try:self.well=image_surface(self.cairo,well_raw,size)
+        try:
+            self.well=image_surface(self.cairo,well_raw,size)
+            self.buffer=self.cairo.cairo_image_surface_create(0,size,size)
+            if not self.cairo.cairo_image_surface_get_data(self.buffer):raise RuntimeError('Pause buffer allocation failed')
+            self.context=self.cairo.cairo_create(self.buffer)
         except Exception:self.clear();raise
 
     def draw(self,_widget,cr,_data):
         owner=self.owner()
         if self.closed or not owner or self.surface is None:return False
-        paint(self.cairo,cr,self.surface,self.size,owner.radius,owner.depth,owner.wave,self.material,self.well)
+        c=self.cairo
+        # Keep vector work at the cover's logical resolution even on HiDPI.
+        # GTK composites one finished image at the monitor scale. Both native
+        # allocations are retained for the whole movement, not made per tick.
+        c.cairo_set_operator(self.context,1);c.cairo_set_source_rgba(self.context,0,0,0,0)
+        c.cairo_paint(self.context);c.cairo_set_operator(self.context,2)
+        paint(c,self.context,self.surface,self.size,owner.radius,owner.depth,owner.wave,self.material,self.well)
+        c.cairo_set_source_surface(cr,self.buffer,0,0)
+        c.cairo_paint(cr)
         return False
 
     def close(self):
