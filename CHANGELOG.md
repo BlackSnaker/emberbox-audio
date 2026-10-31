@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.22.4 — 2026-10-31
+
+- Refined the pause pose: a slim, artwork-tinted satin lip, a small inward movement and narrow contact shadows preserve the photograph's colour and clarity. Removed the duplicate print beneath the animation.
+- Two directional reflections replace the broad concentric halos. Resuming lets an existing crest finish, and rapid reversals retain motion and wave phase without another splash.
+- Moving and settled artwork now use the same Cairo painter, with the static frame prepared outside GTK. Added an exact endpoint check and light/dark/colour/transparency checks; retained the cached rendering and HiDPI frame-budget coverage.
+
 ## 0.22.3 — 2026-10-31
 
 - Fixed fullscreen rendering after the pause effect update: removed its nested GL surfaces and startup GL warmup in both windows. The existing fullscreen and track-change shaders keep their earlier rendering path.

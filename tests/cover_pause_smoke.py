@@ -54,8 +54,9 @@ class Rig:
         return tuple((w.get_allocation().x,w.get_allocation().y,w.get_allocated_width(),w.get_allocated_height())
                      for w in (self.layers,self.button))
 
-    def capture(self,depth,age):
+    def capture(self,depth,age,live=False):
         s=self.surface;s.depth=depth;s.wave=age;s.queue_frame()
+        if live:s.rest_image.hide();s.canvas.show()
         rect=Gdk.Rectangle();rect.width=rect.height=SIZE
         width,height,raw=snapshot(s,rect)
         return np.frombuffer(raw,dtype=np.uint8).reshape(height,width,4)[...,[2,1,0,3]].copy()
@@ -74,10 +75,12 @@ try:
         assert s.tick and s.target==1 and s.depth==0
         wait(lambda:s.depth>.15,'Pause did not reach an intermediate depth')
         assert rig.geometry()==rig.baseline,'Pause must never resize the cover or shift transport'
-        depth,velocity=s.depth,s.velocity
+        depth,velocity,crest=s.depth,s.velocity,s.wave
         s.sync(True,art,'song')
         assert s.depth==depth and s.velocity==velocity and s.target==0,'Rapid reversal jumped to an endpoint'
+        assert s.wave==crest,'Release must preserve the existing reflection rather than replace it'
         s.sync(False,art,'song')
+        assert s.wave==crest,'A rapid second pause must not flash a fresh circle over the old one'
         wait(lambda:not s.tick,'The pause wave failed to settle and stop')
         assert s.get_visible() and s.depth==1 and s.pixels is art
         s.sync(True,art,'song');s.sync(False,art,'song')
@@ -91,9 +94,12 @@ try:
         assert (moving<=1).sum()>moving.size*.35,'The wave must not flash the whole cover'
         assert np.mean(np.abs(later.astype(int)-wave.astype(int)))>.06,'The wavefront must travel'
         floating=rig.capture(0,2);pressed=rig.capture(1,2)
-        scale=1;edge=round(SIZE*.012)
-        assert pressed[SIZE*scale//2,edge,:3].mean()<floating[SIZE*scale//2,edge,:3].mean()*.5,\
-            'The cover must reveal the dark socket as it settles into the body'
+        scale=1;edge=max(0,int(SIZE*.0095)-1)
+        assert pressed[SIZE//2,edge,:3].mean()<floating[SIZE//2,edge,:3].mean()*.82,\
+            'The slim satin seat must remain distinct from the photograph'
+        settled=rig.capture(1,2,live=True)
+        assert np.max(np.abs(settled.astype(int)-pressed.astype(int)))<=2,\
+            'The animated endpoint must match the static paused picture exactly'
         assert pressed[0,0,3]==0 and pressed[SIZE*scale//2,SIZE*scale//2,3]==255
         surface=s.painter.surface;prepared=s.frame_serial;durations=[]
         for depth in (.6,.75,.9,1):

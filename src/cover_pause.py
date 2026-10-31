@@ -9,7 +9,7 @@ import weakref
 import numpy as np
 from PIL import Image,ImageDraw
 from gi.repository import GdkPixbuf,GLib,Gtk
-from cover_pause_paint import CoverPainter
+from cover_pause_paint import CoverPainter,settled_frame
 
 
 def spring(value,velocity,target,seconds):
@@ -25,27 +25,30 @@ def cover_frames(pixels,size,radius):
     source=source.resize((size,size),Image.Resampling.LANCZOS)
     mask=Image.new('L',(size,size));ImageDraw.Draw(mask).rounded_rectangle((0,0,size-1,size-1),radius,fill=255)
     source.putalpha(Image.fromarray(np.minimum(np.asarray(source.getchannel('A')),np.asarray(mask))))
-    pressed=Image.new('RGBA',(size,size),(19,23,19,255))
-    inset=max(1,round(size*.021));top=inset+max(1,round(size*.003));span=size-2*inset
-    art=source.resize((span,span),Image.Resampling.LANCZOS)
-    pressed.alpha_composite(art,(inset,top))
-    shadow=np.zeros((size,size,4),dtype=np.uint8)
-    shadow[...,3]=(np.exp(-np.arange(size)[:,None]/max(4,size*.025))*55).astype(np.uint8)
-    pressed.alpha_composite(Image.fromarray(shadow,'RGBA'));pressed.putalpha(mask)
+    thumb=np.asarray(source.resize((24,24),Image.Resampling.BOX),dtype=np.float32)
+    visible=thumb[...,:3][thumb[...,3]>64]
+    tone=visible.mean(axis=0) if len(visible) else np.array((128,128,128))
+    material=tuple((np.array((38,37,33))+np.clip((tone-128)*.045,-5,5))/255)
     rgba=np.asarray(source,dtype=np.uint16)
     bgra=np.empty((size,size,4),dtype=np.uint8)
     bgra[...,:3]=((rgba[...,[2,1,0]]*rgba[...,3:4]+127)//255).astype(np.uint8)
     bgra[...,3]=rgba[...,3]
-    return source.tobytes(),pressed.tobytes(),bgra.tobytes()
+    raw_bgra=bgra.tobytes()
+    final=np.frombuffer(settled_frame(raw_bgra,size,radius,material),dtype=np.uint8).reshape(size,size,4).astype(np.uint16)
+    alpha=np.maximum(1,final[...,3:4])
+    rgba=np.empty((size,size,4),dtype=np.uint8)
+    rgba[...,:3]=np.minimum(255,(final[...,[2,1,0]]*255+alpha//2)//alpha).astype(np.uint8)
+    rgba[...,3]=final[...,3]
+    return rgba.tobytes(),raw_bgra,material
 
 
 class CoverPause(Gtk.Overlay):
-    WAVE_SECONDS=1.7
+    WAVE_SECONDS=1.55
 
     def __init__(self,pool):
         super().__init__()
         self.pool=pool;self.frame_job=None;self.frame_key=None;self.frame_serial=0
-        self.still=Gtk.Image();self.add(self.still)
+        self.base=Gtk.Box();self.add(self.base)
         self.rest_image=Gtk.Image();self.add_overlay(self.rest_image)
         self.set_overlay_pass_through(self.rest_image,True)
         self.canvas=Gtk.DrawingArea();self.canvas.set_no_show_all(True)
@@ -62,9 +65,9 @@ class CoverPause(Gtk.Overlay):
     def resize(self,size,radius=22):
         if (size,radius)==(self.size,self.radius):return
         self.size,self.radius=size,radius
-        self.set_size_request(size,size);self.still.set_size_request(size,size);self.canvas.set_size_request(size,size)
+        self.set_size_request(size,size);self.base.set_size_request(size,size);self.canvas.set_size_request(size,size)
         if self.get_visible():
-            self.still.clear();self.rest_image.clear();self.painter.clear()
+            self.rest_image.clear();self.painter.clear()
             self.prepare_frames()
 
     def sync(self,playing,pixels,key,*,blocked=False):
@@ -88,7 +91,10 @@ class CoverPause(Gtk.Overlay):
         self.set_pixels(pixels)
         # Reversing direction preserves depth and velocity. A rapid second
         # pause does not stack another loop or restart from an endpoint.
-        self.wave=0.;self.age=0.;self.wall_start=None;self.present_frame()
+        # Release lifts the print without a second splash. An already emitted
+        # crest keeps travelling through a rapid direction change.
+        if not playing and (not self.tick or self.wave>=self.WAVE_SECONDS):self.wave=0.
+        self.age=0.;self.wall_start=None;self.present_frame()
         if not self.tick:self.last_now=None;self.tick=self.add_tick_callback(self.advance)
 
     def set_pixels(self,pixels):
@@ -115,17 +121,16 @@ class CoverPause(Gtk.Overlay):
                 target=owner()
                 if target is None or target.closed or target.frame_key!=key or target.frame_serial!=serial:return False
                 target.frame_job=None
-                for image,raw in zip((target.still,target.rest_image),frames):
-                    image.set_from_pixbuf(GdkPixbuf.Pixbuf.new_from_bytes(GLib.Bytes.new(raw),
-                        GdkPixbuf.Colorspace.RGB,True,8,key[1],key[1],key[1]*4))
-                try:target.painter.set_frame(frames[2],key[1])
+                target.rest_image.set_from_pixbuf(GdkPixbuf.Pixbuf.new_from_bytes(GLib.Bytes.new(frames[0]),
+                    GdkPixbuf.Colorspace.RGB,True,8,key[1],key[1],key[1]*4))
+                try:target.painter.set_frame(frames[1],key[1],frames[2])
                 except (RuntimeError,ValueError):target.reset();return False
                 target.queue_frame();return False
             GLib.idle_add(apply)
         future.add_done_callback(done)
 
     def present_frame(self):
-        self.still.show();self.rest_image.hide();self.canvas.show();self.show();self.queue_frame()
+        self.base.show();self.rest_image.hide();self.canvas.show();self.show();self.queue_frame()
 
     def queue_frame(self):
         if self.depth==1 and self.target==1 and self.wave>=self.WAVE_SECONDS and not self.tick and self.rest_image.get_pixbuf():
@@ -157,7 +162,7 @@ class CoverPause(Gtk.Overlay):
         if self.tick:self.remove_tick_callback(self.tick);self.tick=0
         self.pixels=None;self.key=self.playing=None
         if self.frame_job:self.frame_job.cancel();self.frame_job=None
-        self.frame_key=None;self.still.clear();self.rest_image.clear()
+        self.frame_key=None;self.rest_image.clear()
         self.frame_serial+=1
         self.depth=self.velocity=self.target=0.;self.wave=self.WAVE_SECONDS;self.age=0.;self.last_now=self.wall_start=None
         self.hide()

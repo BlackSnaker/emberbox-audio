@@ -83,7 +83,12 @@ lower reflection reveal the socket. Resuming returns to the unmodified live
 image; rapid reversals preserve both depth and velocity. Desktop, Mini and
 fullscreen keep their layout fixed. Animated covers contribute one held frame.
 The animation paints one cached print with Cairo and a few soft crests; a plain
-GTK image takes over at rest. Preparing pixels runs outside GTK. No additional
+GTK image takes over at rest. A slim satin lip picks up a restrained tint from
+the artwork. Narrow contact shadows leave the picture's interior unchanged.
+Two directional reflections fade as they travel, and release lets an existing
+crest finish instead of emitting another. The settled frame is prepared with
+the same painter as the animation, so the final handoff keeps its geometry,
+colour and edge light. Preparing pixels runs outside GTK. No additional
 GL surface or context is created inside the cover. System animation preferences
 and page/track transitions cancel the effect cleanly. It never controls or delays playback.
 
