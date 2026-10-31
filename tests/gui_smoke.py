@@ -36,7 +36,13 @@ class DummySound:
     def close(self):pass
     def flush(self):self.flushed=True
 widget.SpotifyVolume=DummySound
-widget.Artwork.load=lambda self,image,url,size,radius=8,preserve=False,on_loaded=None:image.set_size_request(size,size)
+def image_load(self,image,url,size,radius=8,preserve=False,on_loaded=None,**options):
+    image.set_size_request(size,size)
+    current=image.get_pixbuf()
+    if current:
+        from gi.repository import GdkPixbuf
+        image.set_from_pixbuf(current.scale_simple(size,size,GdkPixbuf.InterpType.BILINEAR))
+widget.Artwork.load=image_load
 from sources import Session
 class DummyMonitor:
     def __init__(self, connection, changed): self.changed=changed;self.calls=[]
@@ -132,6 +138,24 @@ try:
     assert not app.album_button.get_sensitive()
     spotify.properties['Metadata']['xesam:album']='Original album'
     app.on_sessions([spotify,browser]);assert app.album_button.get_sensitive()
+    # The desktop and Mini cover must follow confirmed playback without any
+    # extra transport command or shift of neighbouring controls.
+    from gi.repository import GdkPixbuf
+    art=GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB,True,8,112,112);art.fill(0x71875aff)
+    spotify.properties['Metadata']['mpris:artUrl']='fixture:pause-cover'
+    app.on_sessions([spotify,browser]);app.cover.set_from_pixbuf(art);app.sync_cover_pause()
+    settle(.2)
+    original_size=tuple(app.window.get_size());original_calls=list(app.monitor.calls)
+    spotify.properties['PlaybackStatus']='Paused';app.on_sessions([spotify,browser]);settle(.2)
+    assert app.cover_pause.tick and app.cover_pause.target==1 and 0<app.cover_pause.depth<1
+    assert tuple(app.window.get_size())==original_size,(original_size,tuple(app.window.get_size()))
+    app.toggle_compact(None);settle(.6)
+    assert app.cover_pause.size==64 and app.cover_pause.depth==1 and not app.cover_pause.tick
+    app.toggle_compact(None);settle(.6)
+    assert app.cover_pause.size==112 and app.cover_pause.depth==1
+    spotify.properties['PlaybackStatus']='Playing';app.on_sessions([spotify,browser]);settle(.1)
+    assert app.cover_pause.target==0 and app.cover_pause.tick
+    assert app.monitor.calls==original_calls,'Cover animation must not dispatch playback commands'
     assert not app.album_button.get_has_tooltip()
     transport_count=len(app.monitor.calls)
     with patch.object(widget.FullscreenPlayer,'open_album') as album:
@@ -351,6 +375,7 @@ try:
 finally:
     # Gtk.main() is not entered by this synchronous harness.
     app.frame_health.close()
+    app.cover_pause.close()
     app.music.close()
     app.yandex_panel.close();app.yandex_web.close()
     app.accounts.close();app.mpris.close()

@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.22.2 — 2026-10-31
+
+- Pausing releases a soft packet of optical waves over the cover as it settles into a shaded socket. Resuming lifts it smoothly back to the exact live artwork; rapid reversals preserve position and velocity.
+- The effect follows confirmed playback in fullscreen, desktop and Mini without changing layout or sending transport commands. It stops drawing after settling, holds one frame of animated artwork, yields to track changes and fullscreen transitions, and respects reduced motion.
+- Hardware GL reuses the cover texture; systems without accelerated GL blend two still images prepared outside GTK. Added framebuffer, lifecycle, HiDPI and desktop/fullscreen integration checks.
+
 ## 0.22.1 — 2026-10-30
 
 - Redesigned the album room around a large, complete cover, a cached artwork-coloured light field, clear release facts and an artist link. Optional liner notes open beside the main actions and remain in the shared page scroll.

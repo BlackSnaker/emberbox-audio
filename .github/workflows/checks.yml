@@ -103,6 +103,8 @@ jobs:
           GDK_SCALE=1 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/cover_ripple_smoke.py
           GDK_SCALE=2 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/cover_ripple_smoke.py
           GDK_SCALE=1 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/cover_change_smoke.py
+          GDK_SCALE=1 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/cover_pause_smoke.py
+          GDK_SCALE=2 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/cover_pause_smoke.py
       - name: Karaoke timing, layout and lifecycle
         run: |
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/karaoke_smoke.py

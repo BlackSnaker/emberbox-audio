@@ -77,6 +77,16 @@ The result is **physically inspired**, rather than an exact simulation of gas-di
 
 ## Interaction stays quiet
 
+Pausing sends a finite packet of soft refractive waves across the cover while
+a critically damped motion settles it into the body. An inner shadow and a faint
+lower reflection reveal the socket. Resuming returns to the unmodified live
+image; rapid reversals preserve both depth and velocity. Desktop, Mini and
+fullscreen keep their layout fixed. Animated covers contribute one held frame.
+The GPU reuses a texture and changes only uniforms, then stops drawing when
+settled. Without accelerated GL, two cached images prepared off GTK blend into
+the same recessed pose. System animation preferences and page/track transitions
+cancel the effect cleanly. It never controls or delays playback.
+
 The artist room unfolds over 1.05 seconds: atmospheric light, a subtly approaching portrait, then the name and music panels. A prewarmed GL layer moves fixed textures inside the catalogue viewport; the hidden live page is painted once, not resized or faded as a tree on every frame. The transport and navigation stay available. Preparation waits briefly for the correctly sized photograph, catalogue arrivals are applied after the handoff, and navigating away cancels immediately. Without accelerated GL, one cached image fades in over 320 ms. Disabling system animations opens the live page directly.
 
 Fullscreen opens with a centred cover; **Lyrics** explicitly enables text lookup and the split layout. Until then, no lyric lookup, line layout or scrolling runs.

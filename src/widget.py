@@ -23,6 +23,7 @@ import control
 from audio_meter import SpotifyAudioMeter
 from artwork import Artwork
 from cover_tint import CoverTint
+from cover_pause import CoverPause
 from discovery_panel import DiscoveryPanel
 from hardware_controls import MuteToggle, VolumeKnob
 from nixie_spectrum import NixieSpectrum
@@ -352,7 +353,11 @@ class Widget:
         cover_surface = Gtk.Box()
         cover_surface.get_style_context().add_class('cover-surface')
         cover_surface.set_valign(Gtk.Align.CENTER)
-        cover_surface.pack_start(self.cover, False, False, 0)
+        self.cover_layers=Gtk.Overlay();self.cover_layers.add(self.cover)
+        self.cover_pause=CoverPause(self.artwork.pool);self.cover_pause.resize(112,13)
+        self.cover_layers.add_overlay(self.cover_pause);self.cover_layers.set_overlay_pass_through(self.cover_pause,True)
+        self.cover_layers.connect('map',lambda *_:GLib.idle_add(self.sync_cover_pause))
+        cover_surface.pack_start(self.cover_layers, False, False, 0)
         cover_drag = Gtk.EventBox()
         cover_drag.set_visible_window(False)
         cover_drag.get_accessible().set_description('Перетащи за обложку, чтобы переместить плеер')
@@ -443,6 +448,7 @@ class Widget:
         controls.pack_end(self.volume_knob, False, False, 0)
         self.previous = self.button('⏮', 'previous', 'Предыдущий трек')
         self.play = self.button('▶', 'toggle', 'Воспроизвести или приостановить', 'play')
+        self.play.connect('notify::label',lambda *_:self.sync_cover_pause())
         self.next = self.button('⏭', 'next', 'Следующий трек')
         self.open = self.button('↗', 'open', 'Открыть Spotify', 'open')
         for button in (self.previous, self.play, self.next):
@@ -582,6 +588,7 @@ class Widget:
         if self.kwin_desktop:self.kwin_desktop.close()
         self.frame_health.close()
         if self.fullscreen:self.fullscreen.close()
+        self.cover_pause.close()
         self.youtube_panel.close()
         self.youtube.close()
         self.accounts.close()
@@ -612,6 +619,7 @@ class Widget:
     def prepare_fullscreen(self):
         self.fullscreen_prewarm=0
         if self.resources_closed:return False
+        self.cover_pause.warmup()
         if self.fullscreen is None:self.fullscreen=FullscreenPlayer(self)
         return self.fullscreen.prewarm()
 
@@ -737,6 +745,7 @@ class Widget:
     def layout_transition_done(self):
         if self.resources_closed:return
         self.reflow()
+        self.sync_cover_pause()
         if self.positioned:self.save_position()
 
     def toggle_discovery(self, _button):
@@ -1301,6 +1310,7 @@ class Widget:
             self.frame_health.request_frame()
 
     def load_cover(self, preserve=False):
+        if hasattr(self,'cover_pause'):self.cover_pause.resize(64 if self.compact else 112,10 if self.compact else 13)
         if not self.art_url:
             self.cover_tint.set_cover(None)
             self.tint_art_url = None
@@ -1309,11 +1319,19 @@ class Widget:
                           on_loaded=self.on_cover_loaded)
 
     def on_cover_loaded(self, pixbuf):
+        self.sync_cover_pause()
         if self.art_url and self.tint_art_url != self.art_url:
             self.cover_tint.set_cover(pixbuf)
             self.tint_art_url = self.art_url
             if hasattr(self,'frame_health'):
                 self.frame_health.request_frame()
+
+    def sync_cover_pause(self):
+        if not hasattr(self,'cover_pause'):return False
+        self.cover_pause.sync(self.playing,self.cover.get_pixbuf(),
+            (self.source,self.art_url,self.title.get_text(),self.artist.get_text()),
+            blocked=self.length<=0 or self.layout_transition.active or bool(getattr(getattr(self,'music',None),'loading',False)))
+        return False
 
     def on_volume_changed(self, sound):
         self.mute_toggle.set_state(sound.volume, sound.muted, sound.available)
@@ -1378,6 +1396,7 @@ class Widget:
 
     def refresh(self):
         self.publish_mpris()
+        self.sync_cover_pause()
         connected = bool(self.apple_web.state.get('ready') and self.apple_web.state.get('authorized')) if self.apple_native() else self.apple.connected
         if connected and not self.apple_was_connected and self.source == 'apple-music' and self.expanded and not self.compact:
             self.apple_panel.open()
