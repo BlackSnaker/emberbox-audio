@@ -8,6 +8,7 @@ import numpy as np
 from PIL import Image,ImageDraw
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 from cover_pause import cover_frames
+from cover_pause_paint import well_frame
 
 
 def paused(image):
@@ -36,6 +37,17 @@ class PausedMaterial(unittest.TestCase):
         pixels,material=paused(Image.new('RGBA',(128,128),(0,0,0,0)))
         self.assertEqual(pixels[0,0,3],0);self.assertEqual(pixels[64,64,3],255)
         self.assertLessEqual(np.max(np.abs(np.asarray(material)*255-(38,37,33))),5)
+
+    def test_molded_well_has_soft_directional_depth(self):
+        size=620
+        raw=well_frame(size,22,tuple(v/255 for v in (38,37,33)))
+        pixels=np.frombuffer(raw,dtype=np.uint8).reshape(size,size,4)
+        left=pixels[size//2,:19,:3].mean(axis=1)
+        right=pixels[size//2,-19:,:3].mean(axis=1)[::-1]
+        self.assertGreater(left.max()-left[17],18,'The shoulder must roll into a recessed shadow')
+        self.assertGreater(right[17]-left[17],15,'The lower-right well catches reflected light')
+        self.assertLess(np.max(np.abs(np.diff(left[1:18]))),8,'The light roll must be soft, not a hard bevel')
+        self.assertEqual(pixels[0,0,3],0)
 
 
 if __name__=='__main__':unittest.main()

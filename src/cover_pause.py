@@ -2,14 +2,14 @@
 
 No transport commands, decoding, image resizing or GTK layout work per frame.
 The paused image is static after settling; animated artwork supplies one held
-frame. Cairo draws one cached print; the settled pose is a plain GTK image.
+frame. Cairo draws a cached print and molded well; rest is a plain GTK image.
 """
 import math
 import weakref
 import numpy as np
 from PIL import Image,ImageDraw
 from gi.repository import GdkPixbuf,GLib,Gtk
-from cover_pause_paint import CoverPainter,settled_frame
+from cover_pause_paint import CoverPainter,settled_frame,well_frame
 
 
 def spring(value,velocity,target,seconds):
@@ -34,12 +34,13 @@ def cover_frames(pixels,size,radius):
     bgra[...,:3]=((rgba[...,[2,1,0]]*rgba[...,3:4]+127)//255).astype(np.uint8)
     bgra[...,3]=rgba[...,3]
     raw_bgra=bgra.tobytes()
-    final=np.frombuffer(settled_frame(raw_bgra,size,radius,material),dtype=np.uint8).reshape(size,size,4).astype(np.uint16)
+    well=well_frame(size,radius,material)
+    final=np.frombuffer(settled_frame(raw_bgra,size,radius,material,well),dtype=np.uint8).reshape(size,size,4).astype(np.uint16)
     alpha=np.maximum(1,final[...,3:4])
     rgba=np.empty((size,size,4),dtype=np.uint8)
     rgba[...,:3]=np.minimum(255,(final[...,[2,1,0]]*255+alpha//2)//alpha).astype(np.uint8)
     rgba[...,3]=final[...,3]
-    return rgba.tobytes(),raw_bgra,material
+    return rgba.tobytes(),raw_bgra,material,well
 
 
 class CoverPause(Gtk.Overlay):
@@ -123,7 +124,7 @@ class CoverPause(Gtk.Overlay):
                 target.frame_job=None
                 target.rest_image.set_from_pixbuf(GdkPixbuf.Pixbuf.new_from_bytes(GLib.Bytes.new(frames[0]),
                     GdkPixbuf.Colorspace.RGB,True,8,key[1],key[1],key[1]*4))
-                try:target.painter.set_frame(frames[1],key[1],frames[2])
+                try:target.painter.set_frame(frames[1],key[1],frames[2],frames[3])
                 except (RuntimeError,ValueError):target.reset();return False
                 target.queue_frame();return False
             GLib.idle_add(apply)

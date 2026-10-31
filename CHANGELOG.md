@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.22.5 — 2026-10-31
+
+- Gave paused artwork a more pronounced neumorphic seat: a continuous molded surface, deep upper-left contact shadow, warm reflected light along the opposite edge and a fine glass highlight. The complete picture settles deeper while its central colours and detail stay unchanged.
+- Bake the smooth relief once outside GTK and reuse it throughout the movement. The settled pose remains a static image; no nested GL surface, per-frame blur or layout work was added.
+- Verified directional relief, full-picture retention, matching moving/static endpoints, cached-surface cleanup, desktop/fullscreen geometry and frame budgets at normal and HiDPI scales.
+
 ## 0.22.4 — 2026-10-31
 
 - Refined the pause pose: a slim, artwork-tinted satin lip, a small inward movement and narrow contact shadows preserve the photograph's colour and clarity. Removed the duplicate print beneath the animation.

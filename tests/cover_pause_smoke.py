@@ -94,17 +94,18 @@ try:
         assert (moving<=1).sum()>moving.size*.35,'The wave must not flash the whole cover'
         assert np.mean(np.abs(later.astype(int)-wave.astype(int)))>.06,'The wavefront must travel'
         floating=rig.capture(0,2);pressed=rig.capture(1,2)
-        scale=1;edge=max(0,int(SIZE*.0095)-1)
+        scale=1;edge=max(0,int(SIZE*.03)-1)
         assert pressed[SIZE//2,edge,:3].mean()<floating[SIZE//2,edge,:3].mean()*.82,\
-            'The slim satin seat must remain distinct from the photograph'
+            'The molded seat must remain distinct from the photograph'
         settled=rig.capture(1,2,live=True)
         assert np.max(np.abs(settled.astype(int)-pressed.astype(int)))<=2,\
             'The animated endpoint must match the static paused picture exactly'
         assert pressed[0,0,3]==0 and pressed[SIZE*scale//2,SIZE*scale//2,3]==255
-        surface=s.painter.surface;prepared=s.frame_serial;durations=[]
+        surface=s.painter.surface;well=s.painter.well;prepared=s.frame_serial;durations=[]
         for depth in (.6,.75,.9,1):
             start=time.perf_counter();rig.capture(depth,2);durations.append(time.perf_counter()-start)
-        assert s.painter.surface==surface and s.frame_serial==prepared,'Frames must reuse the cached print'
+        assert s.painter.surface==surface and s.painter.well==well and s.frame_serial==prepared,\
+            'Frames must reuse both the cached print and the molded relief'
         preview=os.environ.get('EMBERBOX_PAUSE_PREVIEW')
         if preview:
             from PIL import Image
@@ -113,7 +114,7 @@ try:
                 Image.fromarray(data,'RGBA').save(folder/(name+'.png'))
         s.depth=1;s.wave=2;s.sync(True,art,'song')
         wait(lambda:not s.tick,'Resume did not finish')
-        assert not s.get_visible() and s.pixels is None and s.painter.surface is None
+        assert not s.get_visible() and s.pixels is None and s.painter.surface is None and s.painter.well is None
         s.sync(False,art,'song');assert not s.tick and s.depth==1,'An already paused entry must not replay a wave'
         s.sync(True,art,'song');settle(.1);rig.window.hide();settle()
         assert not s.tick and s.pixels is None and not s.get_visible()
@@ -123,7 +124,7 @@ try:
         assert s.pixels is None and not s.get_visible()
         settings.set_property('gtk-enable-animations',True)
         painter=s.painter;rig.close()
-        assert painter.closed and painter.surface is None and not painter.handler
+        assert painter.closed and painter.surface is None and painter.well is None and not painter.handler
         SIZE=720;art=art.scale_simple(SIZE,SIZE,GdkPixbuf.InterpType.BILINEAR)
         large=Rig();rigs.append(large);large.surface.sync(False,art,'large-cover')
         wait(lambda:large.surface.painter.surface is not None,'Large cached print did not arrive')

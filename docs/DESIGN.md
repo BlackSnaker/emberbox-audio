@@ -83,8 +83,11 @@ lower reflection reveal the socket. Resuming returns to the unmodified live
 image; rapid reversals preserve both depth and velocity. Desktop, Mini and
 fullscreen keep their layout fixed. Animated covers contribute one held frame.
 The animation paints one cached print with Cairo and a few soft crests; a plain
-GTK image takes over at rest. A slim satin lip picks up a restrained tint from
-the artwork. Narrow contact shadows leave the picture's interior unchanged.
+GTK image takes over at rest. A molded, rounded shoulder and a deeper concave
+well pick up a restrained tint from the artwork. Soft upper-left shadows and
+warm lower-right reflections and a fine glass edge make the relief visible; the complete photograph
+fits inside it and its interior colours stay unchanged. The smooth well is
+baked once outside GTK and reused as a second cached surface during movement.
 Two directional reflections fade as they travel, and release lets an existing
 crest finish instead of emitting another. The settled frame is prepared with
 the same painter as the animation, so the final handoff keeps its geometry,
