@@ -98,9 +98,8 @@ void main(){
 class CoverRippleGL(RevealGL):
     """Draw the old/new artwork only; no window snapshots or frame allocation."""
 
-    def __init__(self,allow_software=False,*,fragment=FRAGMENT):
-        super().__init__(allow_software,fragment=fragment,uniforms=('elapsed','reveal'))
-        self.reveal_without_new=False
+    def __init__(self,allow_software=False):
+        super().__init__(allow_software,fragment=FRAGMENT,uniforms=('elapsed','reveal'))
         self.room_size=None
         for name,result,args in (
                 ('GetIntegerv',None,(C.c_uint,C.POINTER(C.c_int))),
@@ -161,7 +160,7 @@ class CoverRippleGL(RevealGL):
             self.call('BindTexture',0x0DE1,self.room_texture)
             for name,kind,values in (
                     ('viewport','2f',(width,height)),('elapsed','1f',(age,)),
-                    ('reveal','1f',(reveal if new is not None or self.reveal_without_new else 0.0,)),
+                    ('reveal','1f',(reveal if new is not None else 0.0,)),
                     ('cornerRadius','1f',(radius,)),('cover','1i',(0,)),('room','1i',(1,)),
                     ('hasCover','1i',(int(old is not None),)),('hasRoom','1i',(int(new is not None),))):
                 self.call('Uniform'+kind,self.uniforms[name],*values)

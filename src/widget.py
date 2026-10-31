@@ -619,7 +619,6 @@ class Widget:
     def prepare_fullscreen(self):
         self.fullscreen_prewarm=0
         if self.resources_closed:return False
-        self.cover_pause.warmup()
         if self.fullscreen is None:self.fullscreen=FullscreenPlayer(self)
         return self.fullscreen.prewarm()
 

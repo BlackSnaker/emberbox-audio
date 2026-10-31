@@ -505,7 +505,6 @@ class FullscreenPlayer:
                 except (OSError,AttributeError,RuntimeError):pass
             self.motion_image.warmup()
             self.cover_change.surface.warmup()
-            self.cover_pause.warmup()
             self.reveal.warmup(pixels,room=room,monitor=monitor)
             if self.reveal.driver:self.artist_view.entrance.warmup()
         return False

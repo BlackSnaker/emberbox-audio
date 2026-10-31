@@ -1,6 +1,5 @@
-"""Offline pause geometry, real GL pixels, fallback and transport isolation."""
+"""Offline pause pixels, frame cost, geometry and transport isolation."""
 from concurrent.futures import ThreadPoolExecutor
-import ctypes as C
 import os
 from pathlib import Path
 import sys
@@ -15,6 +14,7 @@ import numpy as np
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'src'))
 from cover_pause import CoverPause,spring
+from room_snapshot import snapshot
 import cover_pause
 
 
@@ -39,7 +39,7 @@ art=art.scale_simple(SIZE,SIZE,GdkPixbuf.InterpType.BILINEAR)
 
 
 class Rig:
-    def __init__(self,gpu=True):
+    def __init__(self):
         self.window=Gtk.Window();self.window.set_decorated(False);self.window.set_resizable(False)
         body=Gtk.Box(orientation=Gtk.Orientation.VERTICAL);self.window.add(body)
         self.layers=Gtk.Overlay();body.pack_start(self.layers,False,False,0)
@@ -48,7 +48,6 @@ class Rig:
         self.layers.add_overlay(self.surface);self.layers.set_overlay_pass_through(self.surface,True)
         self.button=Gtk.Button(label='Transport stays here');body.pack_start(self.button,False,False,0)
         self.window.show_all();settle(.08)
-        if gpu:self.surface.warmup(allow_software=True);assert self.surface.driver
         self.surface.sync(True,art,'song');self.baseline=self.geometry()
 
     def geometry(self):
@@ -56,15 +55,10 @@ class Rig:
                      for w in (self.layers,self.button))
 
     def capture(self,depth,age):
-        s=self.surface;s.depth=depth;s.wave=age
-        s.area.make_current();s.area.attach_buffers()
-        size=SIZE*s.area.get_scale_factor()
-        s.driver.draw(size,size,art,None,age,depth,22*s.area.get_scale_factor())
-        s.driver.call('Finish')
-        read=s.driver.lib.glReadPixels
-        read.restype=None;read.argtypes=[C.c_int,C.c_int,C.c_int,C.c_int,C.c_uint,C.c_uint,C.c_void_p]
-        raw=(C.c_ubyte*(size*size*4))();read(0,0,size,size,0x1908,0x1401,raw)
-        return np.ctypeslib.as_array(raw).reshape(size,size,4)[::-1].copy()
+        s=self.surface;s.depth=depth;s.wave=age;s.queue_frame()
+        rect=Gdk.Rectangle();rect.width=rect.height=SIZE
+        width,height,raw=snapshot(s,rect)
+        return np.frombuffer(raw,dtype=np.uint8).reshape(height,width,4)[...,[2,1,0,3]].copy()
 
     def close(self):self.window.destroy();self.pool.shutdown(wait=True);settle(.03)
 
@@ -75,11 +69,7 @@ rigs=[]
 try:
     with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected fixture network')):
         rig=Rig();rigs.append(rig);s=rig.surface
-        uploads=[]
-        for name in ('TexImage2D','TexSubImage2D'):
-            original=s.driver.functions[name]
-            def upload(*args,_original=original):uploads.append(1);return _original(*args)
-            s.driver.functions[name]=upload
+        assert not any(isinstance(w,Gtk.GLArea) for w in s.get_children()),'Pause must not create a nested GL surface'
         s.sync(False,art,'song')
         assert s.tick and s.target==1 and s.depth==0
         wait(lambda:s.depth>.15,'Pause did not reach an intermediate depth')
@@ -94,19 +84,21 @@ try:
         s.wall_start=GLib.get_monotonic_time()-3_000_000
         wait(lambda:not s.tick,'A stalled compositor did not release the decorative clock')
         assert s.depth==1 and s.wave==s.WAVE_SECONDS,'The time cap must not leave a frozen wave on paused artwork'
+        wait(lambda:s.painter.surface is not None,'Cached print did not arrive')
         calm=rig.capture(.45,2);wave=rig.capture(.45,.43);later=rig.capture(.45,.68)
         moving=np.max(np.abs(wave.astype(int)-calm.astype(int))[...,:3],axis=-1)
         assert (moving>3).sum()>100,'The paused cover needs a visible local wave'
         assert (moving<=1).sum()>moving.size*.35,'The wave must not flash the whole cover'
         assert np.mean(np.abs(later.astype(int)-wave.astype(int)))>.06,'The wavefront must travel'
         floating=rig.capture(0,2);pressed=rig.capture(1,2)
-        scale=s.area.get_scale_factor();edge=round(SIZE*.012*scale)
+        scale=1;edge=round(SIZE*.012)
         assert pressed[SIZE*scale//2,edge,:3].mean()<floating[SIZE*scale//2,edge,:3].mean()*.5,\
             'The cover must reveal the dark socket as it settles into the body'
         assert pressed[0,0,3]==0 and pressed[SIZE*scale//2,SIZE*scale//2,3]==255
-        count=len(uploads)
-        for depth in (.6,.75,.9,1):rig.capture(depth,2)
-        assert len(uploads)==count,'Depth frames must reuse the uploaded cover texture'
+        surface=s.painter.surface;prepared=s.frame_serial;durations=[]
+        for depth in (.6,.75,.9,1):
+            start=time.perf_counter();rig.capture(depth,2);durations.append(time.perf_counter()-start)
+        assert s.painter.surface==surface and s.frame_serial==prepared,'Frames must reuse the cached print'
         preview=os.environ.get('EMBERBOX_PAUSE_PREVIEW')
         if preview:
             from PIL import Image
@@ -115,7 +107,7 @@ try:
                 Image.fromarray(data,'RGBA').save(folder/(name+'.png'))
         s.depth=1;s.wave=2;s.sync(True,art,'song')
         wait(lambda:not s.tick,'Resume did not finish')
-        assert not s.get_visible() and s.pixels is None and s.driver.uploaded is None
+        assert not s.get_visible() and s.pixels is None and s.painter.surface is None
         s.sync(False,art,'song');assert not s.tick and s.depth==1,'An already paused entry must not replay a wave'
         s.sync(True,art,'song');settle(.1);rig.window.hide();settle()
         assert not s.tick and s.pixels is None and not s.get_visible()
@@ -124,20 +116,18 @@ try:
         wait(lambda:not s.tick,'Reduced motion did not cancel the wave')
         assert s.pixels is None and not s.get_visible()
         settings.set_property('gtk-enable-animations',True)
-        fallback=Rig(gpu=False);rigs.append(fallback)
-        with patch.object(cover_pause,'CoverPauseGL',side_effect=RuntimeError('Fixture without GL')):
-            fallback.surface.warmup()
-        assert fallback.surface.failed and not fallback.surface.driver
-        fallback.surface.sync(False,art,'song');settle(.2)
-        assert fallback.surface.still.get_mapped() and fallback.surface.rest_image.get_pixbuf() is not None
-        assert fallback.geometry()==fallback.baseline
-        wait(lambda:not fallback.surface.tick,'Compositor fallback did not settle')
-        assert fallback.surface.depth==1
-        fallback.surface.sync(True,art,'song')
-        wait(lambda:not fallback.surface.tick,'Compositor fallback did not return to live artwork')
-        assert not fallback.surface.get_visible()
-        driver=s.driver;rig.close()
-        assert driver.program==0 and s.closed and s.driver is None
+        painter=s.painter;rig.close()
+        assert painter.closed and painter.surface is None and not painter.handler
+        SIZE=720;art=art.scale_simple(SIZE,SIZE,GdkPixbuf.InterpType.BILINEAR)
+        large=Rig();rigs.append(large);large.surface.sync(False,art,'large-cover')
+        wait(lambda:large.surface.painter.surface is not None,'Large cached print did not arrive')
+        costs=[];serial=large.surface.frame_serial
+        for age in (.25,.4,.55,.7,.85):
+            start=time.perf_counter();large.capture(.5,age);costs.append(time.perf_counter()-start)
+        assert large.surface.frame_serial==serial,'A large wave must not regenerate artwork every frame'
+        assert max(costs)<.08,('The720px pause painter is blocking a frame',costs)
+        large.close()
+        print('PASS720px cover frame budget: max='+str(round(max(costs)*1000,2))+'ms, one cached print')
         # The closed-form spring is independent of callback cadence, including
         # mid-flight reversal; it preserves velocity instead of restarting ease.
         values=[]
@@ -146,7 +136,7 @@ try:
             for _ in range(fps):value,velocity=spring(value,velocity,1,1/fps)
             values.append(value)
         assert max(values)-min(values)<1e-10
-        print('PASS pause cover: real optical wave and socket, no layout shift, cached texture, continuous reversal, finite idle, compositor fallback, reduced motion and GL cleanup; scale='+str(scale))
+        print('PASS pause cover: soft crests and socket, no nested GL, stable layout, cached print, reversal, finite idle, reduced motion and native cleanup; max320px frame='+str(round(max(durations)*1000,2))+'ms')
         import fullscreen_smoke as fixture
         import fullscreen
         host=fixture.FixtureHost()
@@ -162,7 +152,7 @@ try:
                 stage.window.remove_tick_callback(stage.tick);stage.tick=0
                 GLib.source_remove(stage.timer);stage.timer=0
                 settings.set_property('gtk-enable-animations',True)
-                stage.cover_pause.warmup(allow_software=True);stage.update()
+                stage.update()
                 commands=list(host.calls)
                 geometry=tuple((w.get_allocated_width(),w.get_allocated_height()) for w in (stage.art_shell,stage.footer))
                 stage.play_button.clicked();assert host.calls==commands+[(host.source,'toggle')]
@@ -177,7 +167,7 @@ try:
                 except AssertionError:
                     p=stage.cover_pause
                     raise AssertionError(('Fullscreen pause clock',p.depth,p.target,p.wave,p.age,p.tick,p.last_now,
-                        p.get_mapped(),p.area.get_mapped(),p.area.get_allocated_width(),p.area.get_allocated_height(),p.playing))
+                        p.get_mapped(),p.canvas.get_mapped(),p.canvas.get_allocated_width(),p.canvas.get_allocated_height(),p.playing))
                 stage.update();assert stage.motion.playing,'Live artwork must resume after the optical handoff'
                 assert host.calls==commands+[(host.source,'toggle')]*2,'Pause visuals sent an extra transport command'
                 host.playing=False;stage.music.loading=True;stage.update()

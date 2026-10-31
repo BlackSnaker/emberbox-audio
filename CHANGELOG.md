@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.22.3 — 2026-10-31
+
+- Fixed fullscreen rendering after the pause effect update: removed its nested GL surfaces and startup GL warmup in both windows. The existing fullscreen and track-change shaders keep their earlier rendering path.
+- The pause movement now paints a cached print and soft travelling reflections with Cairo. Preparing the image stays outside GTK, no Python Cairo binding is needed, and the settled pose is a plain static image. Continuous reversals and the animated-artwork handoff are preserved.
+- Added a 720px frame-budget check and kept HiDPI, geometry, playback isolation, reduced-motion and renderer cleanup coverage.
+
 ## 0.22.2 — 2026-10-31
 
 - Pausing releases a soft packet of optical waves over the cover as it settles into a shaded socket. Resuming lifts it smoothly back to the exact live artwork; rapid reversals preserve position and velocity.
