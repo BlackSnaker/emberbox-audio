@@ -65,9 +65,33 @@ class DummyAppleWeb:
 widget.AppleWeb=DummyAppleWeb
 widget.YandexWeb=DummyAppleWeb
 widget.SpotifyWeb=DummyAppleWeb
-app=widget.Widget()
+started=time.monotonic();app=widget.Widget()
+print('Desktop construction before background lamps:',round(time.monotonic()-started,3),'s')
 try:
     settle()
+    app.accounts_visible=False;app.expanded=False;app.apply_layout();settle(.3)
+    app.startup_pending=False
+    native=app.spotify_web;native.connected=False;app.update_loading()
+    notice=app.loading_notice
+    assert notice.get_visible() and notice.busy and notice.spinner.get_property('active')
+    geometry=(app.window.get_size(),app.transport.translate_coordinates(app.window,0,0))
+    native.connected=True;native.state={'ready':True,'authorized':False};app.update_loading()
+    assert notice.get_visible() and not notice.busy and notice.action=='accounts'
+    native.state={'ready':True,'authorized':True};app.music.loading=True;app.update_loading();settle(.05)
+    assert notice.busy and notice.get_visible()
+    after=(app.window.get_size(),app.transport.translate_coordinates(app.window,0,0))
+    assert geometry==after,('Loading feedback must not resize the card or shift transport',geometry,after)
+    app.music.error='Fixture playback error';app.update_loading()
+    assert not notice.busy and notice.action=='track' and not notice.spinner.get_property('active')
+    app.music.error='';app.music.loading=False
+    deadline=time.monotonic()+8
+    while not app.equalizer.frames_ready and time.monotonic()<deadline:settle(.02)
+    assert app.equalizer.frames_ready,'Background lamp preparation did not finish'
+    app.update_loading();assert not notice.get_visible() and not notice.spinner.get_property('active')
+    app.music.loading=True;app.update_loading();notice.since=time.monotonic()-31;app.update_loading()
+    assert notice.get_visible() and not notice.busy and notice.action=='retry','Slow loading must offer recovery, not spin forever'
+    app.music.loading=False;app.update_loading();assert not notice.get_visible()
+    native.state={}
     assert app.window.get_size().width==460
     assert app.hide_button.get_visible() and app.close_button.get_visible()
     before=app.youtube.paused
@@ -84,6 +108,10 @@ try:
     settle(.6)
     assert app.compact and app.compact_settings.get_visible()
     assert app.window.get_size().width==320
+    app.music.loading=True;app.update_loading();settle(.05)
+    assert app.compact_notice.get_mapped() and app.compact_notice.busy,'Mini must show loading feedback'
+    assert app.window.get_size().width==320
+    app.music.loading=False;app.update_loading()
     app.compact_settings.clicked()
     settle()
     assert app.settings.popover.get_visible()

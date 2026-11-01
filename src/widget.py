@@ -42,6 +42,7 @@ from accounts import Accounts
 from account_panel import AccountPanel
 from ember_mpris import EmberMpris
 from frame_health import FrameHealth
+from playback_notice import PlaybackNotice, CSS as NOTICE_CSS
 from fullscreen import FullscreenPlayer
 from artist_catalog import album_ref
 from desktop_launch import launch as launch_desktop
@@ -200,7 +201,7 @@ def stamp(microseconds):
 class Widget:
     def __init__(self):
         provider = Gtk.CssProvider()
-        provider.load_from_data(CSS+QUALITY_CSS+FLOW_CSS)
+        provider.load_from_data(CSS+QUALITY_CSS+FLOW_CSS+NOTICE_CSS)
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -237,6 +238,11 @@ class Widget:
         self.apple_mode = 'browser' if saved.get('apple_mode') == 'browser' else 'native'
         self.youtube_binding = str(saved.get('youtube_browser', ''))
         self.youtube_mode = 'browser' if saved.get('youtube_mode') == 'browser' else 'native'
+        # Start the selected engine alongside UI construction, not after it.
+        self.apple_web.set_enabled(self.source=='apple-music' and self.apple_mode=='native')
+        self.spotify_web.set_enabled(self.source=='spotify' and self.spotify_mode=='native')
+        self.yandex_web.set_enabled(self.source=='yandex-music')
+        self.startup_pending=True;self.prewarm_after=time.monotonic()+3
         self.youtube_render_timer = 0
         self.youtube_last_sound = 0.
         self.youtube = YouTubeAudio(self.on_youtube_changed)
@@ -293,7 +299,8 @@ class Widget:
         card.set_margin_bottom(0)
         card.set_margin_start(0)
         card.set_margin_end(0)
-        outside.pack_start(card, True, True, 0)
+        self.card_overlay=Gtk.Overlay();self.card_overlay.add(card)
+        outside.pack_start(self.card_overlay, True, True, 0)
 
         header = Gtk.EventBox()
         self.header = header
@@ -465,6 +472,11 @@ class Widget:
 
         self.equalizer = NixieSpectrum()
         self.equalizer.get_style_context().add_class('lamp-well')
+        self.loading_notice=PlaybackNotice(self);self.loading_notice.set_valign(Gtk.Align.CENTER)
+        header_row.pack_end(self.loading_notice,False,False,0);header_row.reorder_child(self.loading_notice,0)
+        self.compact_notice=PlaybackNotice(self);self.compact_notice.set_margin_top(12);self.compact_notice.set_margin_end(12)
+        self.card_overlay.add_overlay(self.compact_notice)
+        self.equalizer.connect('ready',lambda *_:self.update_loading())
         card.pack_start(self.equalizer, False, False, 0)
 
         self.discovery_button = Gtk.Button()
@@ -527,6 +539,7 @@ class Widget:
         self.yandex_web.set_enabled(self.source=='yandex-music')
         self.apply_layout()
         self.update_source_ui()
+        self.update_loading()
         if self.expanded and not self.compact:
             GLib.idle_add(self.active_panel().open)
         if not saved:
@@ -617,10 +630,18 @@ class Widget:
         self.album_button.get_accessible().set_name(text('Open album: ','Открыть альбом: ')+self.album.get_text())
 
     def prepare_fullscreen(self):
+        if self.resources_closed:self.fullscreen_prewarm=0;return False
+        from playback_notice import playback_notice
+        if time.monotonic()<self.prewarm_after or playback_notice(self).busy:return True
         self.fullscreen_prewarm=0
-        if self.resources_closed:return False
         if self.fullscreen is None:self.fullscreen=FullscreenPlayer(self)
         return self.fullscreen.prewarm()
+
+    def update_loading(self):
+        if hasattr(self,'loading_notice') and not self.resources_closed:
+            self.loading_notice.update(show=not self.compact)
+            self.compact_notice.update(show=self.compact)
+        return False
 
     def on_stage_key(self,_window,event):
         if Gdk.keyval_name(event.keyval)=='F11':self.show_fullscreen();return True
@@ -717,6 +738,7 @@ class Widget:
         self.compact_settings.set_visible(self.compact)
         self.restore_button.set_visible(self.compact)
         self.equalizer.set_compact(self.compact)
+        self.update_loading()
         if self.compact:
             self.drawer.set_reveal_child(False)
             self.drawer.hide()
@@ -950,6 +972,7 @@ class Widget:
         self.play.set_sensitive(True)
         self.play.set_label('Ⅱ' if self.playing else '▶')
         self.set_art(state.get('image') or None)
+        self.update_loading()
         return False
 
     def show_youtube_search(self):
@@ -975,6 +998,7 @@ class Widget:
         self.youtube_panel.notice.set_text(message)
 
     def on_youtube_changed(self):
+        self.update_loading()
         if not self.resources_closed and not self.youtube_render_timer:
             self.youtube_render_timer = GLib.timeout_add(80, self.render_youtube)
 
@@ -1032,6 +1056,7 @@ class Widget:
         if self.source==source:self.music.play_now(item,context=items)
 
     def on_music_changed(self):
+        self.update_loading()
         panel={'spotify':self.panel,'apple-music':self.apple_panel,'youtube':self.youtube_panel,'yandex-music':self.yandex_panel}[self.source]
         if self.music.error:panel.notice.set_text(self.music.error)
         elif self.music_message and panel.notice.get_text()==self.music_message:panel.notice.set_text('')
@@ -1394,6 +1419,7 @@ class Widget:
         self.mpris.publish(state)
 
     def refresh(self):
+        self.update_loading()
         self.publish_mpris()
         self.sync_cover_pause()
         connected = bool(self.apple_web.state.get('ready') and self.apple_web.state.get('authorized')) if self.apple_native() else self.apple.connected
@@ -1404,6 +1430,7 @@ class Widget:
         return True
 
     def on_sessions(self, sessions):
+        self.startup_pending=False
         self.sessions = sessions
         self.accounts.update(sessions)
         self.apply_sessions()

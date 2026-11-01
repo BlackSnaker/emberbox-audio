@@ -73,6 +73,8 @@ jobs:
         run: |
           dbus-run-session -- /usr/bin/python3 tests/mpris_smoke.py
           dbus-run-session -- /usr/bin/python3 tests/widget_control_smoke.py
+      - name: Responsive cold startup
+        run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/loading_smoke.py
       - name: Apple and Yandex Music adapters
         run: |
           node tests/spotify_web_test.js

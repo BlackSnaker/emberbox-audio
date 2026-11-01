@@ -22,8 +22,9 @@ class BridgeUnavailable(RuntimeError):
 
 
 class AppleBridge:
-    def __init__(self, filename='apple-music.sock', methods=('browse', 'tracks', 'play', 'status')):
+    def __init__(self, filename='apple-music.sock', methods=('browse', 'tracks', 'play', 'status'), on_connection=None):
         self.methods = methods
+        self.on_connection=on_connection
         self.path = socket_path(filename=filename)
         self.path.unlink(missing_ok=True)
         self.server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -61,6 +62,7 @@ class AppleBridge:
             if old:
                 old.close()
             threading.Thread(target=self._read, args=(connection,), daemon=True).start()
+            if self.on_connection:self.on_connection()
 
     def _read(self, connection):
         try:
@@ -78,14 +80,17 @@ class AppleBridge:
         except (OSError, ValueError):
             pass
         finally:
+            disconnected=False
             with self.lock:
                 if self.connection is connection:
+                    disconnected=True
                     self.connection = None
                     self.pid = 0
                     for pending in self.pending.values():
                         pending['result'] = {'error':'Apple Music connection closed'}
                         pending['event'].set()
             connection.close()
+            if disconnected and not self.closed and self.on_connection:self.on_connection()
 
     def request(self, method, **params):
         if method not in self.methods:

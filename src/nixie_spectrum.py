@@ -1,15 +1,45 @@
 """Gas discharge indicator tubes driven by the actual Spotify spectrum."""
 
 from pathlib import Path
+from concurrent.futures import Future
+import threading
+import weakref
 from paths import CACHE_DIR, CONFIG_DIR
 
-from gi.repository import GdkPixbuf, Gtk
+from gi.repository import GdkPixbuf, GLib, GObject, Gtk
 
 
 FRAME_COUNT = 384
 WIDTH, HEIGHT = 40, 64
 MINI_WIDTH, MINI_HEIGHT = 28, 45
 _FRAMES = None
+_FRAME_JOB=None
+_FRAME_LOCK=threading.Lock()
+
+
+def load_frame(index,folder):
+    path=folder/f'{index:03}.png'
+    try:return GdkPixbuf.Pixbuf.new_from_file(str(path))
+    except GLib.Error:pass
+    loader=GdkPixbuf.PixbufLoader.new_with_type('svg')
+    loader.write(tube_svg(index/(FRAME_COUNT-1)));loader.close()
+    pixbuf=loader.get_pixbuf()
+    try:
+        temporary=path.with_suffix('.next.png');pixbuf.savev(str(temporary),'png',[],[]);temporary.replace(path)
+    except (OSError,GLib.Error):pass
+    return pixbuf
+
+
+def prepare_frames():
+    global _FRAME_JOB
+    with _FRAME_LOCK:
+        if _FRAME_JOB is None:
+            _FRAME_JOB=Future()
+            def run():
+                try:_FRAME_JOB.set_result(frames())
+                except Exception as error:_FRAME_JOB.set_exception(error)
+            threading.Thread(target=run,daemon=True,name='ember-lamp-cache').start()
+        return _FRAME_JOB
 
 
 def tube_svg(level):
@@ -95,27 +125,22 @@ def frames():
     folder.mkdir(parents=True, exist_ok=True)
     result = []
     for index in range(FRAME_COUNT):
-        path = folder / f'{index:03}.png'
-        if path.exists():
-            pixbuf = GdkPixbuf.Pixbuf.new_from_file(str(path))
-        else:
-            loader = GdkPixbuf.PixbufLoader.new_with_type('svg')
-            loader.write(tube_svg(index / (FRAME_COUNT - 1)))
-            loader.close()
-            pixbuf = loader.get_pixbuf()
-            pixbuf.savev(str(path), 'png', [], [])
-        result.append(pixbuf)
+        result.append(load_frame(index,folder))
     _FRAMES = result
     return result
 
 
 class NixieSpectrum(Gtk.Box):
+    __gsignals__={'ready':(GObject.SignalFlags.RUN_FIRST,None,())}
     def __init__(self):
         super().__init__(orientation=Gtk.Orientation.HORIZONTAL, spacing=5)
         self.set_halign(Gtk.Align.CENTER)
         self.set_valign(Gtk.Align.CENTER)
         self.get_accessible().set_description('Газоразрядный спектр · 9 частотных полос звука Spotify')
-        self.frames = frames()
+        self.closed=False;self.frames_ready=_FRAMES is not None
+        self.connect('destroy',lambda *_:setattr(self,'closed',True))
+        folder=CACHE_DIR/'nixie-glass-v4-fluid';folder.mkdir(parents=True,exist_ok=True)
+        self.frames = _FRAMES if self.frames_ready else [load_frame(0,folder)]*FRAME_COUNT
         self.full_frames = self.frames
         self.mini_frames = None
         self.compact = False
@@ -128,6 +153,23 @@ class NixieSpectrum(Gtk.Box):
             self.pack_start(image, False, False, 0)
             self.tubes.append(image)
         self.set_levels([0.0] * 9)
+        if not self.frames_ready:
+            owner=weakref.ref(self)
+            def done(future):
+                def apply():
+                    target=owner()
+                    if target is None or target.closed:return False
+                    target.frames_ready=True
+                    try:target.full_frames=future.result()
+                    except Exception:target.emit('ready');return False
+                    target.mini_frames=None
+                    target.frames=target.full_frames;target.indices=[-1]*9
+                    if target.compact:
+                        target.mini_frames=[p.scale_simple(MINI_WIDTH,MINI_HEIGHT,GdkPixbuf.InterpType.BILINEAR) for p in target.full_frames]
+                        target.frames=target.mini_frames
+                    target.set_levels(target.levels);target.emit('ready');return False
+                GLib.idle_add(apply)
+            prepare_frames().add_done_callback(done)
 
     def set_levels(self, levels):
         self.levels = list(levels[:9])
@@ -142,8 +184,9 @@ class NixieSpectrum(Gtk.Box):
             return
         self.compact = compact
         if compact and self.mini_frames is None:
-            self.mini_frames = [p.scale_simple(MINI_WIDTH, MINI_HEIGHT, GdkPixbuf.InterpType.BILINEAR)
-                                for p in self.full_frames]
+            self.mini_frames = ([p.scale_simple(MINI_WIDTH, MINI_HEIGHT, GdkPixbuf.InterpType.BILINEAR)
+                                 for p in self.full_frames] if self.frames_ready else
+                                [self.full_frames[0].scale_simple(MINI_WIDTH,MINI_HEIGHT,GdkPixbuf.InterpType.BILINEAR)]*FRAME_COUNT)
         self.frames = self.mini_frames if compact else self.full_frames
         self.set_spacing(3 if compact else 5)
         for image in self.tubes:

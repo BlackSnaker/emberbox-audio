@@ -21,7 +21,8 @@ class AppleWeb:
     def __init__(self, changed):
         self.changed = changed
         self.bridge = AppleBridge(getattr(self,'socket_filename','apple-player.sock'),
-            ('status','browse','tracks','search','play','transport','seek','show','hide','enable','artist','artistSection','release','flow','spatial')+getattr(self,'extra_methods',()))
+            ('status','browse','tracks','search','play','transport','seek','show','hide','enable','artist','artistSection','release','flow','spatial')+getattr(self,'extra_methods',()),
+            on_connection=lambda:GLib.idle_add(self._connection_changed))
         self.pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix='apple-player')
         self.state = {}
         self.enabled = False
@@ -37,6 +38,17 @@ class AppleWeb:
         self.seek_timer=0;self.seek_next=None;self.seek_inflight=False;self.seek_intent=None
         self.output_probe_at=0.;self.output_probe_busy=False;self.last_output=None
         self.timer = GLib.timeout_add(750, self.poll)
+        self.startup_timer=0;self.startup_since=0.
+
+    def _connection_changed(self):
+        if self.closed:return False
+        if not self.connected:self.last_enable=None;self.state={}
+        self.poll();self.changed();return False
+
+    def _startup_poll(self):
+        if self.closed or not self.enabled or self.state.get('ready') or time.monotonic()-self.startup_since>25:
+            self.startup_timer=0;return False
+        self.poll();return True
 
     @property
     def connected(self):
@@ -149,6 +161,10 @@ class AppleWeb:
 
     def set_enabled(self, enabled):
         self.enabled = bool(enabled)
+        if enabled and not getattr(self,'startup_timer',0) and not self.state.get('ready'):
+            self.startup_since=time.monotonic();self.startup_timer=GLib.timeout_add(150,self._startup_poll)
+        elif not enabled and getattr(self,'startup_timer',0):
+            GLib.source_remove(self.startup_timer);self.startup_timer=0
         if enabled:
             self.ensure_started()
         if self.connected and self.last_enable != self.enabled:
@@ -328,6 +344,7 @@ class AppleWeb:
 
     def close(self):
         self.closed = True
+        if self.startup_timer:GLib.source_remove(self.startup_timer);self.startup_timer=0
         if self.seek_timer:GLib.source_remove(self.seek_timer);self.seek_timer=0
         signin=getattr(self,'lossless_process',None)
         if signin and signin.poll() is None:signin.terminate()

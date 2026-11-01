@@ -3,6 +3,7 @@ import io
 import os
 from pathlib import Path
 import struct
+import socket
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,19 @@ ROOT=Path(__file__).resolve().parents[1]
 
 
 class AppleBridgeTests(unittest.TestCase):
+    def test_connection_changes_notify_without_waiting_for_a_poll(self):
+        with tempfile.TemporaryDirectory(prefix='emberbox-bridge-events-') as folder,patch.dict(os.environ,{'XDG_RUNTIME_DIR':folder}):
+            changes=[];bridge=AppleBridge(on_connection=lambda:changes.append(bridge.connected))
+            client=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+            try:
+                client.connect(str(bridge.path));deadline=time.monotonic()+2
+                while not changes and time.monotonic()<deadline:time.sleep(.005)
+                self.assertEqual(changes,[True])
+                client.close();deadline=time.monotonic()+2
+                while len(changes)<2 and time.monotonic()<deadline:time.sleep(.005)
+                self.assertEqual(changes,[True,False])
+            finally:client.close();bridge.close()
+
     def test_framing_rejects_large_and_short_messages(self):
         stream=io.BytesIO();write_message(stream,{'result':{'items':[]}});stream.seek(0)
         self.assertEqual(read_message(stream),{'result':{'items':[]}})

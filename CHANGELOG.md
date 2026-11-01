@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.22.7 — 2026-11-01
+
+- Added a compact top-right loading status in desktop and Mini: connection, library, track and audio preparation. It leaves the lamps clear and transport geometry unchanged. Longer waits expose retry; a static recovery message replaces indefinite spinning.
+- Prepare all 384 lamp states in the background after the first unlit frame. Start the selected music engine alongside UI construction, request status immediately on connection, and defer fullscreen prewarming until initial loading settles.
+- Added cold-start GTK responsiveness, engine connection and both widget layout checks. Source formats, quality and audio buffers are preserved; network music loading still depends on the provider.
+
 ## 0.22.6 — 2026-10-31
 
 - Reduced pause-wave drawing passes and clipped contact-shadow work to its visible bands. Retain one logical-resolution drawing buffer; HiDPI scales the finished image instead of repeating vector work at four times the pixel count.

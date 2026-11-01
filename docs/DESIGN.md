@@ -77,6 +77,17 @@ The result is **physically inspired**, rather than an exact simulation of gas-di
 
 ## Interaction stays quiet
 
+A small recessed capsule at the **top right** shows actual loading stages in
+desktop and Mini. Lamps stay visible and transport geometry stays fixed.
+Connection, library and audio preparation follow engine state without invented
+percentages. The capsule disappears when ready; its spinner stops while hidden.
+After 12 seconds it offers retry; after 30 it becomes a static recovery message.
+Sign-in opens Accounts.
+
+One unlit lamp frame is available immediately; the full 384-state set loads in
+the background. The selected engine starts alongside UI construction, while
+fullscreen prewarming waits for initial loading to settle.
+
 Pausing sends a finite packet of soft travelling reflections across the cover while
 a critically damped motion settles it into the body. An inner shadow and a faint
 lower reflection reveal the socket. Resuming returns to the unmodified live
