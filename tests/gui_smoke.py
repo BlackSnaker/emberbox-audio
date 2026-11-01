@@ -83,14 +83,23 @@ try:
     assert geometry==after,('Loading feedback must not resize the card or shift transport',geometry,after)
     app.music.error='Fixture playback error';app.update_loading()
     assert not notice.busy and notice.action=='track' and not notice.spinner.get_property('active')
-    app.music.error='';app.music.loading=False
+    app.music.error=''
     deadline=time.monotonic()+8
     while not app.equalizer.frames_ready and time.monotonic()<deadline:settle(.02)
     assert app.equalizer.frames_ready,'Background lamp preparation did not finish'
-    app.update_loading();assert not notice.get_visible() and not notice.spinner.get_property('active')
-    app.music.loading=True;app.update_loading();notice.since=time.monotonic()-31;app.update_loading()
+    app.update_loading();notice.since=time.monotonic()-31;app.update_loading()
     assert notice.get_visible() and not notice.busy and notice.action=='retry','Slow loading must offer recovery, not spin forever'
-    app.music.loading=False;app.update_loading();assert not notice.get_visible()
+    app.change_compact();app.update_loading();settle(.05)
+    assert app.compact_notice.get_mapped() and app.compact_notice.busy,'Mini must show the same initial startup'
+    assert not notice.get_visible() and not notice.spinner.get_property('active')
+    app.change_compact();app.music.loading=False;app.update_loading();settle(.05)
+    assert not app.startup_notice_active and not notice.get_visible()
+    assert not app.compact_notice.get_visible() and not notice.spinner.get_property('active')
+    for state in ({'ready':True,'authorized':True,'spatial':{'phase':'preparing'}},{}):
+        native.state=state;app.music.loading=True;app.update_loading()
+        assert not notice.get_visible() and not app.compact_notice.get_visible(),'Finished startup must stay quiet during track changes and reconnects'
+        assert not notice.spinner.get_property('active') and not app.compact_notice.spinner.get_property('active')
+    app.music.loading=False
     native.state={}
     assert app.window.get_size().width==460
     assert app.hide_button.get_visible() and app.close_button.get_visible()
@@ -109,7 +118,7 @@ try:
     assert app.compact and app.compact_settings.get_visible()
     assert app.window.get_size().width==320
     app.music.loading=True;app.update_loading();settle(.05)
-    assert app.compact_notice.get_mapped() and app.compact_notice.busy,'Mini must show loading feedback'
+    assert not app.compact_notice.get_visible() and not app.compact_notice.spinner.get_property('active'),'Mini must not rearm startup feedback'
     assert app.window.get_size().width==320
     app.music.loading=False;app.update_loading()
     app.compact_settings.clicked()

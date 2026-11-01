@@ -42,7 +42,7 @@ from accounts import Accounts
 from account_panel import AccountPanel
 from ember_mpris import EmberMpris
 from frame_health import FrameHealth
-from playback_notice import PlaybackNotice, CSS as NOTICE_CSS
+from playback_notice import PlaybackNotice, playback_notice, CSS as NOTICE_CSS
 from fullscreen import FullscreenPlayer
 from artist_catalog import album_ref
 from desktop_launch import launch as launch_desktop
@@ -242,7 +242,7 @@ class Widget:
         self.apple_web.set_enabled(self.source=='apple-music' and self.apple_mode=='native')
         self.spotify_web.set_enabled(self.source=='spotify' and self.spotify_mode=='native')
         self.yandex_web.set_enabled(self.source=='yandex-music')
-        self.startup_pending=True;self.prewarm_after=time.monotonic()+3
+        self.startup_pending=True;self.startup_notice_active=True;self.prewarm_after=time.monotonic()+3
         self.youtube_render_timer = 0
         self.youtube_last_sound = 0.
         self.youtube = YouTubeAudio(self.on_youtube_changed)
@@ -631,7 +631,6 @@ class Widget:
 
     def prepare_fullscreen(self):
         if self.resources_closed:self.fullscreen_prewarm=0;return False
-        from playback_notice import playback_notice
         if time.monotonic()<self.prewarm_after or playback_notice(self).busy:return True
         self.fullscreen_prewarm=0
         if self.fullscreen is None:self.fullscreen=FullscreenPlayer(self)
@@ -639,8 +638,12 @@ class Widget:
 
     def update_loading(self):
         if hasattr(self,'loading_notice') and not self.resources_closed:
-            self.loading_notice.update(show=not self.compact)
-            self.compact_notice.update(show=self.compact)
+            # This launch gets one loading notice, shared by both layouts.
+            # Track changes, reconnects and reopening the window never rearm it.
+            if self.startup_notice_active and not playback_notice(self).phase:
+                self.startup_notice_active=False
+            self.loading_notice.update(show=self.startup_notice_active and not self.compact)
+            self.compact_notice.update(show=self.startup_notice_active and self.compact)
         return False
 
     def on_stage_key(self,_window,event):

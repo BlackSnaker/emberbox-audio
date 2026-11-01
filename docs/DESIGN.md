@@ -77,8 +77,10 @@ The result is **physically inspired**, rather than an exact simulation of gas-di
 
 ## Interaction stays quiet
 
-A small recessed capsule at the **top right** shows actual loading stages in
-desktop and Mini. Lamps stay visible and transport geometry stays fixed.
+A small recessed capsule at the **top right** shows initial loading stages in
+desktop and Mini. Once ready, it stays hidden until the next application launch,
+including through track changes and reopening the window.
+Lamps stay visible and transport geometry stays fixed.
 Connection, library and audio preparation follow engine state without invented
 percentages. The capsule disappears when ready; its spinner stops while hidden.
 After 12 seconds it offers retry; after 30 it becomes a static recovery message.

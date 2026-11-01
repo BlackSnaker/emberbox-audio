@@ -2,6 +2,11 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.22.8 — 2026-11-01
+
+- Show the top-right status only during initial player loading. Once ready, it stays hidden through track changes, seeking, reconnecting and reopening the window. Desktop and Mini share startup completion; starting a new application process enables initial feedback again.
+- Verified startup stages, slow loading, layout changes and suppression of later loading messages.
+
 ## 0.22.7 — 2026-11-01
 
 - Added a compact top-right loading status in desktop and Mini: connection, library, track and audio preparation. It leaves the lamps clear and transport geometry unchanged. Longer waits expose retry; a static recovery message replaces indefinite spinning.
