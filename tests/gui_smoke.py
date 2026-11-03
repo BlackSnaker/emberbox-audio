@@ -113,6 +113,39 @@ try:
     settle()
     assert app.settings.popover.get_visible()
     assert app.settings.hide_button.get_visible() and app.settings.quit_button.get_visible()
+    # Seasonal decoration must never alter card geometry or steal controls.
+    initial_size=app.window.get_size();app.settings.theme_switch.set_active(True);settle(1.5)
+    assert app.appearance.christmas and app.winter_surface.top.get_mapped()
+    assert not app.winter_surface.tick,'Holiday entrance must stop repainting when settled'
+    assert app.window.get_size().width==initial_size.width
+    assert app.window.get_size().height<=initial_size.height+32
+    app.settings.popover.popdown();settle(.2)
+    preview=os.environ.get('EMBERBOX_WINTER_PREVIEW')
+    if preview:
+        from gi.repository import Gdk,GdkPixbuf
+        folder=Path(preview);folder.mkdir(parents=True,exist_ok=True)
+        original=app.title.get_text(),app.artist.get_text(),app.album.get_text()
+        app.title.set_text('The Christmas Room');app.artist.set_text('Ember Sessions');app.album.set_text('Winter Glow · Vol. 01')
+        app.cover.set_from_pixbuf(GdkPixbuf.Pixbuf.new_from_file_at_scale(str(ROOT/'assets/demo-cover.png'),112,112,True))
+        def winter_shot(name):
+            settle(.3);w,h=app.window.get_size()
+            Gdk.pixbuf_get_from_window(app.window.get_window(),0,0,w,h).savev(str(folder/name),'png',[],[])
+        winter_shot('winter-widget.png')
+        app.change_compact();settle(.65);assert app.window.get_size().width==320
+        winter_shot('winter-mini.png')
+        app.change_compact();settle(.65);app.settings_button.clicked();settle(.25)
+        winter_shot('winter-settings.png');app.settings.popover.popdown()
+        for label,value in zip((app.title,app.artist,app.album),original):label.set_text(value)
+    if not preview:
+        app.change_compact();settle(.65)
+        assert app.window.get_size().width==320 and app.winter_surface.top.get_mapped()
+        top_y=app.winter_surface.top.translate_coordinates(app.window,0,0)[1]
+        cover_y=app.cover_layers.translate_coordinates(app.window,0,0)[1]
+        assert top_y+app.winter_surface.top.get_allocated_height()<=cover_y,'Winter garland must stay above Mini cover controls'
+        app.change_compact();settle(.65)
+    app.appearance.set_christmas(False);settle(.1)
+    assert not app.winter_surface.top.get_visible()
+    app.settings_button.clicked();settle(.1)
     app.settings.mode_button.clicked()
     settle(.6)
     assert app.compact and app.compact_settings.get_visible()
@@ -417,6 +450,7 @@ finally:
     app.frame_health.close()
     app.cover_pause.close()
     app.music.close()
+    app.appearance.close()
     app.yandex_panel.close();app.yandex_web.close()
     app.accounts.close();app.mpris.close()
     app.youtube_panel.close();app.youtube.close();app.apple.close();app.apple_web.close();app.monitor.close();app.meter.stop();app.sound.close()

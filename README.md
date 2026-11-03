@@ -8,6 +8,14 @@
 
 **Album rooms, reimagined.** Large complete artwork, softly reflected light and a clear record table. [See the album design →](docs/DESIGN.md#the-album-room)
 
+## Winter Glow · A warmer Christmas
+
+Evergreen surfaces, wine-red controls, brushed-brass highlights and glass ornaments under a soft incandescent garland. Original vector details carry the theme through the desktop widget, Mini and fullscreen listening room.
+
+**Settings → Christmas theme.** Changes apply immediately and persist across restarts. New installations keep the classic theme by default. Decorations pass clicks through, the entrance animation settles, and there is no continuous snowfall or idle animation loop.
+
+![Winter Glow listening room — Russian UI preview with original Emberbox Sessions demonstration artwork](assets/winter-glow.ru.png)
+
 <a id="the-sound-update"></a>
 
 ## 25 October 2026 · Closer to the music

@@ -127,7 +127,7 @@ def label(value, style, wrap=False):
 
 
 @lru_cache(maxsize=4)
-def background(width,height,color):
+def background(width,height,color,christmas=False):
     # A small cached gradient avoids rasterising tens of thousands of SVG
     # pattern elements. NumPy does the work outside GTK; upscale only once.
     ratio=min(1.,640/max(width,height))
@@ -141,6 +141,14 @@ def background(width,height,color):
     pixels=pixels*(1-second)+np.array((158,114,56),dtype=np.float32)*second
     vignette=(y/1000*.65)[...,None]
     pixels=pixels*(1-vignette)+np.array((12,18,14),dtype=np.float32)*vignette
+    if christmas:
+        # A fixed-size, subtle pine/candlelight field. The cover retains a
+        # little influence without washing the seasonal palette away.
+        green=np.array((18,39,29),dtype=np.float32)
+        warmth=np.maximum(0.,1.-np.sqrt(((x-1180)/760)**2+((y-160)/610)**2))[...,None]*.27
+        pixels=pixels*.22+green*.78
+        pixels=pixels*(1-warmth)+np.array((150,104,56),dtype=np.float32)*warmth
+        pixels=pixels*(1-vignette*.5)+np.array((8,20,15),dtype=np.float32)*vignette*.5
     raw=np.clip(pixels,0,255).astype(np.uint8).tobytes()
     image=GdkPixbuf.Pixbuf.new_from_bytes(GLib.Bytes.new(raw),GdkPixbuf.Colorspace.RGB,False,8,w,h,w*3)
     return image.scale_simple(width,height,GdkPixbuf.InterpType.BILINEAR)
@@ -185,7 +193,8 @@ class FullscreenPlayer:
         header=Gtk.Box(spacing=8);self.header=header
         wordmark=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3)
         wordmark.pack_start(label('EMBER','stage-brand'),False,False,0)
-        wordmark.pack_start(label(text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'),'stage-overline'),False,False,0)
+        self.edition_label=label(text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'),'stage-overline')
+        wordmark.pack_start(self.edition_label,False,False,0)
         header.pack_start(wordmark,False,False,0)
         navigation=Gtk.Box(spacing=2);navigation.get_style_context().add_class('stage-nav')
         navigation.get_style_context().add_class('stage-top-nav')
@@ -335,12 +344,23 @@ class FullscreenPlayer:
         self.reveal=StageReveal(self.window,self.background,self.layout,self.cover,art_shell,
                                self.cover_change.current_art)
         overlay.add_overlay(self.reveal);overlay.set_overlay_pass_through(self.reveal,True)
+        self.appearance=getattr(host,'appearance',None)
+        self.theme_unsubscribe=None;self.winter_surface=None
+        if self.appearance:
+            self.winter_surface=self.appearance.attach(self.window,overlay,stage=True)
+            self.theme_unsubscribe=self.appearance.subscribe(self.theme_changed)
+            self.theme_changed()
         self.source_picker=SourcePicker(lambda source,session=None:host.select_source(source,session),lambda:None,self.open_accounts)
         self.layout.show_all()
         self.set_lyrics_visible(False)
         self.music_unsubscribe=self.music.subscribe(self.music_changed)
         self.music_changed()
         self.follow.hide();self.retry_button.hide()
+
+    def theme_changed(self):
+        if self.closed:return
+        self.edition_label.set_text(text('CHRISTMAS, IN YOUR RHYTHM','РОЖДЕСТВО В ТВОЁМ РИТМЕ') if self.appearance.christmas else text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'))
+        self.bg_key=None;self.paint_background()
 
     def button(self,value,callback,*styles):
         b=Gtk.Button(label=value)
@@ -555,6 +575,8 @@ class FullscreenPlayer:
     def close(self):
         if self.closed:return
         self.hide();self.closed=True
+        if self.theme_unsubscribe:self.theme_unsubscribe()
+        if self.winter_surface:self.winter_surface.close()
         self.cover_change.close()
         self.cover_pause.close()
         self.library_view.close();self.queue_view.close();self.artist_view.close();self.music_unsubscribe()
@@ -619,11 +641,12 @@ class FullscreenPlayer:
 
     def paint_background(self,width=None,height=None):
         if width is None:width,height=self.window.get_size()
-        key=(width,height,self.palette)
+        christmas=bool(self.appearance and self.appearance.christmas)
+        key=(width,height,self.palette,christmas)
         if key==self.bg_key:return
         self.bg_key=key
         # SVG parsing/rasterisation must not block the first animation frames.
-        future=self.artwork.pool.submit(background,max(1,width),max(1,height),self.palette)
+        future=self.artwork.pool.submit(background,max(1,width),max(1,height),self.palette,christmas)
         def completed(result):
             try:pixels=result.result()
             except Exception:return

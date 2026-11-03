@@ -50,6 +50,7 @@ from desktop_launch import launch as launch_desktop
 import desktop_window
 from kwin_desktop import KWinDesktop
 from widget_settings import SettingsMenu, settings_button, window_button
+from seasonal_theme import Appearance
 from widget_control import WidgetControl
 from widget_morph import WidgetMorph
 from music_library import MusicService
@@ -531,6 +532,9 @@ class Widget:
         self.favorite.set_halign(Gtk.Align.START);self.favorite.set_valign(Gtk.Align.CENTER)
         self.favorite.set_margin_start(4)
         self.cover_column.pack_start(self.favorite,False,False,0)
+        self.appearance=Appearance()
+        self.winter_surface=self.appearance.attach(self.window,self.card_overlay)
+        self.settings.appearance=self.appearance
         self.settings.flow=self.music.flow
         neon_caption.set_no_show_all(True);neon_caption.hide()
         self.music_message='';self.music.subscribe(self.on_music_changed)
@@ -609,6 +613,7 @@ class Widget:
         if self.kwin_desktop:self.kwin_desktop.close()
         self.frame_health.close()
         if self.fullscreen:self.fullscreen.close()
+        self.appearance.close()
         self.cover_pause.close()
         self.youtube_panel.close()
         self.youtube.close()

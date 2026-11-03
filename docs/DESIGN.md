@@ -22,6 +22,12 @@ Relief stays shallow: soft directional gradients, a restrained light edge and da
 
 Artwork may shift the shell by at most nine RGB levels per channel. A 1.4-second transition keeps the tint subtle and avoids sudden changes between tracks.
 
+## Winter Glow
+
+Evergreen, wine-red lacquer and warm brass recolour the case, controls and artwork surround. The garland uses original vectors: individual pine needles, glass lamps with soft halos, and reflected light and engraved bands on baubles. The widget reserves a narrow decorative band; fullscreen uses the top edge and side margins. Decorations do not intercept input.
+
+Settings contains a preview and a live toggle, stored locally. Decoration rasterisation runs outside GTK and is cached. The short entrance settles without an idle animation loop and respects reduced motion. Switching back restores the cover-tinted classic surface.
+
 ## Physical details
 
 - The artist room uses a large, uncropped photograph in a narrow gallery mount. Behind it, two soft-focus layers of the same image retain its colours and light: a broad source-coloured glow, a quiet dark field for the name and a faint matte texture. Monochrome portraits retain their original pixels. The static backdrop is composed off the UI thread and cached.

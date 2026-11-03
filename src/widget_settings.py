@@ -60,16 +60,22 @@ class SettingsMenu:
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
         box.set_border_width(12)
         box.set_size_request(228, -1)
-        if stage:
-            scroll=Gtk.ScrolledWindow();scroll.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
-            scroll.set_propagate_natural_height(True)
-            scroll.set_max_content_height(max(180,stage.window.get_allocated_height()-140))
-            scroll.add(box);popup.add(scroll)
-        else:popup.add(box)
+        scroll=Gtk.ScrolledWindow();scroll.set_policy(Gtk.PolicyType.NEVER,Gtk.PolicyType.AUTOMATIC)
+        scroll.set_propagate_natural_height(True)
+        monitor=anchor.get_display().get_monitor_at_window(anchor.get_window()) if anchor.get_window() else None
+        available=stage.window.get_allocated_height()-140 if stage else (monitor.get_workarea().height-80 if monitor else 640)
+        scroll.set_max_content_height(max(180,available))
+        scroll.add(box);popup.add(scroll)
         heading = Gtk.Label(label=text('Player settings', 'Настройки плеера'))
         heading.set_xalign(0)
         heading.get_style_context().add_class('drawer-heading')
         box.pack_start(heading, False, False, 0)
+        appearance=getattr(self,'appearance',None)
+        if appearance:
+            from seasonal_theme import theme_choice
+            appearance.decorate_popup(popup)
+            tile,self.theme_switch=theme_choice(appearance)
+            box.pack_start(tile,False,False,5)
         caption = Gtk.Label(label=source)
         caption.set_xalign(0)
         caption.get_style_context().add_class('caption')

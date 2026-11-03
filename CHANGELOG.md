@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.24.0 — 2026-11-03
+
+- Added the opt-in Winter Glow Christmas theme across desktop, Mini and fullscreen: original evergreen garlands, warm glass lamps, engraved glass ornaments, pine surfaces, wine-red controls and brass highlights.
+- Added a live theme preview/toggle to settings, private persistent preferences and instant return to the classic cover tint. Settings scroll on smaller screens.
+- Rasterise small decorative strips in the background, cache finished assets and stop drawing after the entrance. Decorations pass input through and respect disabled animations. Verified persistence, toggle/off cleanup, geometry, original vector bounds and small-screen transport.
+
 ## 0.23.2 — 2026-11-03
 
 - Send favourites to the connected account immediately and persist failed saves/removals in a private outbox. Retry with bounded backoff and on reconnect; recover unconfirmed local favourites from earlier releases. A newer action replaces the previous intent, while website-only retries require the exact track.
