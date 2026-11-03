@@ -66,7 +66,7 @@ class Favorites:
     def __init__(self,music,path=None):
         self.music=music;self.book=FavoriteBook(path or CONFIG_DIR/'favorites.json')
         self.items=dict(self.book.items);self.pending=set();self.listeners=[];self.closed=False;self.revision=0
-        self.messages={};self.pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-favorites')
+        self.messages={};self.feedback={};self.pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-favorites')
 
     def subscribe(self,callback):
         self.listeners.append(callback)
@@ -94,17 +94,19 @@ class Favorites:
         if self.closed or not value or value['uri'] in self.pending or len(self.pending)>=16:return
         from gi.repository import GLib
         uri=value['uri'];client=self.client(value['source'])
-        self.pending.add(uri);self.messages[uri]=text('Saving in Ember…','Сохраняю в Ember…');self.changed()
-        def publish(items,message,finished=False):
+        self.pending.add(uri);self.messages[uri]=text('Saving in Ember…','Сохраняю в Ember…')
+        self.feedback[uri]={'phase':'saving','saved':bool(saved)};self.changed()
+        def publish(items,message,finished=False,phase='local'):
             if self.closed:return False
             if tuple(self.items)!=tuple(items):self.revision+=1
             self.items=items;self.messages[uri]=message
+            self.feedback[uri]={'phase':phase,'saved':bool(saved)}
             if finished:self.pending.discard(uri)
             self.changed();return False
         def work():
             try:self.book.set(value,saved)
             except Exception:
-                GLib.idle_add(publish,dict(self.book.items),text('Could not save favourites on this device.','Не удалось сохранить избранное на этом устройстве.'),True);return
+                GLib.idle_add(publish,dict(self.book.items),text('Could not save favourites on this device.','Не удалось сохранить избранное на этом устройстве.'),True,'error');return
             GLib.idle_add(publish,dict(self.book.items),text('Saved in Ember · syncing account…','Сохранено в Ember · синхронизация…') if saved else text('Removed from Ember · syncing account…','Удалено из Ember · синхронизация…'))
             confirmed=False
             try:
@@ -118,7 +120,7 @@ class Favorites:
             message=(text('Saved in Ember and ','Сохранено в Ember и ')+name if saved else text('Removed from Ember and ','Удалено из Ember и ')+name) if confirmed else (
                 text('Saved in Ember · account not confirmed','В Ember сохранено · аккаунт не подтвердил') if saved else text('Removed from Ember · account not confirmed','Из Ember удалено · аккаунт не подтвердил'))
             if not client:message=text('Saved in Ember · no account sync in this mode','Сохранено в Ember · в этом режиме без синхронизации') if saved else text('Removed from Ember','Удалено из Ember')
-            GLib.idle_add(publish,dict(self.book.items),message,True)
+            GLib.idle_add(publish,dict(self.book.items),message,True,'synced' if confirmed else 'unconfirmed' if client else 'local-only')
         self.pool.submit(work)
 
     def play(self,item,context=None):

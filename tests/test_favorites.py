@@ -44,9 +44,11 @@ class FavoriteTests(unittest.TestCase):
                 wait(lambda:favorites.saved(item))
                 self.assertIn(item['uri'],favorites.pending)
                 self.assertEqual(favorites.items[item['uri']]['sync'],'local')
+                self.assertEqual(favorites.feedback[item['uri']]['phase'],'local')
                 host.source='spotify';release.set();wait(lambda:not favorites.pending)
                 self.assertEqual(len(calls),1);self.assertEqual(calls[0][1]['id'],'123')
                 self.assertEqual(favorites.items[item['uri']]['sync'],'synced')
+                self.assertEqual(favorites.feedback[item['uri']]['phase'],'synced')
             finally:release.set();favorites.close()
 
     def test_account_failure_retains_local_copy_and_never_claims_success(self):

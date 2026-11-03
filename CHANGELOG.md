@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.23.1 — 2026-11-03
+
+- Turned the favourite heart into a glass lamp with a heart-shaped filament: gradual thermal response, dark-red-to-amber light, a soft halo and reflected glass edges. GTK frame time drives temperature and velocity, retaining motion through reversals. Prepare 201 states in the background and stop drawing at rest.
+- Replaced verbose feedback with a small warm confirmation chip, clear text hierarchy and soft entrance/exit. Normal feedback lasts about 1.45 seconds; warnings about 1.9. Local and account updates share the display period instead of extending normal feedback. The full status remains accessible.
+- Verified gradual warmup, settled motion and timer cleanup, short confirmation, text updates without a new display deadline, hidden controls and reduced motion.
+
 ## 0.23.0 — 2026-11-03
 
 - Added a recessed glass heart below artwork on the left in desktop, Mini and fullscreen. Amber fill, a fading light ring and a small breathing movement follow GTK's frame clock. The finite animation respects reduced motion and stops when hidden; sprites warm in the background.

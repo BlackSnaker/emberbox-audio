@@ -9,7 +9,7 @@ sys.path.insert(0,str(root/'src'))
 import gi
 gi.require_version('Gtk','3.0')
 from gi.repository import Gtk,GLib
-from favorite_button import FavoriteButton,CSS,heart_frame
+from favorite_button import FavoriteButton,CSS,heart_frame,FRAME_STEPS,CONFIRMATION_MS
 from favorites import Favorites
 from listening_library import LibraryView,CSS as LIBRARY_CSS
 from listening_queue import track
@@ -55,9 +55,20 @@ try:
     first.clicked();wait(lambda:first.target==1.)
     assert first.tick and second.tick,'Both visible hearts must animate from shared confirmation'
     settle(.25);assert 0<first.shown<1 and first.note.get_visible()
-    settle(.7);assert first.shown==1 and not first.tick and not second.tick
+    settle(.7);assert .95<first.shown<1 and first.tick,'The filament must warm gradually instead of snapping to its final colour'
+    wait(lambda:not first.tick and not second.tick)
+    assert first.shown==1
+    wait(lambda:not first.note.get_visible())
+    assert not first.note_tick and not first.timeout,'Brief confirmation must finish both opacity motion and its timer'
     assert not first.get_has_tooltip() and not first.note.get_modal()
     wait(lambda:not favorites.pending)
+    # Updating account details while the chip is visible must not restart its
+    # lifetime. The full detail remains available to assistive technology.
+    item=favorites.current();favorites.feedback[item['uri']]={'phase':'synced','saved':True}
+    first.feedback('Full account confirmation',item);settle(.3);timer=first.timeout
+    first.feedback('Updated account detail',item)
+    assert first.timeout==timer and first.caption.get_text()=='In your favourites'
+    settle(CONFIRMATION_MS/1000);assert not first.note.get_visible()
     apple=track(dict(uri='apple:songs:123',title='Original fixture',artist='Ember'), 'apple-music')
     favorites.set(apple,True);wait(lambda:not favorites.pending)
     view.active=True;view.category='favorites';view.load();settle()
@@ -74,10 +85,10 @@ try:
     assert first.shown==0 and not first.tick and second.shown==0
     settings.set_property('gtk-enable-animations',True)
     first.clicked();wait(lambda:first.target==1.)
-    first.hide();assert not first.tick and not first.timeout
+    first.hide();assert not first.tick and not first.timeout and not first.note_tick
     # Cold vector frame work is small and bounded; settled buttons do none.
     durations=[]
-    for index in range(101):
+    for index in range(FRAME_STEPS+1):
         started=time.perf_counter();heart_frame(index,48);durations.append(time.perf_counter()-started)
     print('PASS shared favourites, cross-source playback/removal, reduced motion and finite heart animation; slowest sprite',round(max(durations)*1000,2),'ms')
 finally:

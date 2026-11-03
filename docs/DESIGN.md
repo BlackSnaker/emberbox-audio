@@ -78,12 +78,16 @@ The result is **physically inspired**, rather than an exact simulation of gas-di
 ## Interaction stays quiet
 
 The favourite heart sits below artwork on the left, in a recessed glass
-seat with a fine rim. Its 820 ms amber fill, small breathing movement and fading
-light ring keep button geometry fixed. Sprites warm in the background and are
+seat with a fine rim. A heart-shaped filament warms from dark red to amber over
+roughly 1.5 seconds, casting a soft halo and glass reflections. Temperature and
+velocity follow GTK frame time without moving the button; reversing retains
+motion. The 201 sprites warm in the background and are
 reused; settled hearts have no animation timer. A different track immediately
 shows its own state without inheriting the last movement. Hidden controls and
-reduced motion settle immediately. Brief click feedback distinguishes local
-saving from account confirmation, without hover captions.
+reduced motion settle immediately. A warm two-line chip distinguishes local
+saving from account confirmation, without hover captions. Normal feedback lasts
+about 1.45 seconds including a soft fade; account updates do not extend it.
+Warnings allow about 1.9 seconds and retain the retry action.
 
 A small recessed capsule at the **top right** shows initial loading stages in
 desktop and Mini. Once ready, it stays hidden until the next application launch,
