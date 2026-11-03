@@ -11,7 +11,7 @@ const {FlowDecks}=require('./flow.cjs');let flow=null;
 const {SpatialPlayback}=require('./spatial.cjs');let spatial=null;
 const yandex = process.env.EMBERBOX_WEB_SERVICE === 'yandex';
 const spotify = process.env.EMBERBOX_WEB_SERVICE === 'spotify';
-const integrationVersion = yandex?7:spotify?2:26;
+const integrationVersion = yandex?7:spotify?2:27;
 const service = yandex ? {title:'Yandex Music',origin:'https://music.yandex.ru/',
   url:'https://music.yandex.ru/',command:'emberboxYandexCommand',page:'yandex.js',error:'YANDEX_REQUEST_FAILED'} :
   spotify ? {title:'Spotify',origin:'https://open.spotify.com/',url:'https://open.spotify.com/',
@@ -177,7 +177,9 @@ async function pageRequest(win, request, navigations=0) {
     'const code='+ ((yandex||spotify)?'String(e.message||e.name)': 'String(e.message||"").includes("Sign in to Apple Music")?"SIGN_IN_REQUIRED":String(e.message||"").includes("MusicKit is not ready")?"NOT_READY":e.errorCode||e.reason||e.name')+';const hints=["is not a function","Invalid queue","No playable","storefront","not writable","undefined","not supported","user interaction"];'+
     'return {__emberboxError:'+JSON.stringify(reasons)+'.includes(code)?code:'+JSON.stringify(service.error)+','+
     'stage:["storefront","queue","start"].includes(e.emberboxStage)?e.emberboxStage:"other",'+
-    'hint:hints.find(h=>String(e.message||"").includes(h))||"other"};}})()';
+    'hint:hints.find(h=>String(e.message||"").includes(h))||"other",'+
+    'favoriteStage:["read","write","verify"].includes(e.emberboxFavoriteStage)?e.emberboxFavoriteStage:undefined,'+
+    'httpStatus:Number.isInteger(e.emberboxHttpStatus)&&e.emberboxHttpStatus>=400&&e.emberboxHttpStatus<=599?e.emberboxHttpStatus:undefined};}})()';
   const result=await win.webContents.executeJavaScript(source,['play','transport','wave','feedback','favorite'].includes(request.method));
   if((yandex||spotify)&&result?.__emberboxNavigate) {
     const route=spotify?spotifyRoute(result.__emberboxNavigate):yandexRoute(result.__emberboxNavigate);
@@ -186,9 +188,11 @@ async function pageRequest(win, request, navigations=0) {
     return pageRequest(win,request,navigations+1);
   }
   if(result?.__emberboxError){
+    if(request.method==='favorite')record({favoriteSync:{phase:result.favoriteStage||'other',httpStatus:result.httpStatus||0}});
     diagnostic((spotify?'spotify-api-':yandex?'yandex-api-':'apple-api-')+result.stage+'-'+result.hint);
     throw Error(result.__emberboxError);
   }
+  if(request.method==='favorite')record({favoriteSync:{phase:result.confirmed===true?'confirmed':'pending'}});
   if(request.method==='status')record({ready:!!result.ready,authorized:!!result.authorized,
     playing:!!result.playing,position:Number(result.position)||0,duration:Number(result.duration)||0,
     hasTrack:!!result.title,windowVisible:win.isVisible()});

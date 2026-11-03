@@ -150,17 +150,18 @@ class FavoriteButton(Gtk.Button):
             self.retry=Gtk.Button(label=text('Retry','Повторить'))
             self.retry.get_accessible().set_name(text('Retry account sync','Повторить синхронизацию аккаунта'))
             self.retry.set_halign(Gtk.Align.START)
-            self.retry.connect('clicked',lambda _b:self.favorites.set(self.favorites.current(),True));names.pack_start(self.retry,False,False,0)
+            self.retry.connect('clicked',lambda _b:self.favorites.retry(self.retry_item));names.pack_start(self.retry,False,False,0)
             box.show_all()
         warning=phase in ('error','unconfirmed')
         self.caption.set_text(text('Could not save','Не удалось сохранить') if phase=='error' else
                               text('In your favourites','В избранном') if saved else text('Removed','Удалено'))
         detail=('Ember + '+NAMES[item['source']] if phase=='synced' else
                 text('Ember · syncing','Ember · синхронизация') if phase=='local' else
-                text('Ember · account not confirmed','Ember · без подтверждения аккаунта') if phase=='unconfirmed' else
+                text('Ember · will sync automatically','Ember · отправлю автоматически') if phase=='unconfirmed' else
                 text('Please try again','Попробуй ещё раз') if phase=='error' else 'Ember')
         self.detail.set_text(detail);self.note.get_accessible().set_name(message)
-        stored=self.favorites.items.get(item['uri'])
+        self.retry_item=dict(item)
+        stored=self.favorites.operations.get(item['uri'])
         self.retry.set_visible(bool(stored and warning and item['uri'] not in self.favorites.pending and self.favorites.client(item['source'])))
         # Feedback never grabs keyboard focus or pauses playback.
         if not self.note.get_visible() or warning:

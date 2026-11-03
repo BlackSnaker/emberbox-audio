@@ -263,7 +263,9 @@ Dark olive-charcoal surfaces, warm cream type, amber light behind glass, a smoot
 The glass heart warms to amber when a song is saved. Ember keeps a private local
 copy and also requests the connected Apple Music, Spotify or Yandex Music account
 to save it. Feedback distinguishes account confirmation from a local-only save;
-an unconfirmed request can be retried. YouTube without sign-in and browser/desktop
+changes are sent immediately. Failed saves and removals stay in a private queue
+and retry in the background, including after restarting Ember. Website-control
+retries in Spotify and Yandex wait for the exact song to be current again. YouTube without sign-in and browser/desktop
 fallback modes keep favourites in Ember. Removing a favourite also requests removal
 from the connected account. Choosing a saved song switches to its source.
 

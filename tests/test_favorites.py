@@ -58,7 +58,7 @@ class FavoriteTests(unittest.TestCase):
             try:
                 f.set(item,True);wait(lambda:not f.pending)
                 self.assertTrue(f.saved(item));self.assertEqual(f.items[item['uri']]['sync'],'local')
-                self.assertIn('not confirmed',f.messages[item['uri']])
+                self.assertIn('sync queued',f.messages[item['uri']])
                 f.set(item,False);wait(lambda:not f.pending)
                 self.assertFalse(f.saved(item));self.assertFalse(FavoriteBook(f.book.path).items)
             finally:f.close()
@@ -69,6 +69,72 @@ class FavoriteTests(unittest.TestCase):
             try:
                 f.toggle(item);wait(lambda:not f.pending)
                 self.assertTrue(f.saved(item));self.assertEqual(f.items[item['uri']]['url'],'https://www.youtube.com/watch?v=abcdefghijk')
+            finally:f.close()
+
+    def test_legacy_unsynced_tracks_and_removal_survive_restart(self):
+        with tempfile.TemporaryDirectory() as root:
+            path=Path(root)/'favorites.json';item=song();book=FavoriteBook(path)
+            book.set(item,True)
+            migrated=FavoriteBook(path)
+            self.assertTrue(migrated.operations[item['uri']]['saved'])
+            migrated.set(item,False,queue=True)
+            restored=FavoriteBook(path)
+            self.assertNotIn(item['uri'],restored.items)
+            self.assertFalse(restored.operations[item['uri']]['saved'])
+            restored.confirm(item,False)
+            self.assertFalse(FavoriteBook(path).operations)
+
+    def test_background_retry_and_confirmation_without_another_click(self):
+        with tempfile.TemporaryDirectory() as root:
+            calls=[];item=song();path=Path(root)/'favorites.json'
+            def request(method,**params):
+                calls.append(params.copy())
+                if len(calls)==1:raise RuntimeError('NETWORK_ERROR')
+                return {'favorite':params['value'],'confirmed':True}
+            client=NS(connected=True,state={'ready':True,'authorized':True},request=request)
+            host=NS(apple_mode='native',apple_web=client)
+            f=Favorites(NS(host=host),path)
+            try:
+                f.set(item,True);wait(lambda:not f.pending)
+                self.assertIn(item['uri'],f.operations)
+                for _ in range(10):f.refresh()
+                self.assertEqual(len(calls),1,'Polling must respect the retry backoff')
+            finally:f.close()
+            # Reopening with an available account replays the exact stored ID.
+            f=Favorites(NS(host=host),path)
+            try:
+                f.refresh();wait(lambda:not f.pending)
+                self.assertEqual(len(calls),2)
+                self.assertEqual(calls[1]['id'],item['id'])
+                self.assertEqual(f.items[item['uri']]['sync'],'synced')
+                self.assertFalse(f.operations)
+                self.assertFalse(FavoriteBook(path).operations)
+            finally:f.close()
+
+    def test_reconnect_retries_removal_and_new_save_supersedes_old_intent(self):
+        with tempfile.TemporaryDirectory() as root:
+            item=song();calls=[]
+            client=NS(connected=False,state={'authorized':True},request=lambda method,**p:calls.append(p) or {'favorite':p['value'],'confirmed':True})
+            f=Favorites(NS(host=NS(apple_mode='native',apple_web=client)),Path(root)/'favorites.json')
+            try:
+                f.set(item,True);wait(lambda:not f.pending)
+                f.set(item,False);wait(lambda:not f.pending)
+                f.refresh();self.assertFalse(calls)
+                client.connected=True;f.refresh();wait(lambda:not f.pending)
+                self.assertEqual(len(calls),1);self.assertFalse(calls[0]['value'])
+                self.assertFalse(f.operations);self.assertFalse(f.items)
+            finally:f.close()
+
+    def test_deferred_dom_like_never_targets_the_next_song(self):
+        with tempfile.TemporaryDirectory() as root:
+            item=song('Original','spotify');calls=[]
+            book=FavoriteBook(Path(root)/'favorites.json');book.set(item,True,queue=True)
+            client=NS(connected=True,state={'id':'Replacement','authorized':True},request=lambda method,**p:calls.append(p) or {'favorite':p['value'],'confirmed':True})
+            f=Favorites(NS(host=NS(spotify_mode='native',spotify_web=client)),book.path)
+            try:
+                f.refresh();self.assertFalse(f.pending);self.assertFalse(calls)
+                client.state['id']='Original';f.refresh();wait(lambda:not f.pending)
+                self.assertEqual(calls[0]['id'],'Original');self.assertFalse(f.operations)
             finally:f.close()
 
 

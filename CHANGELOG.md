@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.23.2 — 2026-11-03
+
+- Send favourites to the connected account immediately and persist failed saves/removals in a private outbox. Retry with bounded backoff and on reconnect; recover unconfirmed local favourites from earlier releases. A newer action replaces the previous intent, while website-only retries require the exact track.
+- Support both MusicKit HTTP-option conventions. Handle unavailable Apple favourites endpoints through the documented personal-rating API, bypass cached reads, allow server propagation, and verify the account result before reporting synchronization. Diagnostics contain only bounded stages and HTTP status codes.
+- Retry feedback preserves the warm heart animation and short confirmation. Added network recovery, restart/removal persistence, stale-track protection, MusicKit fallback and authorization-failure checks.
+
 ## 0.23.1 — 2026-11-03
 
 - Turned the favourite heart into a glass lamp with a heart-shaped filament: gradual thermal response, dark-red-to-amber light, a soft halo and reflected glass edges. GTK frame time drives temperature and velocity, retaining motion through reversals. Prepare 201 states in the background and stop drawing at rest.

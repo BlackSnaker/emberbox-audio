@@ -87,31 +87,66 @@ async function emberboxAppleCommand(request) {
   if(request.method==='favorite') {
     if(!['songs','library-songs'].includes(kind)||!safeId.test(id)||typeof params.value!=='boolean'||typeof music.api.music!=='function')throw Error('INVALID_ARGUMENTS');
     const ratingPath='/v1/me/ratings/'+kind+'/'+encodeURIComponent(id);
+    let stage='read';
+    const httpStatus=error=>Number(error?.status||error?.statusCode||error?.response?.status||error?.errors?.[0]?.status||error?.data?.errors?.[0]?.status)||0;
+    const invoke=async(path,query={},options={})=>{
+      const response=await music.api.music(path,query,{...options,...options.fetchOptions,reload:true,fetchOptions:{cache:'no-store',...options.fetchOptions}});
+      const errors=response?.data?.errors||response?.errors||[];
+      if(errors.length){const error=Error('FAVORITE_NOT_CONFIRMED');error.status=Number(errors[0].status)||0;throw error;}
+      return response;
+    };
     const rating=async()=>{
       let response;
-      try{response=await music.api.music(ratingPath);}
-      catch(error){
-        if(Number(error.status||error.statusCode||error.errors?.[0]?.status||error.data?.errors?.[0]?.status)===404)return false;
-        throw error;
-      }
-      const errors=response?.data?.errors||response?.errors||[];
-      if(errors.length){if(errors.every(error=>Number(error.status)===404))return false;throw Error('FAVORITE_NOT_CONFIRMED');}
-      return (response?.data?.data||response?.data||[])[0]?.attributes?.value===1;
+      try{response=await invoke(ratingPath);}
+      catch(error){if(httpStatus(error)===404)return false;throw error;}
+      const rows=response?.data?.data||response?.data||response;
+      if(!Array.isArray(rows))throw Error('FAVORITE_NOT_CONFIRMED');
+      return Number(rows[0]?.attributes?.value)===1;
     };
-    const before=await rating();
-    if(before===params.value)return {favorite:before,confirmed:true};
-    if(params.value) {
-      // Apple's favourites endpoint adds the song to Favorite Songs; a normal
-      // library addition is not a favourite. MusicKit keeps credentials here.
-      await music.api.music('/v1/me/favorites',{['ids['+kind+']']:[id]},{fetchOptions:{method:'POST'}});
-    } else {
-      await music.api.music(ratingPath,{}, {fetchOptions:{method:'DELETE'}});
+    const putRating=async()=>invoke(ratingPath,{}, {fetchOptions:{method:'PUT',body:JSON.stringify({type:'ratings',attributes:{value:1}})}});
+    const verify=async()=>{
+      for(const delay of [0,250,500,1000,1500]) {
+        if(delay)await new Promise(resolve=>setTimeout(resolve,delay));
+        if(await rating()===params.value)return true;
+      }
+      return false;
+    };
+    try {
+      const before=await rating();
+      if(before===params.value)return {favorite:before,confirmed:true};
+      stage='write';
+      if(params.value) {
+        // 202 Accepted queues the favourite on Apple's side. Only a subsequent
+        // read of the personal rating confirms that the change is visible.
+        try {
+          await invoke('/v1/me/favorites',{['ids['+kind+']']:[id]},{fetchOptions:{method:'POST'}});
+        }catch(error){
+          // Some signed-in MusicKit deployments do not expose /me/favorites.
+          // The documented personal-rating API remains available there and
+          // synchronizes catalogue/library song ratings in the same account.
+          // Authentication/network failures are never treated as success.
+          if(![400,404,405,501].includes(httpStatus(error)))throw error;
+          await putRating();
+        }
+      } else {
+        await invoke(ratingPath,{}, {fetchOptions:{method:'DELETE'}});
+      }
+      stage='verify';
+      if(await verify())return {favorite:params.value,confirmed:true};
+      if(params.value){
+        // Accepted favourites and personal ratings are separate on some web
+        // deployments. Explicitly synchronize the like as well, then verify.
+        stage='write';await putRating();stage='verify';
+        if(await verify())return {favorite:true,confirmed:true};
+      }
+      throw Error('FAVORITE_NOT_CONFIRMED');
+    }catch(error){
+      // Export only bounded diagnostic categories, never website responses,
+      // request URLs, account identifiers, tokens or raw error strings.
+      const failure=Error('FAVORITE_NOT_CONFIRMED');
+      failure.emberboxFavoriteStage=stage;failure.emberboxHttpStatus=httpStatus(error);
+      throw failure;
     }
-    for(let n=0;n<4;n++) {
-      if(await rating()===params.value)return {favorite:params.value,confirmed:true};
-      await new Promise(resolve=>setTimeout(resolve,200));
-    }
-    throw Error('FAVORITE_NOT_CONFIRMED');
   }
 
   function publicUrl(value) {
