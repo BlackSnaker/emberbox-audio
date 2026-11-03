@@ -57,3 +57,29 @@ class SnowTests(unittest.TestCase):
         middle=model.advance(t+landed.thaw*.5,shelves)
         fading=next(d for d in middle if abs(d[0]-first[0])<.001 and d[2]<0)
         self.assertGreater(before[3],fading[3]);self.assertAlmostEqual(fading[3],before[3]*.5,places=4)
+
+
+class SnowDamageTests(unittest.TestCase):
+    def test_only_moving_footprints_are_invalidated(self):
+        from types import SimpleNamespace
+        from winter_snow import WinterSnow
+        calls=[]
+        area=SimpleNamespace(get_allocated_width=lambda:1920,get_allocated_height=lambda:1080,
+                             queue_draw_area=lambda *rect:calls.append(rect))
+        snow=SimpleNamespace(area=area)
+        still=(100.,100.,-4.,.5,1.);old=(900.,400.,2.,.5,2.);new=(901.,401.,2.,.5,2.)
+        WinterSnow.invalidate(snow,[still,old],[still,new])
+        self.assertEqual(len(calls),2,'Static caps must not be repainted each frame')
+        self.assertLess(snow.damage_pixels,200,'Snow must never invalidate a fullscreen GL surface')
+        calls.clear();WinterSnow.invalidate(snow,[still,new],[still,new])
+        self.assertFalse(calls);self.assertEqual(snow.damage_pixels,0)
+
+    def test_footprints_are_clipped_to_the_widget(self):
+        from types import SimpleNamespace
+        from winter_snow import WinterSnow
+        calls=[]
+        area=SimpleNamespace(get_allocated_width=lambda:320,get_allocated_height=lambda:230,
+                             queue_draw_area=lambda *rect:calls.append(rect))
+        snow=SimpleNamespace(area=area)
+        WinterSnow.invalidate(snow,[],[(0.,0.,2.,.5,2.),(500.,500.,2.,.5,2.)])
+        self.assertEqual(calls,[(0,0,4,4)])

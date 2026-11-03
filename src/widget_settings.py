@@ -75,6 +75,7 @@ class SettingsMenu:
             from seasonal_theme import theme_choice
             appearance.decorate_popup(popup)
             tile,self.theme_switch=theme_choice(appearance)
+            self.snow_switch=tile.snow_switch
             box.pack_start(tile,False,False,5)
         caption = Gtk.Label(label=source)
         caption.set_xalign(0)

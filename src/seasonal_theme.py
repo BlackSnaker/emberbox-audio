@@ -88,9 +88,11 @@ window.ember-stage.christmas-theme.stage-opening { background-color: transparent
 
 class Appearance:
     def __init__(self,path=None):
-        self.path=Path(path or CONFIG_DIR/'appearance.json');self.christmas=False
+        self.path=Path(path or CONFIG_DIR/'appearance.json');self.christmas=False;self.snow_enabled=False
         try:
-            if self.path.stat().st_size<4096:self.christmas=json.loads(self.path.read_text()).get('theme')=='christmas'
+            if self.path.stat().st_size<4096:
+                data=json.loads(self.path.read_text());self.christmas=data.get('theme')=='christmas'
+                self.snow_enabled=data.get('snow') is True
         except (OSError,ValueError,TypeError,AttributeError):pass
         self.listeners=[];self.surfaces=[];self.closed=False
         self.pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-winter-art')
@@ -106,15 +108,26 @@ class Appearance:
         if self.closed:return False
         enabled=bool(enabled)
         if enabled==self.christmas:return True
+        return self.save_preferences(enabled,self.snow_enabled)
+
+    def set_snow(self,enabled):
+        if self.closed:return False
+        if bool(enabled)==self.snow_enabled:return True
+        return self.save_preferences(self.christmas,bool(enabled))
+
+    def save_preferences(self,enabled,snow):
         temporary=self.path.with_suffix('.next.json')
         try:
             self.path.parent.mkdir(parents=True,exist_ok=True)
             fd=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
-            with os.fdopen(fd,'w') as file:json.dump({'theme':'christmas' if enabled else 'classic'},file)
+            with os.fdopen(fd,'w') as file:json.dump({'theme':'christmas' if enabled else 'classic','snow':snow},file)
             temporary.chmod(0o600);temporary.replace(self.path)
         except OSError:return False
-        self.christmas=enabled
-        for surface in tuple(self.surfaces):surface.apply(animate=True)
+        theme_changed=self.christmas!=enabled
+        self.christmas=enabled;self.snow_enabled=snow
+        for surface in tuple(self.surfaces):
+            if theme_changed:surface.apply(animate=True)
+            else:surface.snow.set_enabled(enabled and snow)
         for callback in tuple(self.listeners):callback()
         return True
 
@@ -158,7 +171,7 @@ class WinterSurface:
         context=self.window.get_style_context();enabled=self.appearance.christmas
         context.add_class('christmas-theme') if enabled else context.remove_class('christmas-theme')
         self.generation+=1;self.key=None;self.settle()
-        self.snow.set_enabled(enabled)
+        self.snow.set_enabled(enabled and self.appearance.snow_enabled)
         if enabled:
             self.render()
             if animate and self.window.get_mapped() and self.window.get_settings().get_property('gtk-enable-animations'):
@@ -234,6 +247,19 @@ def theme_choice(appearance):
         if not appearance.set_christmas(switch.get_active()):
             switch.set_active(appearance.christmas);note.set_text(text('Could not save the theme','Не удалось сохранить тему'))
     switch.connect('notify::active',changed)
-    unsubscribe=appearance.subscribe(lambda:switch.set_active(appearance.christmas))
+    snow_row=Gtk.Box(spacing=10);tile.pack_start(snow_row,False,False,0)
+    snow_label=Gtk.Label(label=text('Light snow','Лёгкий снег'));snow_label.set_xalign(0)
+    snow_label.get_style_context().add_class('theme-choice-title');snow_row.pack_start(snow_label,True,True,0)
+    snow_switch=Gtk.Switch();snow_switch.set_active(appearance.snow_enabled);snow_switch.set_valign(Gtk.Align.CENTER)
+    snow_switch.set_has_tooltip(False);snow_switch.get_accessible().set_name(snow_label.get_text())
+    snow_row.pack_end(snow_switch,False,False,0);tile.snow_switch=snow_switch
+    def change_snow(_switch,_param):
+        if snow_switch.get_active()!=appearance.snow_enabled and not appearance.set_snow(snow_switch.get_active()):
+            snow_switch.set_active(appearance.snow_enabled);note.set_text(text('Could not save the setting','Не удалось сохранить настройку'))
+    snow_switch.connect('notify::active',change_snow)
+    def sync():
+        switch.set_active(appearance.christmas);snow_switch.set_active(appearance.snow_enabled)
+        snow_switch.set_sensitive(appearance.christmas)
+    sync();unsubscribe=appearance.subscribe(sync)
     tile.connect('destroy',lambda *_:unsubscribe())
     return tile,switch

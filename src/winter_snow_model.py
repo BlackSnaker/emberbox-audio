@@ -36,7 +36,7 @@ class SnowShower:
 
     def start(self,width,height):
         self.clear();self.width=width;self.height=height
-        self.cap=38 if width>600 else 16 if width>360 else 12
+        self.cap=22 if width>600 else 10 if width>360 else 8
         self.interval=self.duration/self.cap;self.next_spawn=0.
 
     def clear(self):

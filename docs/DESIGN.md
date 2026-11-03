@@ -28,7 +28,7 @@ Evergreen, wine-red lacquer and warm brass recolour the case, controls and artwo
 
 Settings contains a preview and a live toggle, stored locally. Decoration rasterisation runs outside GTK and is cached. The short entrance settles without an idle animation loop and respects reduced motion. Switching back restores the cover-tinted classic surface.
 
-Snow arrives in occasional short showers. A bounded set of presentation-clock particles catches the real artwork, button and console edges, settles into shallow caps and gently thaws. GPU point sprites need no scene screenshots or per-frame rasterisation. There is no frame callback between showers. Hidden windows, layout changes, theme removal and reduced motion clear the effect. Static decorations remain when hardware OpenGL is unavailable.
+Snow arrives in occasional short showers. A bounded set of presentation-clock particles catches the real artwork, button and console edges, settles into shallow caps and gently thaws. Small Cairo masks paint into GTK’s existing surface, invalidating only the old and new flake footprints. There is no fullscreen GL overlay or separate framebuffer. There is no frame callback between showers. Hidden windows, layout changes, theme removal and reduced motion clear the effect. Snow has a separate opt-in switch, off by default for both new and existing themed installations.
 
 ## Physical details
 

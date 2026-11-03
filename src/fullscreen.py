@@ -360,6 +360,8 @@ class FullscreenPlayer:
 
     def theme_changed(self):
         if self.closed:return
+        if getattr(self,'applied_christmas',None)==self.appearance.christmas:return
+        self.applied_christmas=self.appearance.christmas
         self.edition_label.set_text(text('CHRISTMAS, IN YOUR RHYTHM','РОЖДЕСТВО В ТВОЁМ РИТМЕ') if self.appearance.christmas else text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'))
         self.bg_key=None;self.paint_background()
 

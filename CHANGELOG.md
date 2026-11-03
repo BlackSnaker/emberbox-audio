@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.24.2 — 2026-11-03
+
+- Fixed snowfall compositor stalls: replace the fullscreen GL overlay with small Cairo masks on GTK’s existing surface. Invalidate only the old/new flake footprints; snow creates no GL context or separate framebuffer.
+- Added a separate Light snow switch, off by default for new and existing installations. Christmas styling is retained, and particle counts are reduced.
+- Check whole-scene responsiveness with active snow, sparse damage, persistent opt-in, absence of a GL layer and hidden/resize cleanup.
+
 ## 0.24.1 — 2026-11-03
 
 - Added occasional light snow to Winter Glow: smooth falling flakes catch actual artwork/button/console edges, settle into shallow caps and gently thaw.
