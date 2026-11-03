@@ -58,6 +58,35 @@ class SnowTests(unittest.TestCase):
         fading=next(d for d in middle if abs(d[0]-first[0])<.001 and d[2]<0)
         self.assertGreater(before[3],fading[3]);self.assertAlmostEqual(fading[3],before[3]*.5,places=4)
 
+    def test_frequent_small_waves_overlap_thaw_without_exceeding_live_budget(self):
+        for width,height in ((320,230),(460,430),(1920,1080)):
+            model=SnowShower(4);model.start(width,height,frequent=True)
+            shelves=[('cover',12,width-12,100)]
+            emissions=[];previous=0;overlap=False
+            for frame in range(60*52):
+                dots=model.advance(frame/60,shelves)
+                if model.spawned>previous:
+                    emissions.append(frame/60)
+                    if frame/60>5 and any(d[2]<0 for d in dots):overlap=True
+                    previous=model.spawned
+                self.assertLessEqual(len(dots),model.cap,'Frequency must not increase peak snow density')
+            self.assertGreaterEqual(len(emissions),model.batch*2)
+            gaps=[b-a for a,b in zip(emissions,emissions[1:]) if b-a>1]
+            self.assertTrue(gaps);self.assertLessEqual(max(gaps),8.5)
+            self.assertTrue(overlap,'New flakes should arrive while older snow is still thawing')
+            self.assertFalse(model.finished,'Frequent mode must not insert a long wait for all deposits to thaw')
+            model.duration=model.age
+            model.advance(model.age+32,shelves)
+            self.assertTrue(model.finished);self.assertFalse(model.flakes)
+
+    def test_monitor_sleep_does_not_replay_missed_waves(self):
+        model=SnowShower(4);model.start(1920,1080,frequent=True)
+        model.advance(0,[]);before=model.spawned
+        model.advance(24*3600,[])
+        self.assertLessEqual(model.spawned,before+1)
+        self.assertLessEqual(len(model.flakes),1)
+
+
 
 class SnowDamageTests(unittest.TestCase):
     def test_only_moving_footprints_are_invalidated(self):

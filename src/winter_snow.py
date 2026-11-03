@@ -1,4 +1,4 @@
-"""Intermittent, input-transparent snow; no frame callback between showers."""
+"""Frequent sparse, input-transparent snow; stopped when hidden or disabled."""
 import random
 import math
 from itertools import zip_longest
@@ -40,7 +40,7 @@ class WinterSnow:
 
     def schedule(self,first=False):
         if not self.eligible() or self.timer or self.active:return
-        delay=self.random.uniform(3.,5.) if first else self.random.uniform(52.,88.)
+        delay=self.random.uniform(2.,3.5) if first else self.random.uniform(2.5,5.)
         self.timer=GLib.timeout_add(round(delay*1000),self.begin)
 
     def animations_changed(self,*_):
@@ -67,7 +67,7 @@ class WinterSnow:
         self.area.show();self.warmup()
         if not self.painter:self.area.hide();return False
         w,h=self.overlay.get_allocated_width(),self.overlay.get_allocated_height()
-        self.model.start(max(1,w),max(1,h));self.start_time=None;self.active=True
+        self.model.start(max(1,w),max(1,h),frequent=True);self.start_time=None;self.active=True
         self.geometry_at=0.;self.geometry_size=None;self.dots=[]
         if not self.tick:self.tick=self.area.add_tick_callback(self.advance)
         return False
@@ -97,7 +97,7 @@ class WinterSnow:
         if not self.geometry(now):return False
         previous=self.dots
         self.dots=self.model.advance(now-self.start_time,self.shelves)
-        if self.model.finished or now-self.start_time>48.:
+        if self.model.finished or now-self.start_time>self.model.duration+32.:
             self.tick=0;self.active=False;self.dots=[];self.model.clear();self.area.hide()
             self.schedule();return False
         self.invalidate(previous,self.dots);return True

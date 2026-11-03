@@ -34,9 +34,12 @@ class SnowShower:
         self.random=random.Random(seed);self.flakes=[];self.age=0.;self.next_spawn=0.;self.duration=8.
         self.spawned=0;self.landed_count=0;self.previous={}
 
-    def start(self,width,height):
+    def start(self,width,height,frequent=False):
         self.clear();self.width=width;self.height=height
         self.cap=22 if width>600 else 10 if width>360 else 8
+        self.frequent=bool(frequent);self.duration=math.inf if self.frequent else 8.
+        self.batch=5 if width>600 else 3 if width>360 else 2
+        self.wave_start=0.;self.wave_emitted=0
         self.interval=self.duration/self.cap;self.next_spawn=0.
 
     def clear(self):
@@ -53,9 +56,23 @@ class SnowShower:
         self.spawned+=1
 
     def advance(self,age,shelves):
-        self.age=max(self.age,float(age));lookup={v[0]:v for v in shelves}
-        while self.next_spawn<=self.age and self.next_spawn<self.duration and self.spawned<self.cap:
-            self.emit(self.next_spawn,shelves);self.next_spawn+=self.interval
+        next_age=max(self.age,float(age))
+        if self.frequent and next_age-self.age>32.:
+            # Do not replay hours of missed showers after monitor sleep.
+            self.flakes=[];self.previous={};self.next_spawn=next_age
+            self.wave_start=next_age;self.wave_emitted=0
+        self.age=next_age;lookup={v[0]:v for v in shelves}
+        while self.next_spawn<=self.age and self.next_spawn<self.duration and (self.frequent or self.spawned<self.cap):
+            # Small recurring waves share the existing live-particle budget.
+            # A new wave never clears older deposits or waits for them to thaw.
+            if len(self.flakes)<self.cap:self.emit(self.next_spawn,shelves)
+            if self.frequent:
+                self.wave_emitted+=1
+                if self.wave_emitted>=self.batch:
+                    self.next_spawn=self.wave_start+self.random.uniform(5.5,8.5)
+                    self.wave_start=self.next_spawn;self.wave_emitted=0
+                else:self.next_spawn+=.45
+            else:self.next_spawn+=self.interval
         dots=[];alive=[]
         for f in self.flakes:
             t=max(0.,self.age-f.born)

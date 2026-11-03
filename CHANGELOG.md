@@ -2,6 +2,11 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.24.3 — 2026-11-03
+
+- Emit small snow waves about every 6–8 seconds while older flakes continue thawing. Replace the previous 52–88-second pause after complete thaw with a short interval.
+- Preserve the existing live-particle budget for Mini, desktop and fullscreen. New waves retain older deposits; sparse Cairo drawing and the independent opt-in switch remain in place.
+
 ## 0.24.2 — 2026-11-03
 
 - Fixed snowfall compositor stalls: replace the fullscreen GL overlay with small Cairo masks on GTK’s existing surface. Invalidate only the old/new flake footprints; snow creates no GL context or separate framebuffer.
