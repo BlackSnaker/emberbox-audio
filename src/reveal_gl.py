@@ -84,7 +84,7 @@ void main(){
 
 
 class RevealGL:
-    def __init__(self,allow_software=False,fragment=FRAGMENT,uniforms=()):
+    def __init__(self,allow_software=False,fragment=FRAGMENT,uniforms=(),vertex=VERTEX):
         name=find_library('GL')
         if not name:raise RuntimeError('System OpenGL unavailable')
         self.lib=C.CDLL(name)
@@ -122,7 +122,7 @@ class RevealGL:
             self.functions[name]=call
         shaders=[]
         try:
-            for kind,source in ((0x8B31,VERTEX),(0x8B30,fragment)):
+            for kind,source in ((0x8B31,vertex),(0x8B30,fragment)):
                 shader=self.call('CreateShader',kind);shaders.append(shader)
                 text=C.c_char_p(source)
                 self.call('ShaderSource',shader,1,C.byref(text),None)

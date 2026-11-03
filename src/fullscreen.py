@@ -348,6 +348,7 @@ class FullscreenPlayer:
         self.theme_unsubscribe=None;self.winter_surface=None
         if self.appearance:
             self.winter_surface=self.appearance.attach(self.window,overlay,stage=True)
+            self.winter_surface.snow.set_targets(lambda:[self.art_shell,self.console,self.source_button,self.settings_button,self.exit_button])
             self.theme_unsubscribe=self.appearance.subscribe(self.theme_changed)
             self.theme_changed()
         self.source_picker=SourcePicker(lambda source,session=None:host.select_source(source,session),lambda:None,self.open_accounts)

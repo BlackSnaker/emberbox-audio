@@ -146,6 +146,8 @@ class WinterSurface:
         for image in (self.top,self.corner):
             image.set_no_show_all(True);image.set_can_focus(False)
             overlay.add_overlay(image);overlay.set_overlay_pass_through(image,True)
+        from winter_snow import WinterSnow
+        self.snow=WinterSnow(window,overlay,stage)
         self.size_signal=window.connect('size-allocate',lambda *_:self.render())
         self.unmap_signal=window.connect('unmap',lambda *_:self.settle())
         self.destroy_signal=window.connect('destroy',lambda *_:self.close())
@@ -156,6 +158,7 @@ class WinterSurface:
         context=self.window.get_style_context();enabled=self.appearance.christmas
         context.add_class('christmas-theme') if enabled else context.remove_class('christmas-theme')
         self.generation+=1;self.key=None;self.settle()
+        self.snow.set_enabled(enabled)
         if enabled:
             self.render()
             if animate and self.window.get_mapped() and self.window.get_settings().get_property('gtk-enable-animations'):
@@ -202,7 +205,7 @@ class WinterSurface:
 
     def close(self):
         if self.closed:return
-        self.closed=True;self.settle();self.generation+=1
+        self.closed=True;self.settle();self.snow.close();self.generation+=1
         for signal in (self.size_signal,self.unmap_signal,self.destroy_signal):
             if self.window.handler_is_connected(signal):self.window.disconnect(signal)
         for image in (self.top,self.corner):image.destroy()

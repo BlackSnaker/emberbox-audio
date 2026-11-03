@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.24.1 — 2026-11-03
+
+- Added occasional light snow to Winter Glow: smooth falling flakes catch actual artwork/button/console edges, settle into shallow caps and gently thaw.
+- Bounded GPU point sprites use no scene screenshots or per-frame rasterisation. No frame callback runs between showers; hiding, resizing, disabling the theme and reduced motion stop the effect.
+- Verified refresh-independent flight, landing, complete thaw, real GLSL rendering, input transparency and lifecycle cleanup.
+
 ## 0.24.0 — 2026-11-03
 
 - Added the opt-in Winter Glow Christmas theme across desktop, Mini and fullscreen: original evergreen garlands, warm glass lamps, engraved glass ornaments, pine surfaces, wine-red controls and brass highlights.

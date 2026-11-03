@@ -12,7 +12,7 @@
 
 Evergreen surfaces, wine-red controls, brushed-brass highlights and glass ornaments under a soft incandescent garland. Original vector details carry the theme through the desktop widget, Mini and fullscreen listening room.
 
-**Settings → Christmas theme.** Changes apply immediately and persist across restarts. New installations keep the classic theme by default. Decorations pass clicks through, the entrance animation settles, and there is no continuous snowfall or idle animation loop.
+**Settings → Christmas theme.** Changes apply immediately and persist across restarts. New installations keep the classic theme by default. Decorations pass clicks through. Occasional light snow showers settle on the artwork, buttons and console edges before gently melting. Snow rendering stops between showers and when hidden; reduced motion is respected.
 
 ![Winter Glow listening room — Russian UI preview with original Emberbox Sessions demonstration artwork](assets/winter-glow.ru.png)
 

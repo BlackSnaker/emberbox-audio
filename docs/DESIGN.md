@@ -28,6 +28,8 @@ Evergreen, wine-red lacquer and warm brass recolour the case, controls and artwo
 
 Settings contains a preview and a live toggle, stored locally. Decoration rasterisation runs outside GTK and is cached. The short entrance settles without an idle animation loop and respects reduced motion. Switching back restores the cover-tinted classic surface.
 
+Snow arrives in occasional short showers. A bounded set of presentation-clock particles catches the real artwork, button and console edges, settles into shallow caps and gently thaws. GPU point sprites need no scene screenshots or per-frame rasterisation. There is no frame callback between showers. Hidden windows, layout changes, theme removal and reduced motion clear the effect. Static decorations remain when hardware OpenGL is unavailable.
+
 ## Physical details
 
 - The artist room uses a large, uncropped photograph in a narrow gallery mount. Behind it, two soft-focus layers of the same image retain its colours and light: a broad source-coloured glow, a quiet dark field for the name and a faint matte texture. Monochrome portraits retain their original pixels. The static backdrop is composed off the UI thread and cached.
