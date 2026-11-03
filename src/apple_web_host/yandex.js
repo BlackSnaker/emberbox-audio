@@ -4,7 +4,7 @@
  */
 async function emberboxYandexCommand(request) {
   if (location.origin !== 'https://music.yandex.ru') throw Error('NOT_READY');
-  const allowed=['status','wave','browse','tracks','search','play','transport','seek','feedback','artist','artistSection','release'];
+  const allowed=['status','wave','browse','tracks','search','play','transport','seek','feedback','artist','artistSection','release','favorite'];
   if(!allowed.includes(request.method)) throw Error('UNSUPPORTED');
   const p=request.params||{};
   const state=window.__emberboxYandex||(window.__emberboxYandex={items:new Map()});
@@ -195,6 +195,12 @@ async function emberboxYandexCommand(request) {
     const control=button(p.action==='like'?'LIKE_BUTTON':'DISLIKE_BUTTON',bar||document);
     if(!control)throw Error('ADAPTER_UNAVAILABLE');
     control.click();return {ok:true};
+  }
+  if(request.method==='favorite') {
+    if(!/^\d{1,20}$/.test(String(p.id||''))||String(p.id)!==status.id||typeof p.value!=='boolean')throw Error('INVALID_ARGUMENTS');
+    return emberboxSetFavorite(()=>button('LIKE_BUTTON',bar||document),p.value,()=>{
+      context();return String(state.store?.sonataState?.entityMeta?.id||external?.getCurrentTrack?.()?.id||'')===String(p.id);
+    });
   }
   const listRoot=()=>document.querySelector('main')||document;
   function items(root=listRoot()) {

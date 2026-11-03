@@ -93,9 +93,40 @@ class SpotifyWeb(AppleWeb):
     def _status_done(self,future):
         self.busy=False
         if not self.closed:
-            try:self.state=self._seek_state(future.result())
+            try:
+                self.state=self._seek_state(future.result())
+                if self.state.get('ready') and self.state.get('integrationVersion')==1 and not self.upgrade_attempted:
+                    self.upgrade_attempted=self.upgrading=True
+                    self.pool.submit(self._upgrade_adapter,dict(self.state)).add_done_callback(lambda item:GLib.idle_add(self._adapter_upgraded,item))
             except Exception:self.state={}
             self.changed()
+        return False
+
+    def _upgrade_adapter(self,previous):
+        subprocess.run(['systemctl','--user','stop',APP_ID+'-spotify.service'],check=True,timeout=8,
+                       stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        self._start_engine();until=time.monotonic()+30
+        while not self.closed and time.monotonic()<until:
+            if self.connected:
+                try:
+                    state=self.bridge.request('status')
+                    if state.get('ready') and state.get('integrationVersion',0)>=2 and (not previous.get('authorized') or state.get('authorized')):
+                        self.bridge.request('enable',enabled=self.enabled)
+                        if self.enabled and previous.get('uri') and previous.get('authorized'):
+                            self.bridge.request('play',uri=previous['uri'])
+                            if previous.get('position',0)>0:self.bridge.request('seek',position=previous['position'])
+                            if not previous.get('playing'):self.bridge.request('transport',action='pause')
+                        return
+                except BridgeUnavailable:pass
+            time.sleep(.3)
+        raise BridgeUnavailable('Spotify adapter update timed out')
+
+    def _adapter_upgraded(self,future):
+        self.upgrading=False
+        if not self.closed:
+            try:future.result();self.error=''
+            except Exception:self.error=text('Reconnect Spotify to finish the update.','Переподключи Spotify для завершения обновления.')
+            self.poll();self.changed()
         return False
 
 

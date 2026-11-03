@@ -137,7 +137,7 @@ class LibraryView(Gtk.Box):
         self.entry.connect('activate',lambda _e:self.search())
         hero.pack_end(self.entry,False,False,0);self.pack_start(hero,False,False,0)
         filters=self.filters=Gtk.Box(spacing=7);self.tabs={}
-        for key,name in [('home',text('For you','Подборки')),('albums',text('Albums','Альбомы')),('search',text('Search','Поиск'))]:
+        for key,name in [('home',text('For you','Подборки')),('albums',text('Albums','Альбомы')),('favorites',text('Favourites','Избранное')),('search',text('Search','Поиск'))]:
             b=Gtk.ToggleButton(label=name);b.get_style_context().add_class('stage-tab');b.set_has_tooltip(False)
             b.connect('clicked',lambda _b,k=key:self.select(k));self.tabs[key]=b;filters.pack_start(b,False,False,0)
         self.source_badge=label('','stage-library-source');filters.pack_start(self.source_badge,True,True,14)
@@ -170,6 +170,8 @@ class LibraryView(Gtk.Box):
         self.wave_button.set_no_show_all(True);foot.pack_end(self.wave_button,False,False,0)
         self.pack_end(foot,False,False,0)
         self.unsubscribe=service.subscribe(self.service_changed)
+        self.favorite_revision=-1;self.favorite_tables=[];self.favorite_limit=200
+        self.unsubscribe_favorites=service.favorites.subscribe(self.favorites_changed)
         self.show_all();self.context.hide();self.connect_button.hide();self.wave_button.hide();self.sync_tabs()
 
     def sync_tabs(self):
@@ -180,7 +182,9 @@ class LibraryView(Gtk.Box):
     def activate(self):
         self.active=True
         if self.source!=self.service.host.source:
-            self.source=self.service.host.source;self.selected=None;self.items=[];self.category='home';self.sync_tabs()
+            self.source=self.service.host.source;self.selected=None;self.items=[]
+            if self.category!='favorites':self.category='home'
+            self.sync_tabs()
             self.next_offset=None;self.render()
         self.source_badge.set_text(NAMES[self.source].upper())
         self.wave_button.set_visible(self.source=='yandex-music')
@@ -192,6 +196,7 @@ class LibraryView(Gtk.Box):
     def select(self,category):
         if self.updating:return
         self.category=category;self.selected=None;self.sync_tabs()
+        self.wave_button.set_visible(category!='favorites' and self.source=='yandex-music')
         if category=='search':
             self.entry.grab_focus()
             if not self.entry.get_text().strip():
@@ -206,6 +211,10 @@ class LibraryView(Gtk.Box):
 
     def load(self,refresh=False,append=False):
         if not self.active:return
+        if self.category=='favorites':
+            self.request+=1;self.service.cancel_browse();self.busy=False;self.spinner.stop()
+            self.notice.set_text('');self.connect_button.hide();self.items=list(self.service.favorites.items.values())[::-1]
+            self.next_offset=None;self.favorite_revision=self.service.favorites.revision;self.render();return
         key=self.key()
         if self.category=='search' and not key[2] and not self.selected:
             self.items=[];self.next_offset=None;self.render();return
@@ -247,6 +256,8 @@ class LibraryView(Gtk.Box):
         self.service.stop();self.service.host.start_yandex_wave()
 
     def render(self):
+        if self.category=='favorites':self.render_favorites();return
+        self.favorite_tables=[];self.source_badge.set_text(NAMES[self.source].upper())
         clear(self.content);self.song_buttons=[];self.album_buttons=[];self.track_table=None;self.playback_key=None
         if self.selected:
             self.artwork.load(self.hero_image,self.selected.get('image',''),68,10,
@@ -313,6 +324,13 @@ class LibraryView(Gtk.Box):
         self.update_playback()
 
     def update_playback(self):
+        if self.category=='favorites':
+            state=snapshot(self.service.host)
+            key=(self.service.host.source,state.get('id'),state.get('uri'),state.get('title'),state.get('artist'),state.get('playing'))
+            if key==self.playback_key:return
+            self.playback_key=key
+            for source,table in self.favorite_tables:table.set_state(state if self.service.host.source==source else {})
+            return
         if not self.track_table:return
         state=snapshot(self.service.host)
         pending=self.service.book.current(self.source) if self.service.loading and self.service.book.active==self.source else None
@@ -335,12 +353,49 @@ class LibraryView(Gtk.Box):
             self.source_badge.set_visible(not dense)
             fit_art(self.hero_image,48 if dense else 68)
         if self.track_table:self.track_table.resize(width)
+        for _source,table in self.favorite_tables:table.resize(width)
+
+    def favorites_changed(self):
+        if self.active and self.category=='favorites':
+            if self.favorite_revision!=self.service.favorites.revision:self.load()
+            else:self.update_playback()
+            for _source,table in self.favorite_tables:
+                for row in table.rows:row.action_buttons[0].set_sensitive(row.item['uri'] not in self.service.favorites.pending)
+
+    def render_favorites(self):
+        clear(self.content);self.favorite_tables=[];self.track_table=None;self.song_buttons=[];self.playback_key=None
+        self.source_badge.set_text(text('EMBER FAVOURITES','ИЗБРАННОЕ EMBER'))
+        self.context.hide();self.hero_image.hide();self.wave_button.hide()
+        self.title.set_text(text('Favourites, together.','Любимое — рядом.'))
+        self.subtitle.set_text(text(f'{len(self.items)} saved tracks · All sources',f'Сохранено треков: {len(self.items)} · Все источники'))
+        for source,name in NAMES.items():
+            values=[v for v in self.items if v['source']==source]
+            if not values:continue
+            self.content.pack_start(label(name.upper(),'stage-library-source'),False,False,8)
+            table=RecordList();self.content.pack_start(table,False,False,0);self.favorite_tables.append((source,table))
+            for index,item in enumerate(values[:self.favorite_limit]):
+                row=RecordRow(item,index,source,self.artwork,
+                    lambda value=item,context=tuple(values):self.service.favorites.play(value,context),None,
+                    [('list-remove-symbolic',text('Remove from favourites','Удалить из избранного'),
+                      lambda value=item:self.service.favorites.set(value,False),item['uri'] not in self.service.favorites.pending)])
+                table.append(row);self.song_buttons.append((row.play_button,row.action_buttons[0],item))
+        if any(sum(v['source']==source for v in self.items)>self.favorite_limit for source in NAMES):
+            def more():self.favorite_limit+=200;self.render_favorites()
+            self.content.pack_start(button(text('Show more favourites','Показать ещё избранное'),more),False,False,8)
+        if not self.items:
+            self.content.pack_start(label('♡','stage-queue-empty'),False,False,25)
+            self.content.pack_start(label(text('A place for the songs you love.','Здесь будет музыка, которую хочется сохранить.'),'stage-library-title',65),False,False,0)
+            self.content.pack_start(label(text('Tap the heart on a cover. Ember keeps your favourites from every source.',
+                'Нажми сердечко на обложке. Ember соберёт избранное из всех источников.'),'stage-library-note',85),False,False,0)
+        self.content.show_all()
+        for _source,table in self.favorite_tables:table.resize(self.list_width)
+        self.update_playback()
 
     def service_changed(self):
         if self.active and self.service.error:self.notice.set_text(self.service.error)
         if self.active:self.update_playback()
 
-    def close(self):self.deactivate();self.unsubscribe()
+    def close(self):self.deactivate();self.unsubscribe();self.unsubscribe_favorites()
 
 
 class QueueView(Gtk.Box):

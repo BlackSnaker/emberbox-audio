@@ -2,7 +2,7 @@
  * the sandboxed website. Only named music fields cross the local IPC bridge. */
 async function emberboxSpotifyCommand(request) {
  if(location.origin!=='https://open.spotify.com')throw Error('NOT_READY');
- const allowed=['status','browse','search','tracks','play','transport','seek','artist','artistSection','release'];
+ const allowed=['status','browse','search','tracks','play','transport','seek','artist','artistSection','release','favorite'];
  if(!allowed.includes(request.method))throw Error('INVALID_ARGUMENTS');
  const p=request.params||{},finite=n=>Number.isFinite(Number(n))?Math.max(0,Number(n)):0;
  const clean=n=>String(n||'').trim().slice(0,300);
@@ -72,6 +72,16 @@ async function emberboxSpotifyCommand(request) {
   canSeek:!!id&&duration>0,ended:!!media?.ended,capabilities:{player:!!player,metadata:!!(title||meta)},emberFlow:false,emberBeatSync:false};
  if(request.method==='status')return status;
  if(!authorized)throw Error('SIGN_IN_REQUIRED');
+ if(request.method==='favorite') {
+  if(!id||p.uri!=='spotify:track:'+id||typeof p.value!=='boolean')throw Error('INVALID_ARGUMENTS');
+  const find=()=>document.querySelector('[data-testid="now-playing-widget"] button[data-testid="add-button"], [data-testid="now-playing-widget"] button[data-testid="control-button-heart"], footer button[data-testid="add-button"]');
+  return emberboxSetFavorite(find,p.value,async()=>{
+   const current=identifier(link(document.querySelector('[data-testid="now-playing-widget"],footer'),'track')?.getAttribute('href'),'track');
+   let fresh;try{fresh=await player?.getState?.();}catch{}
+   const actual=identifier(fresh?.item?.uri||fresh?.track?.uri,'track');
+   return (!current||current===id)&&(!actual||actual===id)&&!!(current||actual);
+  });
+ }
  const wait=async work=>{for(let n=0;n<70;n++){const v=await work();if(v)return v;await new Promise(resolve=>setTimeout(resolve,150));}throw Error('NOT_READY');};
  function routeValid(route){return typeof route==='string'&&route.length<1200&&/^\/(?:$|collection\/(tracks|albums|playlists)$|(track|album|playlist)\/[A-Za-z0-9]{1,64}$|artist\/[A-Za-z0-9]{1,64}(\/discography\/(all|album|single|compilation))?$|search\/[^/]{1,800}$)/.test(route);}
  async function navigate(route){

@@ -43,6 +43,7 @@ from account_panel import AccountPanel
 from ember_mpris import EmberMpris
 from frame_health import FrameHealth
 from playback_notice import PlaybackNotice, playback_notice, CSS as NOTICE_CSS
+from favorite_button import FavoriteButton,CSS as FAVORITE_CSS
 from fullscreen import FullscreenPlayer
 from artist_catalog import album_ref
 from desktop_launch import launch as launch_desktop
@@ -201,7 +202,7 @@ def stamp(microseconds):
 class Widget:
     def __init__(self):
         provider = Gtk.CssProvider()
-        provider.load_from_data(CSS+QUALITY_CSS+FLOW_CSS+NOTICE_CSS)
+        provider.load_from_data(CSS+QUALITY_CSS+FLOW_CSS+NOTICE_CSS+FAVORITE_CSS)
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -391,7 +392,10 @@ class Widget:
         self.compact_settings.set_margin_end(2)
         self.compact_settings.set_margin_bottom(2)
         cover_overlay.add_overlay(self.compact_settings)
-        body.pack_start(cover_overlay, False, False, 0)
+        self.cover_column=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=2)
+        self.cover_column.set_valign(Gtk.Align.CENTER)
+        self.cover_column.pack_start(cover_overlay,False,False,0)
+        body.pack_start(self.cover_column, False, False, 0)
 
         details = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.details = details
@@ -523,6 +527,10 @@ class Widget:
         self.music=MusicService(self)
         self.flow_control=FlowControl(self.music.flow)
         self.time_row.pack_start(self.flow_control,False,False,0)
+        self.favorite=FavoriteButton(self.music.favorites,34)
+        self.favorite.set_halign(Gtk.Align.START);self.favorite.set_valign(Gtk.Align.CENTER)
+        self.favorite.set_margin_start(4)
+        self.cover_column.pack_start(self.favorite,False,False,0)
         self.settings.flow=self.music.flow
         neon_caption.set_no_show_all(True);neon_caption.hide()
         self.music_message='';self.music.subscribe(self.on_music_changed)
@@ -734,6 +742,7 @@ class Widget:
         self.transport.set_spacing(8 if self.compact else 7)
         self.mute_toggle.set_compact(self.compact)
         self.volume_knob.set_compact(self.compact)
+        self.favorite.set_size(28 if self.compact else 34)
         for child in (self.header, self.title, self.artist, self.album_row,
                       self.progress_event, self.time_row, self.open, self.discovery_button):
             child.set_visible(not self.compact)

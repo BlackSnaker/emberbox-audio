@@ -77,6 +77,14 @@ The result is **physically inspired**, rather than an exact simulation of gas-di
 
 ## Interaction stays quiet
 
+The favourite heart sits below artwork on the left, in a recessed glass
+seat with a fine rim. Its 820 ms amber fill, small breathing movement and fading
+light ring keep button geometry fixed. Sprites warm in the background and are
+reused; settled hearts have no animation timer. A different track immediately
+shows its own state without inheriting the last movement. Hidden controls and
+reduced motion settle immediately. Brief click feedback distinguishes local
+saving from account confirmation, without hover captions.
+
 A small recessed capsule at the **top right** shows initial loading stages in
 desktop and Mini. Once ready, it stays hidden until the next application launch,
 including through track changes and reopening the window.

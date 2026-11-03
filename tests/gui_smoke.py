@@ -177,12 +177,15 @@ try:
     app.on_sessions([spotify,browser]);assert app.album_button.get_sensitive()
     # The desktop and Mini cover must follow confirmed playback without any
     # extra transport command or shift of neighbouring controls.
+    app.expanded=False;app.apply_layout();settle(.4)
     from gi.repository import GdkPixbuf
     art=GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB,True,8,112,112);art.fill(0x71875aff)
     spotify.properties['Metadata']['mpris:artUrl']='fixture:pause-cover'
     app.on_sessions([spotify,browser]);app.cover.set_from_pixbuf(art);app.sync_cover_pause()
     settle(.2)
     original_size=tuple(app.window.get_size());original_calls=list(app.monitor.calls)
+    cover_y=app.cover.translate_coordinates(app.window,0,0)[1]
+    assert app.favorite.translate_coordinates(app.window,0,0)[1]>=cover_y+app.cover.get_allocated_height(),'Favourite button must sit below the photograph'
     spotify.properties['PlaybackStatus']='Paused';app.on_sessions([spotify,browser]);settle(.2)
     assert app.cover_pause.tick and app.cover_pause.target==1 and 0<app.cover_pause.depth<1
     assert tuple(app.window.get_size())==original_size,(original_size,tuple(app.window.get_size()))

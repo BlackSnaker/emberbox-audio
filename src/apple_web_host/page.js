@@ -84,6 +84,36 @@ async function emberboxAppleCommand(request) {
   const offset = Math.max(0, Math.min(100000, Number(params.offset) || 0));
   const safeId = /^[\w.-]{1,200}$/;
 
+  if(request.method==='favorite') {
+    if(!['songs','library-songs'].includes(kind)||!safeId.test(id)||typeof params.value!=='boolean'||typeof music.api.music!=='function')throw Error('INVALID_ARGUMENTS');
+    const ratingPath='/v1/me/ratings/'+kind+'/'+encodeURIComponent(id);
+    const rating=async()=>{
+      let response;
+      try{response=await music.api.music(ratingPath);}
+      catch(error){
+        if(Number(error.status||error.statusCode||error.errors?.[0]?.status||error.data?.errors?.[0]?.status)===404)return false;
+        throw error;
+      }
+      const errors=response?.data?.errors||response?.errors||[];
+      if(errors.length){if(errors.every(error=>Number(error.status)===404))return false;throw Error('FAVORITE_NOT_CONFIRMED');}
+      return (response?.data?.data||response?.data||[])[0]?.attributes?.value===1;
+    };
+    const before=await rating();
+    if(before===params.value)return {favorite:before,confirmed:true};
+    if(params.value) {
+      // Apple's favourites endpoint adds the song to Favorite Songs; a normal
+      // library addition is not a favourite. MusicKit keeps credentials here.
+      await music.api.music('/v1/me/favorites',{['ids['+kind+']']:[id]},{fetchOptions:{method:'POST'}});
+    } else {
+      await music.api.music(ratingPath,{}, {fetchOptions:{method:'DELETE'}});
+    }
+    for(let n=0;n<4;n++) {
+      if(await rating()===params.value)return {favorite:params.value,confirmed:true};
+      await new Promise(resolve=>setTimeout(resolve,200));
+    }
+    throw Error('FAVORITE_NOT_CONFIRMED');
+  }
+
   function publicUrl(value) {
     try { const u=new URL(value);return u.protocol==='https:'&&u.hostname==='music.apple.com'&&!u.username&&!u.password
       ? u.origin+u.pathname : ''; } catch { return ''; }

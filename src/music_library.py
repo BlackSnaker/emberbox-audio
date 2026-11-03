@@ -133,6 +133,8 @@ class MusicService:
         self.youtube=Search(self._youtube_results);self.youtube_done=None
         from ember_flow import EmberFlow
         self.flow=EmberFlow(self,self.book.path.with_name('ember-flow.json'))
+        from favorites import Favorites
+        self.favorites=Favorites(self,self.book.path.with_name('favorites.json'))
         self.timer=GLib.timeout_add(250,self.poll)
 
     def subscribe(self,callback):
@@ -354,6 +356,7 @@ class MusicService:
         self.stop();self.cancel_browse();self.source=self.host.source
 
     def poll(self):
+        self.favorites.refresh()
         if self.closed:return False
         if self.source!=self.host.source:self.source_changed()
         source=self.host.source
@@ -384,6 +387,6 @@ class MusicService:
         return True
 
     def close(self):
-        self.cancel_prime();self.closed=True;self.flow.close();self.play_generation+=1;self.cancel_browse()
+        self.cancel_prime();self.closed=True;self.flow.close();self.favorites.close();self.play_generation+=1;self.cancel_browse()
         GLib.source_remove(self.timer);self.youtube.close();self.listeners.clear()
         self.browse_pool.shutdown(wait=False,cancel_futures=True);self.play_pool.shutdown(wait=False,cancel_futures=True)

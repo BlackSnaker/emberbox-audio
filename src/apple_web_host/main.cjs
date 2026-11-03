@@ -11,15 +11,15 @@ const {FlowDecks}=require('./flow.cjs');let flow=null;
 const {SpatialPlayback}=require('./spatial.cjs');let spatial=null;
 const yandex = process.env.EMBERBOX_WEB_SERVICE === 'yandex';
 const spotify = process.env.EMBERBOX_WEB_SERVICE === 'spotify';
-const integrationVersion = yandex?6:spotify?1:24;
+const integrationVersion = yandex?7:spotify?2:26;
 const service = yandex ? {title:'Yandex Music',origin:'https://music.yandex.ru/',
   url:'https://music.yandex.ru/',command:'emberboxYandexCommand',page:'yandex.js',error:'YANDEX_REQUEST_FAILED'} :
   spotify ? {title:'Spotify',origin:'https://open.spotify.com/',url:'https://open.spotify.com/',
     command:'emberboxSpotifyCommand',page:'spotify.js',error:'SPOTIFY_REQUEST_FAILED'} :
   {title:'Apple Music',origin:'https://music.apple.com/',url:'https://music.apple.com/us/new',
    command:'emberboxAppleCommand',page:'page.js',error:'APPLE_REQUEST_FAILED'};
-const methods = ['status','browse','tracks','search','play','transport','seek','artist','artistSection','release',...(yandex?['wave','feedback']:[])];
-const pageCommand = fs.readFileSync(path.join(__dirname,service.page),'utf8');
+const methods = ['status','browse','tracks','search','play','transport','seek','artist','artistSection','release','favorite',...(yandex?['wave','feedback']:[])];
+const pageCommand = fs.readFileSync(path.join(__dirname,'favorite_dom.js'),'utf8')+'\n'+fs.readFileSync(path.join(__dirname,service.page),'utf8');
 let enabled = false;
 const profile = process.env.EMBERBOX_APPLE_PROFILE;
 if (!profile) throw new Error('An independent EMBERBOX_APPLE_PROFILE is required.');
@@ -165,12 +165,12 @@ async function pageRequest(win, request, navigations=0) {
     let signInError=false;
     if(spotify&&win.webContents.getURL().startsWith('https://accounts.spotify.com/'))
       signInError=await win.webContents.executeJavaScript("/something went wrong|try again later|что-то пошло не так/i.test(document.querySelector('h1, h2, [role=alert]')?.textContent||'')");
-    return {ready:false,authorized:false,signInError,integrationVersion:spotify?1:6};
+    return {ready:false,authorized:false,signInError,integrationVersion};
   }
   const reasons=['CONTENT_EQUIVALENT','CONTENT_UNAVAILABLE','CONTENT_UNSUPPORTED','DEVICE_LIMIT','GEO_BLOCK',
     'INVALID_ARGUMENTS','MEDIA_LICENSE','MEDIA_KEY','MEDIA_PLAYBACK','NETWORK_ERROR','SUBSCRIPTION_ERROR','TypeError','ReferenceError','Error',
     'TOKEN_EXPIRED','UNAUTHORIZED_ERROR','UNSUPPORTED_ERROR','USER_INTERACTION_REQUIRED','WIDEVINE_CDM_EXPIRED',
-    'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND','REGION_UNAVAILABLE','SUBSCRIPTION_REQUIRED','ADAPTER_UNAVAILABLE','YANDEX_REQUEST_FAILED','SPOTIFY_REQUEST_FAILED','PREMIUM_REQUIRED','PLAYBACK_RESTRICTED','REGION_UNAVAILABLE','FLOW_UNAVAILABLE','FLOW_CANCELLED','FLOW_NOT_READY'];
+    'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND','REGION_UNAVAILABLE','SUBSCRIPTION_REQUIRED','ADAPTER_UNAVAILABLE','FAVORITE_NOT_CONFIRMED','YANDEX_REQUEST_FAILED','SPOTIFY_REQUEST_FAILED','PREMIUM_REQUIRED','PLAYBACK_RESTRICTED','REGION_UNAVAILABLE','FLOW_UNAVAILABLE','FLOW_CANCELLED','FLOW_NOT_READY'];
   const source='(async()=>{window.__emberboxPlaybackAllowed='+JSON.stringify(enabled)+';'+pageCommand+
     ';try{return await '+service.command+'('+JSON.stringify(request)+');}catch(e){'+
     ((yandex||spotify)?'if(e.emberboxRoute)return {__emberboxNavigate:e.emberboxRoute};':'')+
@@ -178,7 +178,7 @@ async function pageRequest(win, request, navigations=0) {
     'return {__emberboxError:'+JSON.stringify(reasons)+'.includes(code)?code:'+JSON.stringify(service.error)+','+
     'stage:["storefront","queue","start"].includes(e.emberboxStage)?e.emberboxStage:"other",'+
     'hint:hints.find(h=>String(e.message||"").includes(h))||"other"};}})()';
-  const result=await win.webContents.executeJavaScript(source,['play','transport','wave','feedback'].includes(request.method));
+  const result=await win.webContents.executeJavaScript(source,['play','transport','wave','feedback','favorite'].includes(request.method));
   if((yandex||spotify)&&result?.__emberboxNavigate) {
     const route=spotify?spotifyRoute(result.__emberboxNavigate):yandexRoute(result.__emberboxNavigate);
     if(!route||navigations>=1)throw Error('ADAPTER_UNAVAILABLE');

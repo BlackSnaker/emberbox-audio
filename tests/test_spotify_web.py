@@ -56,4 +56,20 @@ class SpotifyWebTests(unittest.TestCase):
         h=self.host();c=SpotifyClient(h.spotify_web);c.home();h.spotify_web.request.assert_called_with('browse',category='home')
         c.play('spotify:track:TRACK');h.spotify_web.request.assert_called_with('play',uri='spotify:track:TRACK')
 
+    def test_favourites_adapter_upgrade_restores_the_recording_position_and_pause(self):
+        app=SpotifyWeb.__new__(SpotifyWeb);app.closed=False;app.enabled=True;app._start_engine=Mock()
+        states=[{'ready':True,'authorized':False,'integrationVersion':2},
+                {'ready':True,'authorized':True,'integrationVersion':2}]
+        def request(method,**params):
+            if method=='status':return states.pop(0)
+            self.assertFalse(states,'Playback must wait for the signed-in engine')
+            return {}
+        app.bridge=Mock(connected=True);app.bridge.request.side_effect=request
+        with patch('spotify_web.subprocess.run') as run,patch('spotify_web.time.sleep'):
+            app._upgrade_adapter({'uri':'spotify:track:TRACK','authorized':True,'position':42,'playing':False})
+        self.assertTrue(run.call_args.args[0][-1].endswith('-spotify.service'))
+        app.bridge.request.assert_any_call('play',uri='spotify:track:TRACK')
+        app.bridge.request.assert_any_call('seek',position=42)
+        app.bridge.request.assert_any_call('transport',action='pause')
+
 if __name__=='__main__':unittest.main()

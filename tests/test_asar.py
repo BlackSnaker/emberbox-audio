@@ -17,6 +17,10 @@ class AsarDependencies(unittest.TestCase):
                 for dependency in re.findall(r"require\(['\"](\./[^'\"]+)['\"]\)",source):
                     key=str(PurePosixPath(name).parent/dependency)
                     self.assertIn(key,files,f'{name} requires missing packaged module {key}')
+                # Page helpers are injected as text rather than require()'d.
+                # They are still mandatory when running the shipped archive.
+                for dependency in re.findall(r"readFileSync\(path\.join\(__dirname,\s*['\"]([^'\"]+)['\"]\)",source):
+                    self.assertIn(dependency,files,f'{name} reads missing packaged helper {dependency}')
 
 
 if __name__=='__main__':unittest.main()

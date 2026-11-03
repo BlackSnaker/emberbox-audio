@@ -258,6 +258,14 @@ Dark olive-charcoal surfaces, warm cream type, amber light behind glass, a smoot
 | Mute | Metal toggle; the volume setting is retained |
 | Seek | Click the progress bar |
 | Browse collections | **For you** for Spotify; **Your library** for Apple Music |
+| Favourites | Heart below the cover on the left; **Collection → Favourites** brings every source together |
+
+The glass heart warms to amber when a song is saved. Ember keeps a private local
+copy and also requests the connected Apple Music, Spotify or Yandex Music account
+to save it. Feedback distinguishes account confirmation from a local-only save;
+an unconfirmed request can be retried. YouTube without sign-in and browser/desktop
+fallback modes keep favourites in Ember. Removing a favourite also requests removal
+from the connected account. Choosing a saved song switches to its source.
 
 ## Early release notes
 

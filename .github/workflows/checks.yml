@@ -78,6 +78,7 @@ jobs:
       - name: Apple and Yandex Music adapters
         run: |
           node tests/spotify_web_test.js
+          node tests/favorites_web_test.js
           node tests/apple_web_test.js
           node tests/apple_browser_test.js
           node tests/yandex_web_test.js
@@ -94,6 +95,8 @@ jobs:
           GDK_BACKEND=x11 LANGUAGE=ru dbus-run-session -- xvfb-run -a -s '-screen 0 1024x600x24' /usr/bin/python3 tests/headphone_smoke.py
       - name: GTK layout and controls
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/gui_smoke.py
+      - name: Favourites and finite heart motion
+        run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/favorites_smoke.py
       - name: Fullscreen listening room
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/fullscreen_smoke.py
       - name: Liquid cover transitions and playback readiness

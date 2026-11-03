@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.23.0 — 2026-11-03
+
+- Added a recessed glass heart below artwork on the left in desktop, Mini and fullscreen. Amber fill, a fading light ring and a small breathing movement follow GTK's frame clock. The finite animation respects reduced motion and stops when hidden; sprites warm in the background.
+- Collection → Favourites combines locally saved songs from every source, switches sources for playback and supports removal. Local persistence precedes account sync and uses atomic writes with 0600 permissions.
+- Added verified favourite requests for connected Apple Music, Spotify and Yandex Music. Exact-track guards and idempotent state checks avoid toggling an existing like or acting on a replacement song. Failed or changed site integrations retain the local save with separate feedback and retry. Signed-out YouTube and fallback modes use local favourites.
+- Updated the relevant source adapters while retaining sign-in and restoring playback. Added persistence, network failure, track-change, cross-source collection, finite-motion and injected-JS archive dependency checks.
+
 ## 0.22.8 — 2026-11-01
 
 - Show the top-right status only during initial player loading. Once ready, it stays hidden through track changes, seeking, reconnecting and reopening the window. Desktop and Mini share startup completion; starting a new application process enables initial feedback again.

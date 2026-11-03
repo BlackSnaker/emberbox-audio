@@ -26,6 +26,7 @@ from dj_view import DJView,CSS as DJ_CSS
 from flow_control import FlowControl,CSS as FLOW_CSS
 from cover_change import CoverChange
 from cover_pause import CoverPause
+from favorite_button import FavoriteButton,CSS as FAVORITE_CSS
 
 
 CSS = b'''
@@ -172,7 +173,7 @@ class FullscreenPlayer:
         self.window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self.window.connect('delete-event',lambda *_args:(self.dismiss(),True)[1])
         self.window.connect('key-press-event',self.on_key)
-        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS+KARAOKE_CSS+ARTIST_CSS+DJ_CSS+FLOW_CSS)
+        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS+KARAOKE_CSS+ARTIST_CSS+DJ_CSS+FLOW_CSS+FAVORITE_CSS)
         Gtk.StyleContext.add_provider_for_screen(self.window.get_screen(),provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+5)
         self.provider=provider
         overlay=Gtk.Overlay();overlay.add(Gtk.Box());self.window.add(overlay)
@@ -229,6 +230,10 @@ class FullscreenPlayer:
         art_layers.add_overlay(self.cover_pause);art_layers.set_overlay_pass_through(self.cover_pause,True)
         self.cover_change=CoverChange(self,art_layers)
         self.left.pack_start(art_shell,False,False,0)
+        self.favorite=FavoriteButton(self.music.favorites,40)
+        self.favorite.set_halign(Gtk.Align.START);self.favorite.set_valign(Gtk.Align.CENTER)
+        self.favorite.set_margin_start(9)
+        self.left.pack_start(self.favorite,False,False,0)
         self.title=label('','stage-track-title',True);self.title.set_lines(2);self.title.set_ellipsize(Pango.EllipsizeMode.END)
         self.left.pack_start(self.title,False,False,0)
         self.artist=label('','stage-artist');self.artist.set_ellipsize(Pango.EllipsizeMode.END)
