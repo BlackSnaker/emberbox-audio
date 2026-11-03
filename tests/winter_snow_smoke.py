@@ -49,6 +49,8 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected fixtu
         assert restored.christmas and restored.snow_enabled
         restored.close()
         commands=list(host.calls);size=stage.window.get_size()
+        # An unrelated damage clip must not invoke any snow masks.
+
         snow.begin();settle(.1)
         assert snow.painter and not snow.failed,'Existing Cairo drawing must be available without Pycairo or OpenGL'
         assert snow.active and snow.tick and snow.area.get_mapped()
@@ -68,6 +70,14 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected fixtu
             p=Path(target);p.parent.mkdir(exist_ok=True,parents=True);w,h=stage.window.get_size()
             Gdk.pixbuf_get_from_window(stage.window.get_window(),0,0,w,h).savev(str(p),'png',[],[])
         assert snow.painter.draws>0,'Cairo must paint the live snow layer'
+        from cover_pause_paint import bindings
+        c,_,_=bindings();output=c.cairo_image_surface_create(0,32,32);cr=c.cairo_create(output)
+        try:
+            original=snow.dots;snow.dots=[(1000.,1000.,2.,.5,2.)]
+            paints=snow.painter.draws;snow.painter.draw(None,cr,None)
+            assert snow.painter.draws==paints,'Snow outside GTK damage must not be drawn'
+            snow.dots=original
+        finally:c.cairo_destroy(cr);c.cairo_surface_destroy(output)
         assert snow.damage_pixels<size.width*size.height*.03,'Invalidate tiny footprints rather than a fullscreen surface'
         # Keep measuring the normal advancing path, not just its tiny painter.
         snow.model.start(*size);snow.start_time=stage.window.get_frame_clock().get_frame_time()/1e6-8.

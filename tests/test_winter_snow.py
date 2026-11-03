@@ -88,6 +88,29 @@ class SnowTests(unittest.TestCase):
 
 
 
+class SnowClockTests(unittest.TestCase):
+    def test_high_refresh_displays_only_advance_snow_at_sixty_hz(self):
+        from winter_snow_model import SnowClock
+        for rate in (60,120,144,165,240):
+            clock=SnowClock();times=[i/rate for i in range(rate*3)]
+            updates=sum(clock.due(t) for t in times)
+            self.assertLessEqual(abs(updates-180),1,(rate,updates))
+
+    def test_clock_jitter_does_not_halve_sixty_hz_animation(self):
+        from winter_snow_model import SnowClock
+        clock=SnowClock()
+        times=[i/60+(.0007 if i%2 else -.0007) for i in range(120)]
+        self.assertGreaterEqual(sum(clock.due(t) for t in times),119)
+        self.assertFalse(clock.due(times[-1]))
+
+    def test_resume_and_slower_displays_do_not_replay_frames(self):
+        from winter_snow_model import SnowClock
+        clock=SnowClock();self.assertTrue(clock.due(100.))
+        self.assertTrue(clock.due(1000.));self.assertFalse(clock.due(1000.))
+        self.assertTrue(clock.due(10.))
+        clock.reset();self.assertEqual(sum(clock.due(i/30) for i in range(60)),60)
+
+
 class SnowDamageTests(unittest.TestCase):
     def test_only_moving_footprints_are_invalidated(self):
         from types import SimpleNamespace
@@ -98,7 +121,7 @@ class SnowDamageTests(unittest.TestCase):
         snow=SimpleNamespace(area=area)
         still=(100.,100.,-4.,.5,1.);old=(900.,400.,2.,.5,2.);new=(901.,401.,2.,.5,2.)
         WinterSnow.invalidate(snow,[still,old],[still,new])
-        self.assertEqual(len(calls),2,'Static caps must not be repainted each frame')
+        self.assertEqual(len(calls),1,'Overlapping footprints must share one small damage request')
         self.assertLess(snow.damage_pixels,200,'Snow must never invalidate a fullscreen GL surface')
         calls.clear();WinterSnow.invalidate(snow,[still,new],[still,new])
         self.assertFalse(calls);self.assertEqual(snow.damage_pixels,0)

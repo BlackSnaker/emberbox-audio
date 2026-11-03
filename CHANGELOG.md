@@ -2,6 +2,14 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.24.4 — 2026-11-03
+
+- Pace snow with the display frame clock at a 60Hz target. Displays running at 120/144/165/240Hz no longer multiply snow calculations and damage requests; missed frames are not replayed.
+- Retain static CSS materials and neumorphic shadows in bounded caches while children stay live. Style/size changes invalidate these caches.
+- Cache mask geometry and colours between updates, skip snow outside GTK’s current damage clip and merge overlapping old/new footprints into one repaint request.
+- Suspend the desktop widget’s snow and visual loop behind fullscreen playback, then resume them on exit.
+- Check pacing across display rates and timestamp jitter. Private diagnostic counters distinguish snow updates from painted updates.
+
 ## 0.24.3 — 2026-11-03
 
 - Emit small snow waves about every 6–8 seconds while older flakes continue thawing. Replace the previous 52–88-second pause after complete thaw with a short interval.

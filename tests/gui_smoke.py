@@ -116,6 +116,10 @@ try:
     # Seasonal decoration must never alter card geometry or steal controls.
     initial_size=app.window.get_size();app.settings.theme_switch.set_active(True);settle(1.5)
     assert app.appearance.christmas and app.winter_surface.top.get_mapped()
+    app.settings.snow_switch.set_active(True);settle(.25)
+    assert app.winter_surface.snow.materials
+    assert any(cache.surface is not None for cache in app.winter_surface.snow.materials),'Live widget materials must be cached while snow is enabled'
+    assert not any(cache.failed for cache in app.winter_surface.snow.materials)
     assert not app.winter_surface.tick,'Holiday entrance must stop repainting when settled'
     assert app.window.get_size().width==initial_size.width
     assert app.window.get_size().height<=initial_size.height+32

@@ -3,6 +3,8 @@ import json
 import os
 from pathlib import Path
 import time
+import gi
+gi.require_version('Gtk','3.0');gi.require_version('Gdk','3.0')
 from gi.repository import Gdk,GLib,Gtk
 from paths import APP_ID,CACHE_DIR
 
@@ -14,6 +16,7 @@ class FrameHealth:
         self.frames = self.paints = self.recoveries = 0
         self.obscured = False
         self.closed = False
+        self.suspended = False
         self.tick = window.add_tick_callback(self._tick)
         window.add_events(Gdk.EventMask.VISIBILITY_NOTIFY_MASK)
         window.connect('visibility-notify-event',self._visibility)
@@ -24,6 +27,7 @@ class FrameHealth:
         self.timer = GLib.timeout_add(1000,self.check)
 
     def _tick(self,window,clock):
+        if self.closed or self.suspended:return False
         self.last_frame = time.monotonic()
         self.frames += 1
         return self.animate(window,clock)
@@ -36,8 +40,19 @@ class FrameHealth:
         self.obscured = event.state == Gdk.VisibilityState.FULLY_OBSCURED
         return False
 
+    def set_suspended(self,suspended):
+        if self.closed:return
+        suspended=bool(suspended)
+        if suspended==self.suspended:return
+        self.suspended=suspended
+        if self.tick:self.window.remove_tick_callback(self.tick);self.tick=0
+        if not suspended:
+            self.last_frame=time.monotonic()
+            self.tick=self.window.add_tick_callback(self._tick)
+            self.request_frame()
+
     def request_frame(self):
-        if self.closed or not self.window.get_mapped():
+        if self.closed or self.suspended or not self.window.get_mapped():
             return
         self.window.queue_resize_no_redraw()
         self.window.queue_draw()
@@ -53,7 +68,7 @@ class FrameHealth:
             return False
         age = time.monotonic()-self.last_frame
         mapped = self.window.get_mapped()
-        if mapped and not self.obscured and age>1.5:
+        if mapped and not self.obscured and not self.suspended and age>1.5:
             if self.tick:
                 self.window.remove_tick_callback(self.tick)
             self.tick = self.window.add_tick_callback(self._tick)
@@ -61,8 +76,12 @@ class FrameHealth:
             self.recoveries += 1
         # Only counters and window health; no titles, account or music data.
         value = {'frames':self.frames,'paints':self.paints,'frameAgeMs':round(age*1000),
-                 'mapped':mapped,'obscured':self.obscured,'recoveries':self.recoveries,
+                 'mapped':mapped,'obscured':self.obscured,'suspended':self.suspended,'recoveries':self.recoveries,
                  'inputGrab':Gtk.grab_get_current() is not None}
+        owner=getattr(self.animate,'__self__',None)
+        stage=getattr(owner,'fullscreen',None)
+        surface=getattr(stage if stage and stage.visible else owner,'winter_surface',None)
+        if surface:value['snow']=surface.snow.metrics()
         try:
             temporary = self.path.with_suffix('.next.json')
             temporary.write_text(json.dumps(value))
@@ -77,6 +96,6 @@ class FrameHealth:
         self.closed = True
         GLib.source_remove(self.timer)
         if self.tick:
-            self.window.remove_tick_callback(self.tick)
+            if self.tick:self.window.remove_tick_callback(self.tick);self.tick=0
         if self.clock.handler_is_connected(self.paint_handler):
             self.clock.disconnect(self.paint_handler)

@@ -442,6 +442,7 @@ class FullscreenPlayer:
         self.show_page('playing',force=True)
         self.cover_change.reset()
         self.visible=True
+        self.suspend_desktop_visuals(True)
         self.current_line=-2;self.last_position=None;self.frame_time=None;self.manual_until=0.
         display=self.host.window.get_display()
         native=self.host.window.get_window()
@@ -477,6 +478,11 @@ class FullscreenPlayer:
             self.show_page('dj');self.dj_view.entry.grab_focus();return False
         GLib.timeout_add(40,select)
 
+    def suspend_desktop_visuals(self,suspended):
+        surface=getattr(self.host,'winter_surface',None)
+        for component in (getattr(self.host,'frame_health',None),getattr(surface,'snow',None)):
+            if component:component.set_suspended(suspended)
+
     def hide(self):
         if getattr(self.host,'settings',None):self.host.settings.dismiss_for(self.window)
         self.cover_change.reset()
@@ -484,6 +490,7 @@ class FullscreenPlayer:
         self.reveal.finish()
         self.dismiss_pending=False
         self.visible=False
+        self.suspend_desktop_visuals(False)
         self.library_view.deactivate();self.queue_view.deactivate();self.artist_view.deactivate()
         self.karaoke.deactivate();self.dj_view.deactivate()
         self.track=None

@@ -6,14 +6,16 @@ import gi
 gi.require_version('Gtk','3.0')
 gi.require_version('Gdk','3.0')
 from gi.repository import Gdk,Gtk,GLib
-from winter_snow_model import SnowShower
+from winter_snow_model import SnowShower,SnowClock
 
 
 class WinterSnow:
     def __init__(self,window,overlay,stage=False):
         self.window,self.overlay,self.stage=window,overlay,stage
-        self.closed=self.enabled=self.failed=self.obscured=False
+        self.closed=self.enabled=self.failed=self.obscured=self.suspended=False
         self.painter=None;self.timer=self.tick=0;self.start_time=None;self.active=False
+        self.materials=[]
+        self.pacing=SnowClock();self.frame_callbacks=0;self.updates=0
         self.model=SnowShower();self.random=random.Random();self.dots=[];self.targets=lambda:[]
         self.shelves=[];self.geometry_at=0.;self.geometry_size=None;self.damage_pixels=0
         self.area=Gtk.DrawingArea();self.area.set_has_window(False);self.area.set_app_paintable(True)
@@ -27,16 +29,36 @@ class WinterSnow:
         settings=window.get_settings()
         self.signals.append((settings,settings.connect('notify::gtk-enable-animations',self.animations_changed)))
 
-    def set_targets(self,getter):self.targets=getter;self.geometry_at=0.
+    def set_targets(self,getter):
+        self.targets=getter;self.geometry_at=0.
+        from winter_surface_cache import MaterialCache
+        seen={cache.widget for cache in self.materials}
+        for target in getter():
+            node=target
+            while node and node is not self.window:
+                if isinstance(node,Gtk.Box) and node not in seen and any(node.get_style_context().has_class(c) for c in
+                        ('card','cover-surface','lamp-well','stage-art-shell','stage-console')):
+                    self.materials.append(MaterialCache(node,self));seen.add(node)
+                node=node.get_parent()
 
     def eligible(self):
-        return bool(not self.closed and self.enabled and not self.failed and not self.obscured
+        return bool(not self.closed and self.enabled and not self.failed and not self.obscured and not self.suspended
                     and self.overlay.get_mapped() and self.window.get_mapped()
                     and self.window.get_settings().get_property('gtk-enable-animations'))
 
     def set_enabled(self,enabled):
         self.enabled=bool(enabled);self.pause()
+        if not self.enabled:
+            for cache in self.materials:cache.clear()
         if self.enabled:self.schedule(first=True)
+
+    def set_suspended(self,suspended):
+        suspended=bool(suspended)
+        if suspended==self.suspended:return
+        self.suspended=suspended;self.pause()
+        if suspended:
+            for cache in self.materials:cache.clear()
+        if not suspended:self.schedule(first=True)
 
     def schedule(self,first=False):
         if not self.eligible() or self.timer or self.active:return
@@ -68,6 +90,7 @@ class WinterSnow:
         if not self.painter:self.area.hide();return False
         w,h=self.overlay.get_allocated_width(),self.overlay.get_allocated_height()
         self.model.start(max(1,w),max(1,h),frequent=True);self.start_time=None;self.active=True
+        self.pacing.reset()
         self.geometry_at=0.;self.geometry_size=None;self.dots=[]
         if not self.tick:self.tick=self.area.add_tick_callback(self.advance)
         return False
@@ -91,8 +114,11 @@ class WinterSnow:
         self.shelves=shelves;return True
 
     def advance(self,_area,clock):
+        if self.closed or not self.active:return False
+        now=clock.get_frame_time()/1e6;self.frame_callbacks+=1
+        if not self.pacing.due(now):return True
         if not self.eligible():self.pause();return False
-        now=clock.get_frame_time()/1e6
+        self.updates+=1
         if self.start_time is None:self.start_time=now
         if not self.geometry(now):return False
         previous=self.dots
@@ -112,17 +138,34 @@ class WinterSnow:
             if before==after:continue
             if before is not None:dirty.append(before)
             if after is not None:dirty.append(after)
-        for x,y,radius,_alpha,h in dirty:
-            left=max(0,math.floor(x-abs(radius)-2));top=max(0,math.floor(y-h-2))
-            right=min(width,math.ceil(x+abs(radius)+2));bottom=min(height,math.ceil(y+h+2))
-            if right>left and bottom>top:
+        # Adjacent old/new footprints overlap at normal motion speeds. Union
+        # each pair before entering GDK instead of sending duplicate damage.
+        for index in range(0,len(dirty),2):
+            rectangles=[]
+            for x,y,radius,_alpha,h in dirty[index:index+2]:
+                left=max(0,math.floor(x-abs(radius)-2));top=max(0,math.floor(y-h-2))
+                right=min(width,math.ceil(x+abs(radius)+2));bottom=min(height,math.ceil(y+h+2))
+                if right>left and bottom>top:rectangles.append((left,top,right,bottom))
+            if len(rectangles)==2:
+                a,b=rectangles
+                if a[0]<=b[2] and b[0]<=a[2] and a[1]<=b[3] and b[1]<=a[3]:
+                    rectangles=[(min(a[0],b[0]),min(a[1],b[1]),max(a[2],b[2]),max(a[3],b[3]))]
+            for left,top,right,bottom in rectangles:
                 self.area.queue_draw_area(left,top,right-left,bottom-top)
                 self.damage_pixels+=(right-left)*(bottom-top)
+
+    def metrics(self):
+        return {'active':self.active,'fullscreen':self.stage,'callbacks':self.frame_callbacks,'updates':self.updates,
+                'draws':self.painter.draws if self.painter else 0,
+                'paintedUpdates':self.painter.presentations if self.painter else 0,
+                'damagePixels':self.damage_pixels,'materials':len(self.materials),
+                'materialBuilds':sum(cache.builds for cache in self.materials),
+                'materialFallbacks':sum(cache.failed for cache in self.materials)}
 
     def pause(self):
         if self.timer:GLib.source_remove(self.timer);self.timer=0
         if self.tick:self.area.remove_tick_callback(self.tick);self.tick=0
-        self.active=False;self.start_time=None;self.dots=[];self.model.clear();self.area.hide()
+        self.active=False;self.start_time=None;self.dots=[];self.model.clear();self.pacing.reset();self.area.hide()
 
     def close(self):
         if self.closed:return
@@ -130,5 +173,7 @@ class WinterSnow:
         for obj,signal in self.signals:
             if obj.handler_is_connected(signal):obj.disconnect(signal)
         self.signals=[]
+        for cache in self.materials:cache.close()
+        self.materials=[]
         if self.painter:self.painter.close();self.painter=None
         self.area.destroy()

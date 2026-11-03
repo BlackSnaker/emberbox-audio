@@ -10,6 +10,25 @@ def smooth(value):
     value=max(0.,min(1.,value));return value*value*value*(value*(value*6.-15.)+10.)
 
 
+class SnowClock:
+    """At most 60 display-aligned updates, never replay missed frames."""
+    FPS=60
+
+    def __init__(self):self.reset()
+
+    def reset(self):self.epoch=None;self.slot=-1;self.seen=None
+
+    def due(self,now):
+        if self.epoch is None or self.seen is not None and (now<self.seen or now-self.seen>1.):
+            self.epoch=now;self.slot=-1
+        self.seen=now
+        # Round to the nearest presentation slot. Tiny timestamp jitter at
+        # 60Hz must not accidentally drop every other frame at a boundary.
+        slot=math.floor((now-self.epoch)*self.FPS+.5)
+        if slot<=self.slot:return False
+        self.slot=slot;return True
+
+
 @dataclass
 class Flake:
     born:float
