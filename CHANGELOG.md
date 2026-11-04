@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.25.0 — 2026-11-04
+
+- Give artist stories and album liner notes a warm editorial reader with a comfortable line width, selectable text, source attribution and a gentle focus movement.
+- Add on-demand Russian translation through Google Translate, an original/translation switch, an amber preparation indicator and finite crossfades with stable text geometry.
+- Keep translation independent of playback: one bounded worker, duplicate-request sharing, exact-text local caching and stale-reader guards. Network errors and incomplete translations preserve the original with a retry action.
+- Document the public web-service dependency, automatic-translation limitations and text-only network disclosure. Add offline translation/GTK integration checks in both interface languages.
+
 ## 0.24.4 — 2026-11-03
 
 - Pace snow with the display frame clock at a 60Hz target. Displays running at 120/144/165/240Hz no longer multiply snow calculations and damage requests; missed frames are not replayed.

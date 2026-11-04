@@ -161,6 +161,16 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         assert any('Original demonstration biography.' in value for value in f.labels(view))
         assert not plays
         shot(stage,'artist-about')
+        translations=[]
+        def translate(value,alive):
+            translations.append(value);return 'История демонстрационного артиста.'
+        view.translator.translate=translate
+        reader=view.reader
+        assert reader and reader.original_label.get_selectable()
+        reader.translate_button.clicked();wait(lambda:reader.result is not None)
+        assert reader.pages.get_visible_child_name()=='russian'
+        reader.translate_button.clicked();assert reader.original_label.get_text()==profile['bio']
+        assert len(translations)==1 and not plays,'Reading or translating must never change playback'
         view.filters['albums'].clicked();wait(lambda:len(view.album_buttons)==6)
         assert calls[-1][2]['section']=='albums'
         view.album_buttons[0][0].clicked();wait(lambda:len(view.song_buttons)==5)
@@ -168,6 +178,10 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         assert not view.song_buttons[2][1].get_sensitive()
         view.read_button.clicked();f.settle(.4)
         assert any('Original demonstration liner notes.' in value for value in f.labels(view))
+        assert view.reader and view.reader is not reader and reader.closed
+        view.reader.translate_button.clicked();wait(lambda:view.reader.result is not None)
+        assert len(translations)==2 and 'Original demonstration liner notes.' in translations[1]
+        view.reader.translate_button.clicked()
         shot(stage,'artist-release')
         view.scroll.get_vadjustment().set_value(0)
         view.song_buttons[0][1].clicked();assert len(service.book.upcoming('spotify'))==1 and not plays

@@ -134,6 +134,10 @@ jobs:
         run: |
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/artist_smoke.py
           EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/artist_smoke.py
+      - name: Editorial reading, Russian translation and responsive offline failures
+        run: |
+          GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/editorial_reader_smoke.py
+          EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/editorial_reader_smoke.py
       - name: Album room, artwork and finite entrance
         run: |
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/test_album_header.py

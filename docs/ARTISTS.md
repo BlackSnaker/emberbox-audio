@@ -75,6 +75,10 @@ album catalogue, so its album label is not a link.
 Click a cover for tracks, available release date and track count. **Read the
 liner notes** softly unfolds the source's album description when supplied.
 
+Artist stories and album notes share an [editorial reader](READING.md): selectable
+prose, a Russian translation button, cached results and a reversible soft crossfade.
+Only pressing Translate contacts Google with the public description text.
+
 ![Release with original demonstration liner notes](../assets/artist-release.png)
 
 - Click a song to play from that point and continue through the loaded playable

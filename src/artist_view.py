@@ -12,6 +12,9 @@ from artist_reveal import ArtistReveal
 from album_header import AlbumHeader,CSS as ALBUM_CSS
 from album_opening import AlbumOpening
 from track_list import RecordList,RecordRow
+from editorial_reader import EditorialReader,CSS as EDITORIAL_CSS
+from editorial_translation import EditorialTranslator
+from editorial_motion import ReaderFocus
 
 CSS=b'''
 .stage-artist-hero { background-image: linear-gradient(to bottom right,rgba(76,73,49,.6),rgba(28,35,26,.55));
@@ -88,6 +91,8 @@ CSS+=ALBUM_CSS+b'''
 .album-imprint { padding: 10px 12px 0; }
 '''
 
+CSS+=EDITORIAL_CSS
+
 NAMES_SECTION={
     'overview':('Overview','Обзор'),'discography':('All releases','Все релизы'),'albums':('Albums','Альбомы'),
     'singles':('Singles & EPs','Синглы и EP'),'compilations':('Compilations','Сборники'),
@@ -118,6 +123,7 @@ class ArtistView(Gtk.Box):
         self.section='overview';self.items=[];self.sections=[];self.choices=[];self.next_offset=None
         self.cache={};self.card_size=164;self.portrait_size=184;self.busy=False;self.syncing=False
         self.banner_cache=BannerCache(artwork.pool)
+        self.translator=EditorialTranslator();self.reader=None
         self.intro_pending=False;self.render_queued=False
         self.saved_section='overview';self.note='';self.size=None
         self.catalog=ReleaseCatalog();self.card_page=0;self.card_page_size=48
@@ -141,6 +147,7 @@ class ArtistView(Gtk.Box):
         toolbar.pack_start(self.filter_bar,False,False,0)
         self.content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18)
         self.scroll=scroll(self.content);self.entrance=ArtistReveal(self.scroll,self.finish_intro)
+        self.reader_focus=ReaderFocus(self.scroll,self.content)
         self.scroll.connect('size-allocate',self.queue_overview_fit)
         self.pack_start(self.entrance,True,True,0)
         foot=self.foot=Gtk.Box(spacing=12);foot.set_no_show_all(True)
@@ -183,6 +190,7 @@ class ArtistView(Gtk.Box):
 
     def deactivate(self):
         self.cancel_intro()
+        self.reader_focus.stop()
         self.active=False;self.request+=1;self.busy=False;self.spinner.stop();self.service.cancel_browse()
 
     def cancel_intro(self):
@@ -221,6 +229,7 @@ class ArtistView(Gtk.Box):
             self.items=self.catalog_selection();self.render();self.catalog_notice();self.load_catalog();return
         if section in ('overview','about'):
             self.request+=1;self.service.cancel_browse();self.busy=False;self.spinner.stop();self.render()
+            if section=='about':self.reader_focus.begin(self.reader)
         else:self.load('artist-section',dict(self.reference,section=section))
 
     def choose(self,ref):
@@ -371,6 +380,9 @@ class ArtistView(Gtk.Box):
         self.notes_open=not self.notes_open
         if self.notes_open:self.notes_revealer.show()
         self.notes_revealer.set_reveal_child(self.notes_open)
+        if self.notes_open:
+            self.reader_focus.begin(self.reader,450 if Gtk.Settings.get_default().get_property('gtk-enable-animations') else 32)
+        else:self.reader_focus.stop()
         if self.release_hero.notes_button:
             self.release_hero.notes_button.set_label(text('About this album','Об альбоме')+('  ⌃' if self.notes_open else '  ⌄'))
 
@@ -393,9 +405,9 @@ class ArtistView(Gtk.Box):
             self.notes_revealer=Gtk.Revealer();self.notes_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
             self.notes_revealer.set_no_show_all(True)
             self.notes_revealer.set_transition_duration(420 if Gtk.Settings.get_default().get_property('gtk-enable-animations') else 0)
-            reading=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12);reading.get_style_context().add_class('album-notes')
-            reading.pack_start(label(text('INSIDE THE RECORD','ВНУТРИ АЛЬБОМА'),'stage-artist-kicker'),False,False,0)
-            reading.pack_start(paragraph(prose),False,False,0);self.notes_revealer.add(reading)
+            reading=self.reader=EditorialReader(prose,value.get('title') or text('Inside the record','Внутри альбома'),
+                NAMES[self.source],self.translator,album=True)
+            self.notes_revealer.add(reading)
             self.notes_revealer.set_reveal_child(self.notes_open);self.content.pack_start(self.notes_revealer,False,False,0)
             reading.show_all();self.notes_revealer.set_visible(self.notes_open)
             self.notes_revealer.connect('notify::child-revealed',lambda r,_p:r.hide() if not r.get_reveal_child() and not r.get_child_revealed() else None)
@@ -567,6 +579,8 @@ class ArtistView(Gtk.Box):
         if self.intro_pending and self.profile and not self.release_ref:
             self.intro_pending=False;animate=self.entrance.hold_loading()
         self.album_opening.finish();clear(self.content);clear(self.filter_bar);self.filter_bar.hide()
+        self.reader_focus.stop()
+        self.reader=None
         self.release_hero=self.release_tracks=None;self.notes_revealer=None;self.playback_key=None
         self.content.set_spacing(12 if self.release_ref else 18)
         self.song_buttons=[];self.album_buttons=[];self.choice_buttons=[];self.filters={}
@@ -592,11 +606,13 @@ class ArtistView(Gtk.Box):
                 for child in tabs.get_children():child.show_all()
                 tabs.show()
                 if self.section=='about':
-                    reading=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=14);reading.get_style_context().add_class('stage-artist-reading')
-                    reading.pack_start(label(text('Behind the music','За музыкой'),'stage-artist-section'),False,False,0)
-                    reading.pack_start(paragraph(self.profile.get('bio') or text('This source has not supplied an artist description.',
-                        'Источник пока не передал описание артиста.')),False,False,0)
-                    reading.pack_start(label(NAMES[self.source]+' · '+text('Artist editorial information','Информация об артисте'),'stage-artist-credit'),False,False,0)
+                    bio=plain(self.profile.get('bio') or '')
+                    if bio:
+                        reading=self.reader=EditorialReader(bio,self.profile.get('name') or text('Behind the music','За музыкой'),
+                            NAMES[self.source],self.translator)
+                    else:
+                        reading=paragraph(text('This source has not supplied an artist description.',
+                            'Источник пока не передал описание артиста.'))
                     self.content.pack_start(reading,False,False,0)
                 elif self.section=='overview':
                     self.overview()
@@ -737,4 +753,4 @@ class ArtistView(Gtk.Box):
 
     def close(self):
         if self.overview_fit_idle:GLib.source_remove(self.overview_fit_idle);self.overview_fit_idle=0
-        self.deactivate();self.closed=True;self.entrance.close();self.unsubscribe();self.cache.clear();self.banner_cache.clear()
+        self.deactivate();self.closed=True;self.entrance.close();self.unsubscribe();self.cache.clear();self.banner_cache.clear();self.translator.close()
