@@ -27,6 +27,12 @@ def settle(seconds=.3):
             GLib.MainContext.default().iteration(False)
         time.sleep(.01)
 
+
+def wait(predicate,message,limit=4):
+    deadline=time.monotonic()+limit
+    while not predicate() and time.monotonic()<deadline:settle(.02)
+    assert predicate(),message()
+
 class DummySound:
     def __init__(self,changed):
         self.volume=.6;self.muted=False;self.available=False;self.changed=changed
@@ -231,12 +237,24 @@ try:
     spotify.properties['PlaybackStatus']='Paused';app.on_sessions([spotify,browser]);settle(.2)
     assert app.cover_pause.tick and app.cover_pause.target==1 and 0<app.cover_pause.depth<1
     assert tuple(app.window.get_size())==original_size,(original_size,tuple(app.window.get_size()))
-    app.toggle_compact(None);settle(.6)
-    assert app.cover_pause.size==64 and app.cover_pause.depth==1 and not app.cover_pause.tick
-    app.toggle_compact(None);settle(.6)
-    assert app.cover_pause.size==112 and app.cover_pause.depth==1
-    spotify.properties['PlaybackStatus']='Playing';app.on_sessions([spotify,browser]);settle(.1)
-    assert app.cover_pause.target==0 and app.cover_pause.tick
+    def pause_state():
+        return {'compact':app.compact,'morph':app.layout_transition.active,
+                'size':app.cover_pause.size,'depth':app.cover_pause.depth,
+                'target':app.cover_pause.target,'tick':app.cover_pause.tick}
+    # Both the frame-clock morph and the pause spring can still be in flight
+    # after 600ms on a shared/software renderer. Keep checking their real end
+    # state, with a hard deadline that still catches a stuck animation.
+    app.toggle_compact(None)
+    wait(lambda:not app.layout_transition.active and app.cover_pause.size==64 and
+         app.cover_pause.depth==1 and not app.cover_pause.tick,
+         lambda:('Mini paused cover did not settle',pause_state()))
+    app.toggle_compact(None)
+    wait(lambda:not app.layout_transition.active and app.cover_pause.size==112 and
+         app.cover_pause.depth==1 and not app.cover_pause.tick,
+         lambda:('Desktop paused cover did not settle',pause_state()))
+    spotify.properties['PlaybackStatus']='Playing';app.on_sessions([spotify,browser])
+    wait(lambda:app.cover_pause.target==0 and bool(app.cover_pause.tick),
+         lambda:('Resume did not start its cover animation',pause_state()))
     assert app.monitor.calls==original_calls,'Cover animation must not dispatch playback commands'
     assert not app.album_button.get_has_tooltip()
     transport_count=len(app.monitor.calls)
