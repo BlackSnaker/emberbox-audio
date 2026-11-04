@@ -234,13 +234,20 @@ try:
     original_size=tuple(app.window.get_size());original_calls=list(app.monitor.calls)
     cover_y=app.cover.translate_coordinates(app.window,0,0)[1]
     assert app.favorite.translate_coordinates(app.window,0,0)[1]>=cover_y+app.cover.get_allocated_height(),'Favourite button must sit below the photograph'
-    spotify.properties['PlaybackStatus']='Paused';app.on_sessions([spotify,browser]);settle(.2)
-    assert app.cover_pause.tick and app.cover_pause.target==1 and 0<app.cover_pause.depth<1
-    assert tuple(app.window.get_size())==original_size,(original_size,tuple(app.window.get_size()))
     def pause_state():
         return {'compact':app.compact,'morph':app.layout_transition.active,
                 'size':app.cover_pause.size,'depth':app.cover_pause.depth,
-                'target':app.cover_pause.target,'tick':app.cover_pause.tick}
+                'target':app.cover_pause.target,'tick':app.cover_pause.tick,
+                'preparing':app.cover_pause.frame_job is not None}
+    spotify.properties['PlaybackStatus']='Paused';app.on_sessions([spotify,browser])
+    # The worker owns cold cover preparation. A fixed 200ms delay can observe
+    # target=1 before its first drawable frame has reached GTK. Slow sampling
+    # may instead observe the already settled endpoint; both are valid here.
+    # Dedicated cover_pause_smoke checks intermediate pixels and frame cadence.
+    wait(lambda:app.cover_pause.target==1 and app.cover_pause.painter.surface is not None and
+         (bool(app.cover_pause.tick) or app.cover_pause.depth==1),
+         lambda:('Pause did not present a prepared cover',pause_state()))
+    assert tuple(app.window.get_size())==original_size,(original_size,tuple(app.window.get_size()))
     # Both the frame-clock morph and the pause spring can still be in flight
     # after 600ms on a shared/software renderer. Keep checking their real end
     # state, with a hard deadline that still catches a stuck animation.

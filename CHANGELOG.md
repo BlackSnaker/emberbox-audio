@@ -6,7 +6,7 @@
 
 - Prime cached CSS backgrounds and shadows with one explicit GTK repaint when snow is enabled or resumed. Paused, static widgets no longer depend on unrelated artwork/audio damage to prepare materials.
 - Fix the GitHub widget/installer check's first-paint race. Add a static-window regression with the first snow shower deferred, including resume from suspension; keep cache and pixel assertions enabled.
-- Check the actual Mini/desktop pause-animation endpoint with a bounded wait, rather than assuming the frame-clock morph has finished after 600ms on a shared runner. Timeout failures include the transition state.
+- Check cold cover preparation and the actual Mini/desktop pause-animation endpoint with bounded waits, rather than assuming worker preparation or a frame-clock morph has finished after 200/600ms on a shared runner. Dedicated intermediate-pixel/cadence checks remain enabled; timeout failures include the transition state.
 
 ## 0.25.0 — 2026-11-04
 
