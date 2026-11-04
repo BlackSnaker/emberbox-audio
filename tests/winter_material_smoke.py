@@ -19,8 +19,9 @@ def settle(seconds=.1):
             GLib.MainContext.default().iteration(False)
         time.sleep(.002)
 
-window=Gtk.Window();box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8)
-box.get_style_context().add_class('fixture-material');window.add(box)
+window=Gtk.Window();overlay=Gtk.Overlay();window.add(overlay)
+box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8)
+box.get_style_context().add_class('fixture-material');box.get_style_context().add_class('card');overlay.add(box)
 box.set_size_request(460,300);label=Gtk.Label(label='Live track and controls');box.pack_start(label,True,True,0)
 button=Gtk.Button(label='Play');box.pack_end(button,False,False,0)
 provider=Gtk.CssProvider();provider.load_from_data(b'''
@@ -57,5 +58,24 @@ try:
     assert cache.builds>builds and np.any(restyled!=changed),'Style changes must invalidate cached material'
     owner.suspended=True;pixels();assert cache.surface is None
     owner.suspended=False;cache.MAX_PIXELS=1;pixels();assert cache.surface is None,'Oversized cache must fall back to GTK'
+    cache.close()
+    # A paused, static widget has no unrelated audio/cover invalidations. Its
+    # first shower is deliberately far away: enabling must prime materials
+    # through GTK before snow begins, rather than rely on incidental damage.
+    from types import SimpleNamespace
+    from winter_snow import WinterSnow
+    snow=WinterSnow(window,overlay)
+    try:
+        snow.set_targets(lambda:[label])
+        snow.random=SimpleNamespace(uniform=lambda *_:30.)
+        settle(.1)
+        assert snow.materials and all(v.surface is None for v in snow.materials)
+        snow.set_enabled(True);settle(.2)
+        assert not snow.active,'Preparation must not start an early shower'
+        assert all(v.surface is not None for v in snow.materials),'Enabling snow must repaint static materials before the first shower'
+        snow.set_suspended(True);assert all(v.surface is None for v in snow.materials)
+        settle(.1);snow.set_suspended(False);settle(.2)
+        assert all(v.surface is not None for v in snow.materials),'Resume must prime static materials too'
+    finally:snow.close()
     print('PASS GTK-equivalent material pixels, retained cache, live children and suspended cleanup')
 finally:cache.close();window.destroy()

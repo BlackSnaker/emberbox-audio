@@ -50,7 +50,16 @@ class WinterSnow:
         self.enabled=bool(enabled);self.pause()
         if not self.enabled:
             for cache in self.materials:cache.clear()
-        if self.enabled:self.schedule(first=True)
+        if self.enabled:
+            self.prepare_materials();self.schedule(first=True)
+
+    def prepare_materials(self):
+        # A paused widget may have no pending damage at all. Ask GTK for one
+        # normal paint to build its static CSS cache before the first flakes,
+        # rather than relying on unrelated cover/audio activity to trigger it.
+        if self.closed or not self.enabled or self.failed or self.suspended:return
+        for cache in self.materials:
+            if cache.widget.get_mapped():cache.widget.queue_draw()
 
     def set_suspended(self,suspended):
         suspended=bool(suspended)
@@ -58,7 +67,8 @@ class WinterSnow:
         self.suspended=suspended;self.pause()
         if suspended:
             for cache in self.materials:cache.clear()
-        if not suspended:self.schedule(first=True)
+        if not suspended:
+            self.prepare_materials();self.schedule(first=True)
 
     def schedule(self,first=False):
         if not self.eligible() or self.timer or self.active:return

@@ -2,6 +2,11 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.25.1 — 2026-11-04
+
+- Prime cached CSS backgrounds and shadows with one explicit GTK repaint when snow is enabled or resumed. Paused, static widgets no longer depend on unrelated artwork/audio damage to prepare materials.
+- Fix the GitHub widget/installer check's first-paint race. Add a static-window regression with the first snow shower deferred, including resume from suspension; keep cache and pixel assertions enabled.
+
 ## 0.25.0 — 2026-11-04
 
 - Give artist stories and album liner notes a warm editorial reader with a comfortable line width, selectable text, source attribution and a gentle focus movement.

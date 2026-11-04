@@ -116,7 +116,12 @@ try:
     # Seasonal decoration must never alter card geometry or steal controls.
     initial_size=app.window.get_size();app.settings.theme_switch.set_active(True);settle(1.5)
     assert app.appearance.christmas and app.winter_surface.top.get_mapped()
-    app.settings.snow_switch.set_active(True);settle(.25)
+    app.settings.snow_switch.set_active(True)
+    # Wait for the requested GTK paint, not a fixed fraction of a second on a
+    # shared runner. This deadline is before the first scheduled snow shower.
+    deadline=time.monotonic()+1.5
+    while not any(cache.surface is not None for cache in app.winter_surface.snow.materials) and time.monotonic()<deadline:
+        settle(.02)
     assert app.winter_surface.snow.materials
     assert any(cache.surface is not None for cache in app.winter_surface.snow.materials),'Live widget materials must be cached while snow is enabled'
     assert not any(cache.failed for cache in app.winter_surface.snow.materials)
