@@ -43,6 +43,37 @@ class SpatialMixTests(unittest.TestCase):
             delta=1e-5
             self.assertLess(abs(float(curve(at+delta)-curve(at-delta))),1e-9)
         self.assertAlmostEqual(float(curve(.5)),.5)
+
+    def test_automatic_flow_retains_both_actual_signals_through_the_shared_phrase(self):
+        n=RATE*4;t=np.arange(n)/RATE
+        a=np.column_stack([.2*np.sin(t*2*np.pi*220)]*2).astype(np.float32)
+        b=np.column_stack([.2*np.sin(t*2*np.pi*440)]*2).astype(np.float32)
+        events=[];m=Mixer(events.append)
+        for slot,pcm in enumerate((a,b)):
+            m.configure({'slot':slot,'generation':slot+1});m.received(slot,slot+1,pcm.tobytes())
+        m.control({'type':'transition','duration':4,'key':'shared'})
+        output=np.frombuffer(b''.join(m.render() for _ in range(200)),'<f4').reshape(-1,2)
+        self.assertTrue(np.isfinite(output).all());self.assertLessEqual(abs(output).max(),.2)
+        # Measure the real rendered tones in three separate middle windows.
+        for at in (1.5,1.9,2.3):
+            block=output[round(at*RATE):round((at+.15)*RATE),0];axis=(at+np.arange(len(block))/RATE)
+            levels=[2*abs(np.dot(block,np.exp(-2j*np.pi*hz*axis)))/len(block) for hz in (220,440)]
+            self.assertGreater(min(levels),.2*.38,(at,levels))
+        np.testing.assert_allclose(output[-1],b[-1],atol=2e-7)
+
+    def test_shared_phrase_has_smooth_boundaries_and_cancellation_keeps_its_level(self):
+        for at in (0.,.36,.64,1.):
+            self.assertLess(abs(float(curve(at+1e-5,flow=True)-curve(at-1e-5,flow=True))),1e-9)
+        m=Mixer(lambda _:None)
+        for slot,gain in enumerate((.2,.7)):
+            m.configure({'slot':slot,'generation':slot+1})
+            m.received(slot,slot+1,np.full((RATE*3,2),gain,np.float32).tobytes())
+        m.control({'type':'transition','duration':2,'key':'cancel'})
+        for _ in range(40):m.render()
+        gain=float(curve(m.frames/(m.fade['length']-1),flow=True))
+        expected=.2*(1-gain)+.7*gain
+        m.control({'type':'cancel','keep':0})
+        self.assertFalse(m.fade['flow']);self.assertAlmostEqual(float(np.frombuffer(m.render(),'<f4')[0]),expected,places=6)
     def test_old_pcm_generation_cannot_leak_into_a_reused_slot(self):
         m=Mixer(lambda _:None);m.configure({'slot':1,'generation':2})
         m.received(1,1,np.ones((BLOCK,2),np.float32).tobytes())

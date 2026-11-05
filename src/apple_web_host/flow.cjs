@@ -1,13 +1,13 @@
 'use strict';
 const {detectBeat,matchBeats,attachTap}=require('./rhythm.cjs');
-// Three C2-continuous phases: reveal the intro, exchange the foreground,
+// Three C2-continuous phases: reveal the intro, share the foreground,
 // release the old ambience. The complementary gains retain peak headroom.
 // The same curve drives mpv (flow_youtube.py); tests compare both engines.
 function mixCurve(position){
  const t=Math.max(0,Math.min(1,position));let x,start,span;
- if(t<.38){x=t/.38;start=0;span=.18;}
- else if(t<.62){x=(t-.38)/.24;start=.18;span=.64;}
- else{x=(t-.62)/.38;start=.82;span=.18;}
+ if(t<.36){x=t/.36;start=0;span=.4;}
+ else if(t<.64){x=(t-.36)/.28;start=.4;span=.2;}
+ else{x=(t-.64)/.36;start=.6;span=.4;}
  return start+span*x*x*x*(x*(x*6-15)+10);
 }
 // MusicKit keeps its media elements detached from the DOM. Resolve the ordinary

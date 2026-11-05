@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.26.1 — 2026-11-05
+
+- Give automatic EmberFlow an audible shared phrase: introduce the next song gently, let both share the foreground, then dissolve the outgoing tail. An eight-second transition has about 2.2 seconds in the middle phase.
+- Match envelopes across YouTube, MusicKit and native Apple Atmos/Lossless. Keep complementary gains, existing buffers, formats and fast manual switches. Cancellation starts from the actual current blend level.
+- Check actual PCM components across the middle, compare all three engines and exercise Apple Flow in CI. A private silent mpv output measured both tone components at several points through the transition.
+
 ## 0.26.0 — 2026-11-05
 
 - Add a fullscreen Mashups tab with two warm decks, native measured waveforms, inset controls, metal level knobs and a compact heading. Build/save controls remain visible at three checked window sizes.

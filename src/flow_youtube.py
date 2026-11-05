@@ -5,17 +5,17 @@ from youtube_audio import YouTubeAudio
 
 
 def curve(position):
-    """Introduce the new song, hand over the foreground, dissolve the tail.
+    """Introduce the new song, share the foreground, dissolve the tail.
 
-    The short middle handover limits competing vocals/bass. The longer outer
-    phases let the listener hear the incoming texture and outgoing ambience.
+    The middle keeps both songs audible instead of rushing through the blend.
+    The outer phases ease into and out of that shared musical phrase.
     Every join has zero first/second derivative; gains share one peak budget.
     Keep this in sync with mixCurve in apple_web_host/flow.cjs.
     """
     t=max(0.,min(1.,position))
-    if t<.38:x=t/.38;start,span=0.,.18
-    elif t<.62:x=(t-.38)/.24;start,span=.18,.64
-    else:x=(t-.62)/.38;start,span=.82,.18
+    if t<.36:x=t/.36;start,span=0.,.4
+    elif t<.64:x=(t-.36)/.28;start,span=.4,.2
+    else:x=(t-.64)/.36;start,span=.6,.4
     incoming=start+span*x*x*x*(x*(x*6-15)+10)
     return 1-incoming,incoming
 

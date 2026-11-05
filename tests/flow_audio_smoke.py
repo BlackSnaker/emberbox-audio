@@ -59,16 +59,18 @@ def run():
                 freq=np.fft.rfftfreq(len(value),1/48000)
                 return [round(float(spectrum[(freq>hz-8)&(freq<hz+8)].max()),4) for hz in (220,440)]
             before,middle,after=bands(.4),bands(4.95),bands(9.7)
+            shared=[bands(at) for at in (3.95,6.0)]
             # The server can restore the application's own output volume.
             # Compare against that baseline, without changing the user's mixer.
             baseline=before[0];assert baseline>.005
             assert before[1]<baseline*.05,(before,middle,after)
             assert min(middle)>baseline*.25,(before,middle,after)
+            assert all(min(value)>baseline*.28 for value in shared),(baseline,shared)
             assert after[0]<baseline*.05 and after[1]>baseline*.9,(before,middle,after)
             assert np.max(np.abs(samples))<.185,'Overlap exceeded the input peak'
             usage=resource.getrusage(resource.RUSAGE_SELF)
             print(json.dumps({'pass':True,'before_220_440':before,'overlap_220_440':middle,'after_220_440':after,
-                'peak':round(float(np.max(np.abs(samples))),4),'cpu_seconds':round(usage.ru_utime+usage.ru_stime-cpu,3),
+                'shared_phrase_220_440':shared,'peak':round(float(np.max(np.abs(samples))),4),'cpu_seconds':round(usage.ru_utime+usage.ru_stime-cpu,3),
                 'wall_seconds':round(time.monotonic()-start,2),'peak_process_mib':round(usage.ru_maxrss/1024,1)}))
     finally:
         stop.set();decks.cancel();old.close();new.close()

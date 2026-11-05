@@ -19,8 +19,9 @@ Ember DJ set. The next queued track is prepared near the end of the current one.
 Its opening overlaps the outgoing tail for up to **eight seconds**:
 
 1. The incoming texture is introduced gently.
-2. A shorter middle phase hands over the foreground, limiting the time competing
-   vocals and bass lines spend at similar volume.
+2. Both songs share the foreground for a few seconds: the outgoing tail and
+   incoming opening remain clearly present. An eight-second transition has
+   about 2.2 seconds of this shared phrase.
 3. The outgoing ambience dissolves behind the new song.
 
 The envelope has no sharp slope or curvature changes at phase boundaries. Gains
@@ -29,6 +30,11 @@ Short tracks receive proportionally shorter transitions. When the existing lamp
 meter detects an already quiet outro, the entrance shortens to 1.4 seconds.
 Stale measurements and muted playback cannot trigger this shortcut.
 Source format and quality settings are retained.
+
+The same musical envelope is used by YouTube, ordinary in-player Apple Music
+and native Apple Atmos/Lossless. Fast manual switches, seeks and cancellation
+keep their existing short envelopes; the shared phrase belongs to automatic
+transitions. It needs no additional analysis or AI.
 
 | Source | EmberFlow |
 | --- | --- |

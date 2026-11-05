@@ -6,6 +6,7 @@ from unittest.mock import Mock,patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 from ember_flow import EmberFlow
 from flow_youtube import curve,YouTubeDecks
+from spatial_mix import curve as spatial_curve
 from listening_queue import QueueBook
 
 
@@ -116,8 +117,14 @@ class FlowTests(unittest.TestCase):
         for a,b in pairs:self.assertAlmostEqual(a+b,1);self.assertLessEqual(abs(a+b),1.)
         self.assertLess(pairs[1][1],.00001);self.assertLess(1-pairs[-2][1],.00001)
         self.assertEqual(pairs,sorted(pairs,reverse=True))
-        self.assertAlmostEqual(curve(.38)[1],.18)
-        self.assertAlmostEqual(curve(.62)[1],.82)
+        # A shared phrase must be audible for several seconds, not just at
+        # the instant the foreground changes hands.
+        for i in range(360,641):
+            a,b=curve(i/1000);self.assertGreaterEqual(min(a,b),.399999)
+        self.assertAlmostEqual(curve(.36)[1],.4)
+        self.assertAlmostEqual(curve(.64)[1],.6)
+        for i,(_,incoming) in enumerate(pairs):
+            self.assertAlmostEqual(incoming,float(spatial_curve(i/1000,flow=True)),places=12)
     @unittest.skipUnless(shutil.which('node'),'Node is needed for the cross-engine comparison')
     def test_apple_and_youtube_follow_the_same_audible_envelope(self):
         root=Path(__file__).resolve().parents[1]
