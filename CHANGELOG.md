@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.26.0 — 2026-11-05
+
+- Add a fullscreen Mashups tab with two warm decks, native measured waveforms, inset controls, metal level knobs and a compact heading. Build/save controls remain visible at three checked window sizes.
+- Stream selected CC BY recordings through ccMixter's public API without an account or key. Resolve licences and file URLs afresh, preserve attribution and save up to 24 private project recipes without audio or credentials.
+- Prepare whole songs or clips in an isolated, cancellable helper: optional existing UVR separation, bounded tempo/key/phase proposals, FFmpeg Rubber Band alignment and peak-safe stereo mixing. Preview through a separate mpv with the main transport and audio-reactive lamps.
+- Keep subscription-service songs recipe-only until an approved editing integration exists. Add bilingual capability/resource documentation and offline tests, plus an optional real-catalogue/null-output check.
+
 ## 0.25.1 — 2026-11-04
 
 - Prime cached CSS backgrounds and shadows with one explicit GTK repaint when snow is enabled or resumed. Paused, static widgets no longer depend on unrelated artwork/audio damage to prepare materials.

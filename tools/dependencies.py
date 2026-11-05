@@ -32,7 +32,7 @@ LABELS = {
     'pactl': 'PulseAudio control client', 'xwayland': 'XWayland',
     'libmpv': 'libmpv', 'python_mpv': 'python-mpv', 'yt_dlp': 'yt-dlp',
     'ejs': 'YouTube JavaScript challenge scripts', 'js_runtime': 'Deno ≥ 2.3 / Node ≥ 22',
-    'ffmpeg': 'FFmpeg', 'cxx': 'C++17 compiler · Apple Atmos',
+    'ffmpeg': 'FFmpeg', 'mpv_cli': 'mpv · mashup preview', 'cxx': 'C++17 compiler · Apple Atmos',
     'fairplay_build':'Native Apple Lossless build tools',
 }
 PURE = {'numpy': 'numpy>=1.24', 'pillow': 'Pillow>=10', 'scipy': 'scipy>=1.10',
@@ -57,6 +57,7 @@ PACKAGES = {
 }
 for _family,_compiler in {'arch':'gcc','debian':'g++','fedora':'gcc-c++','opensuse':'gcc-c++'}.items():
     PACKAGES[_family]['cxx']=(_compiler,)
+    PACKAGES[_family]['mpv_cli']=('mpv',)
 for _family,_packages in {
     'arch':('gcc','make','git','openssl','curl'),
     'debian':('build-essential','git','libssl-dev','libcurl4-openssl-dev'),
@@ -346,6 +347,7 @@ def inspect(python=None, *, youtube=True, spatial=False, lossless=False, os_rele
                     checks['fairplay_build']=result.returncode==0
             except (OSError,subprocess.SubprocessError):checks['fairplay_build']=False
     checks['ffmpeg'] = bool(shutil.which('ffmpeg', path=path))
+    checks['mpv_cli'] = bool(shutil.which('mpv', path=path))
     kept_env = {key: env[key] for key in ('PATH', 'XDG_SESSION_TYPE', 'WAYLAND_DISPLAY') if key in env}
     markers = tuple(immutable_paths) if immutable_paths is not None else ('/run/ostree-booted', '/usr/share/ublue-os/image-info.json')
     return Report(selected, distribution, checks, versions, dict(probe.get('details', {})), wayland, youtube,

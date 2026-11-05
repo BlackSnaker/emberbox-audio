@@ -122,6 +122,12 @@ class DependencyTests(unittest.TestCase):
             plan=deps.build_plan(current,venv_dir='/unused/runtime')
         self.assertEqual(plan.packages,('libmpv1',))
 
+    def test_mashup_player_binary_is_provisioned_even_with_libmpv_present(self):
+        with patch('dependencies.shutil.which',return_value='/fixture/manager'):
+            for family in deps.PACKAGES:
+                plan=deps.build_plan(report('mpv_cli',family=family),venv_dir='/tmp/ember-test-runtime')
+                self.assertEqual(plan.packages,('mpv',))
+
     def test_missing_python_extras_use_only_isolated_binary_wheels(self):
         with tempfile.TemporaryDirectory() as folder:
             runtime=Path(folder)/'runtime'

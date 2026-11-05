@@ -27,6 +27,7 @@ from flow_control import FlowControl,CSS as FLOW_CSS
 from cover_change import CoverChange
 from cover_pause import CoverPause
 from favorite_button import FavoriteButton,CSS as FAVORITE_CSS
+from mashup_view import MashupView,CSS as MASHUP_CSS
 
 
 CSS = b'''
@@ -181,7 +182,7 @@ class FullscreenPlayer:
         self.window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self.window.connect('delete-event',lambda *_args:(self.dismiss(),True)[1])
         self.window.connect('key-press-event',self.on_key)
-        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS+KARAOKE_CSS+ARTIST_CSS+DJ_CSS+FLOW_CSS+FAVORITE_CSS)
+        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS+KARAOKE_CSS+ARTIST_CSS+DJ_CSS+FLOW_CSS+FAVORITE_CSS+MASHUP_CSS)
         Gtk.StyleContext.add_provider_for_screen(self.window.get_screen(),provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+5)
         self.provider=provider
         overlay=Gtk.Overlay();overlay.add(Gtk.Box());self.window.add(overlay)
@@ -199,7 +200,7 @@ class FullscreenPlayer:
         navigation=Gtk.Box(spacing=2);navigation.get_style_context().add_class('stage-nav')
         navigation.get_style_context().add_class('stage-top-nav')
         navigation.set_halign(Gtk.Align.CENTER);self.page_tabs={}
-        for key,name in [('playing',text('Listening','Слушать')),('library',text('Collection','Коллекция')),('queue',text('Queue','Очередь')),('dj','DJ'),('karaoke',text('Karaoke','Караоке'))]:
+        for key,name in [('playing',text('Listening','Слушать')),('library',text('Collection','Коллекция')),('queue',text('Queue','Очередь')),('dj','DJ'),('mashup',text('Mashups','Мешапы')),('karaoke',text('Karaoke','Караоке'))]:
             b=Gtk.ToggleButton(label=name);b.get_style_context().add_class('stage-tab');b.set_has_tooltip(False)
             b.connect('clicked',lambda _b,k=key:self.show_page(k) if not self.nav_sync else None)
             navigation.pack_start(b,False,False,0);self.page_tabs[key]=b
@@ -303,6 +304,7 @@ class FullscreenPlayer:
         self.dj=DJService(self.music);self.dj_view=DJView(self.dj,self.artwork,self.open_accounts,self.open_artist)
         self.pages.add_named(self.dj_view,'dj')
         self.karaoke=KaraokeView(self);self.pages.add_named(self.karaoke,'karaoke')
+        self.mashups=MashupView(self);self.pages.add_named(self.mashups,'mashup')
         self.pages.set_visible_child_name('playing');self.layout.pack_start(self.pages,True,True,0)
         footer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10);self.footer=footer
         self.playing_caption=label('','stage-library-note');self.playing_caption.set_ellipsize(Pango.EllipsizeMode.END)
@@ -332,11 +334,11 @@ class FullscreenPlayer:
         console.pack_start(transport,False,False,0)
         volume_box=Gtk.Box(spacing=8);volume_box.set_hexpand(True);volume_box.set_halign(Gtk.Align.END)
         volume_box.set_valign(Gtk.Align.CENTER)
-        self.mute=MuteToggle(host.sound.toggle_mute);self.mute.set_compact(True)
+        self.mute=MuteToggle(self.toggle_mute);self.mute.set_compact(True)
         volume_box.pack_start(self.mute,False,False,0)
         self.volume_meter=TubeMeter()
         volume_box.pack_start(self.volume_meter,False,False,0)
-        self.knob=VolumeKnob(host.sound.set_volume,large=True)
+        self.knob=VolumeKnob(self.set_volume,large=True)
         volume_box.pack_start(self.knob,False,False,0)
         console.pack_end(volume_box,True,True,0)
         footer.pack_start(console,False,False,0)
@@ -351,7 +353,7 @@ class FullscreenPlayer:
             self.winter_surface.snow.set_targets(lambda:[self.art_shell,self.console,self.source_button,self.settings_button,self.exit_button])
             self.theme_unsubscribe=self.appearance.subscribe(self.theme_changed)
             self.theme_changed()
-        self.source_picker=SourcePicker(lambda source,session=None:host.select_source(source,session),lambda:None,self.open_accounts)
+        self.source_picker=SourcePicker(self.select_source,lambda:None,self.open_accounts)
         self.layout.show_all()
         self.set_lyrics_visible(False)
         self.music_unsubscribe=self.music.subscribe(self.music_changed)
@@ -387,6 +389,7 @@ class FullscreenPlayer:
         self.library_view.deactivate();self.queue_view.deactivate();self.artist_view.deactivate()
         if self.page=='dj':self.dj_view.deactivate()
         if self.page=='karaoke':self.karaoke.deactivate()
+        if self.page=='mashup':self.mashups.deactivate()
         self.pages.set_transition_type(Gtk.StackTransitionType.NONE if page=='artist' else Gtk.StackTransitionType.CROSSFADE)
         self.page=page;self.pages.set_visible_child_name(page)
         if page!='playing':self.cover_change.cancel();self.cover_pause.reset()
@@ -397,6 +400,7 @@ class FullscreenPlayer:
         elif page=='artist':self.artist_view.activate()
         elif page=='dj':self.dj_view.activate()
         elif page=='karaoke':self.track=None;self.karaoke.activate()
+        elif page=='mashup':self.mashups.activate()
         else:self.track=None
         if page not in ('playing','karaoke'):
             self.lyrics.set_track('','');self.motion.set_playing(False)
@@ -492,7 +496,7 @@ class FullscreenPlayer:
         self.visible=False
         self.suspend_desktop_visuals(False)
         self.library_view.deactivate();self.queue_view.deactivate();self.artist_view.deactivate()
-        self.karaoke.deactivate();self.dj_view.deactivate()
+        self.karaoke.deactivate();self.dj_view.deactivate();self.mashups.deactivate()
         self.track=None
         self.lyrics.set_track('','')
         self.motion_lookup.set_track('')
@@ -590,7 +594,7 @@ class FullscreenPlayer:
         self.cover_change.close()
         self.cover_pause.close()
         self.library_view.close();self.queue_view.close();self.artist_view.close();self.music_unsubscribe()
-        self.karaoke.close();self.dj_view.close();self.dj.close()
+        self.karaoke.close();self.dj_view.close();self.dj.close();self.mashups.close()
         if self.owns_music:self.music.close()
         self.lyrics.close()
         self.motion_lookup.close()
@@ -605,6 +609,7 @@ class FullscreenPlayer:
         self.library_view.card_size=max(128,min(240,(width-230)//6-26))
         self.artist_view.resize(width,height)
         self.dj_view.resize(width,height)
+        self.mashups.resize(width,height)
         small=height<850 or width<1200
         self.karaoke.resize(height<800)
         self.equalizer.set_compact(small)
@@ -717,6 +722,9 @@ class FullscreenPlayer:
         h=self.host
         self.source_picker.show(self.source_button,h.source,h.sessions,h.browser_binding,h.youtube_binding,h.youtube_mode)
 
+    def select_source(self,source,session=None):
+        self.mashups.stop();self.host.select_source(source,session)
+
     def show_settings(self):
         if self.reveal.active:return
         h=self.host
@@ -726,7 +734,23 @@ class FullscreenPlayer:
     def open_accounts(self):
         self.hide();self.host.show_accounts()
 
+    def mashup_active(self):
+        return self.page=='mashup' and self.mashups.client.state=='ready'
+
+    def set_volume(self,value):
+        if self.mashup_active():self.mashups.client.set_volume(value)
+        else:self.host.sound.set_volume(value)
+
+    def toggle_mute(self):
+        if self.mashup_active():self.mashups.client.toggle_mute()
+        else:self.host.sound.toggle_mute()
+
     def action(self,action):
+        if self.mashup_active():
+            client=self.mashups.client
+            if action=='toggle':client.toggle()
+            elif action in ('previous','next'):client.seek(max(0,client.position+(-10 if action=='previous' else 10)))
+            self.update();return
         if action in ('next','previous') and self.music.book.active!=self.host.source:
             self.cover_change.request()
         self.host.on_action(None,action)
@@ -737,6 +761,8 @@ class FullscreenPlayer:
         return True
 
     def request_seek(self,value):
+        if self.mashup_active():
+            self.mashups.client.seek(value);return
         self.position=max(0,min(self.host.length/1e6,float(value)))
         self.host.seek_to(self.position)
         self.progress.set_value(self.position)
@@ -757,11 +783,13 @@ class FullscreenPlayer:
             if key in ('space','Return','KP_Enter','Up','Down','Left','Right'):return False
         if key in ('space','XF86AudioPlay'):self.action('toggle');return True
         if key in ('Left','Right'):
-            if self.progress.get_sensitive() and self.host.length>0:
+            if self.progress.get_sensitive() and (self.mashup_active() or self.host.length>0):
                 self.request_seek(self.position+(-10 if key=='Left' else 10))
             return True
         if key in ('Up','Down'):
-            if self.host.sound.available:self.host.sound.set_volume(max(0,min(1,self.host.sound.volume+(.03 if key=='Up' else -.03))))
+            if self.mashup_active() or self.host.sound.available:
+                volume=self.mashups.client.volume if self.mashup_active() else self.host.sound.volume
+                self.set_volume(max(0,min(1,volume+(.03 if key=='Up' else -.03))))
             return True
         return False
 
@@ -786,17 +814,20 @@ class FullscreenPlayer:
             from types import SimpleNamespace
             self.on_size(self.window,SimpleNamespace(width=width,height=height))
         names={'spotify':'Spotify','apple-music':'Apple Music','youtube':'YouTube','yandex-music':text('Yandex Music','Яндекс Музыка')}
-        for button,value in ((self.source_button,'●  '+names.get(h.source,h.source)+'  ⌄'),(self.play_button,'Ⅱ' if h.playing else '▶')):
+        mashup=self.mashup_active();preview=self.mashups.client
+        source_name='ccMixter' if mashup else names.get(h.source,h.source)
+        playing=preview.playing if mashup else h.playing
+        for button,value in ((self.source_button,'●  '+source_name+'  ⌄'),(self.play_button,'Ⅱ' if playing else '▶')):
             if button.get_label()!=value:
                 button.set_label(value)
                 button.get_child().show()
-        self.play_button.set_sensitive(h.play.get_sensitive())
-        self.previous_button.set_sensitive(h.previous.get_sensitive());self.next_button.set_sensitive(h.next.get_sensitive())
-        if self.music.book.active==h.source:
+        self.play_button.set_sensitive(mashup or h.play.get_sensitive())
+        self.previous_button.set_sensitive(mashup or h.previous.get_sensitive());self.next_button.set_sensitive(mashup or h.next.get_sensitive())
+        if not mashup and self.music.book.active==h.source:
             index=self.music.book.indices[h.source]
             self.next_button.set_sensitive(index+1<len(self.music.book.queues[h.source]))
             self.previous_button.set_sensitive(bool(self.music.book.current(h.source)))
-        delayed=self.page=='karaoke' and self.karaoke.audio.active and self.karaoke.audio.engine=='ai'
+        delayed=mashup or self.page=='karaoke' and self.karaoke.audio.active and self.karaoke.audio.engine=='ai'
         if not delayed:
             value=text('Now playing: ','Сейчас: ')+title+'  ·  '+artist
             if self.playing_caption.get_text()!=value:self.playing_caption.set_text(value)
@@ -816,8 +847,20 @@ class FullscreenPlayer:
             self.progress.set_sensitive(h.progress_event.get_sensitive() and h.length>0)
             for item,value in ((self.elapsed,clock_text(self.position)),(self.total,clock_text(h.length/1e6))):
                 if item.get_text()!=value:item.set_text(value)
-        self.mute.set_state(h.sound.volume,h.sound.muted,h.sound.available)
-        self.knob.set_state(h.sound.volume,h.sound.muted,h.sound.available)
+        if not mashup:
+            self.mute.set_state(h.sound.volume,h.sound.muted,h.sound.available)
+            self.knob.set_state(h.sound.volume,h.sound.muted,h.sound.available)
+        else:
+            client=preview;self.position=client.position
+            upper=max(1,client.ready.get('duration',1))
+            if self.progress.get_adjustment().get_upper()!=upper:self.progress.set_range(0,upper)
+            self.progress.set_value(client.position);self.progress.set_sensitive(True)
+            caption='Ember Mashups · '+(self.mashups.name.get_text() or text('Your mix','Твой мешап'))+' · PCM 48 kHz'
+            for item,value in ((self.elapsed,clock_text(client.position)),(self.total,clock_text(client.ready.get('duration',0))),
+                               (self.playing_caption,caption)):
+                if item.get_text()!=value:item.set_text(value)
+            self.mute.set_state(client.volume,client.muted,True);self.knob.set_state(client.volume,client.muted,True)
+        self.flow_control.set_sensitive(not mashup)
         self.load_art()
         if not self.reveal.active and self.page=='playing':
             self.motion_lookup.set_track(self.motion_page() if self.motion.executable else '',h.art_url or '')
@@ -834,6 +877,7 @@ class FullscreenPlayer:
             self.lyrics.set_track(title if valid else '',artist if valid else '',album if valid else '',h.length/1e6)
         if self.lyrics_visible and self.page=='playing':self.update_line()
         if self.page=='karaoke':self.karaoke.update()
+        if self.page=='mashup':self.mashups.poll_setup()
         return True
 
     def on_lyrics(self,force=False):
@@ -945,7 +989,9 @@ class FullscreenPlayer:
             self.last_fade=time.monotonic();self.fade_lines()
         meter=self.host.meter
         playing=self.karaoke.heard_playing if self.page=='karaoke' and self.karaoke.audio.active else self.host.playing
-        active=playing and not self.host.sound.muted and time.monotonic()-meter.last_sample<.35
+        if self.mashup_active():playing=self.mashups.client.playing
+        muted=self.mashups.client.muted if self.mashup_active() else self.host.sound.muted
+        active=playing and not muted and time.monotonic()-meter.last_sample<.35
         targets=meter.levels if active else (0.,)*9
         self.volume_meter.advance(getattr(meter,'rms_level',0.) if active else 0.,dt)
         for i,(old,target) in enumerate(zip(self.levels,targets)):

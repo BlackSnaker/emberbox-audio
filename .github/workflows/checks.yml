@@ -122,6 +122,11 @@ jobs:
         run: |
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/karaoke_smoke.py
           EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/karaoke_smoke.py
+      - name: Mashup studio, recipes and isolated audio
+        run: |
+          /usr/bin/python3 tests/mashup_worker_smoke.py
+          GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/mashup_smoke.py
+          EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/mashup_smoke.py
       - name: Fullscreen shader and offscreen room
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1280x720x24' /usr/bin/python3 tests/reveal_smoke.py
       - name: Fullscreen collection and listening queue

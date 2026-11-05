@@ -8,6 +8,19 @@
 
 **Album rooms, reimagined.** Large complete artwork, softly reflected light and a clear record table. [See the album design →](docs/DESIGN.md#the-album-room)
 
+## Ember Mashups · Two songs. One spark.
+
+A voice, a foundation and a new fullscreen studio. Whole songs or selected
+clips, automatic alignment, manual controls and saved projects meet warm
+Grunesphism surfaces, native waveforms and tactile metal knobs.
+
+**Start free:** choose a CC BY vocal and instrumental from ccMixter, without
+accounts, keys or subscriptions. Optional AI extracts layers from full mixes.
+Subscription-service songs are currently recipe-only; their connections do
+not provide editing access.
+
+[Meet the studio →](docs/MASHUPS.md)
+
 ## Winter Glow · A warmer Christmas
 
 Evergreen surfaces, wine-red controls, brushed-brass highlights and glass ornaments under a soft incandescent garland. Original vector details carry the theme through the desktop widget, Mini and fullscreen listening room.

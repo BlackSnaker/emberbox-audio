@@ -1381,6 +1381,8 @@ class Widget:
 
     def karaoke_meter_target(self):
         stage=getattr(self,'fullscreen',None)
+        if stage and stage.visible and stage.page=='mashup':
+            return stage.mashups.meter_target()
         if stage and stage.visible and stage.page=='karaoke':return stage.karaoke.meter_target()
         return None
 

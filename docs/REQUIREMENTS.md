@@ -1,5 +1,11 @@
 # System requirements
 
+**Mashup studio:** allow 8 GB RAM for whole songs, preferably 16 GB with AI
+separation. Supplied stems and short clips require less processing. System
+mpv, FFmpeg and its `rubberband` filter are needed for tempo/pitch changes.
+These are preliminary recommendations, not measured minima.
+[Studio limits →](MASHUPS.md#resources-and-storage)
+
 **English** · [Русский](REQUIREMENTS.ru.md)
 
 Emberbox Audio is a Linux desktop application. Ordinary playback, fullscreen
