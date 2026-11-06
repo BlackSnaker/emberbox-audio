@@ -1,20 +1,19 @@
 """An in-playlist two-deck transition desk; static curves, real audition."""
-from functools import lru_cache
 from gi.repository import Gtk,Pango
 from source_picker import text
-from hardware_controls import pixbuf
 from flow_control import FlowControl
 from flow_plans import recipe
-from flow_youtube import curve
 from flow_hardware import TimeDial,BeatSwitch,screw
+from flow_timeline import FlowTimeline
+from flow_eq_panel import EQPanel
 
 CSS=b'''
 .flow-desk { background-image: linear-gradient(145deg,rgba(51,53,46,.94),rgba(22,27,23,.96));
- border: 1px solid rgba(235,219,178,.12); border-radius: 24px; padding: 20px;
+ border: 1px solid rgba(235,219,178,.12); border-radius: 28px; padding: 16px;
  box-shadow: inset 0 1px rgba(255,239,201,.06),0 5px 12px rgba(0,0,0,.12); }
 .flow-desk-title { font-size: 23px; font-weight: bold; color: #f1e5be; }
 .flow-deck { background-image: linear-gradient(145deg,rgba(14,19,16,.65),rgba(39,43,34,.7));
- border: 1px solid rgba(235,219,178,.045); border-radius: 16px; padding: 12px;
+ border: 1px solid rgba(235,219,178,.045); border-radius: 22px; padding: 12px;
  box-shadow: inset 0 2px 5px rgba(0,0,0,.2),0 1px rgba(235,219,178,.04); }
 .flow-desk .flow-envelope { background: #0a100d; border-radius: 19px; padding: 7px;
  border: 1px solid rgba(179,189,153,.07); box-shadow: inset 2px 3px 8px rgba(0,0,0,.65),0 1px rgba(240,224,179,.08); }
@@ -22,18 +21,18 @@ CSS=b'''
 .flow-cover { background-image: linear-gradient(140deg,#101613,#30392c); padding: 5px; border-radius: 13px;
  box-shadow: inset 0 2px 6px rgba(0,0,0,.6),0 1px rgba(240,224,179,.08); }
 .flow-desk button.flow-selector { background-image: linear-gradient(145deg,#3b4438,#262e26); border: 1px solid #161d17;
- border-radius: 9px; padding: 7px 11px; color: #b8b5a1; font-size: 11px; box-shadow: 1px 2px 3px rgba(0,0,0,.25),inset 0 1px rgba(244,232,193,.08); }
+ border-radius: 17px; padding: 7px 13px; color: #b8b5a1; font-size: 11px; box-shadow: 1px 2px 3px rgba(0,0,0,.25),inset 0 1px rgba(244,232,193,.08); }
 .flow-desk button.flow-selector:checked { background-image: linear-gradient(150deg,#1c241d,#2c3427);
  color: #f2cb7f; box-shadow: inset 1px 2px 4px rgba(0,0,0,.5),0 1px rgba(240,224,179,.08); }
 .flow-desk button.flow-selector:hover { color: #f2dba7; }
 .flow-instrument { background-image: linear-gradient(155deg,rgba(12,19,14,.75),rgba(44,51,39,.5)); padding: 8px 15px;
- border-radius: 16px; border: 1px solid rgba(5,12,7,.6); box-shadow: inset 1px 2px 4px rgba(0,0,0,.28),0 1px rgba(240,224,179,.06); }
+ border-radius: 22px; border: 1px solid rgba(5,12,7,.6); box-shadow: inset 1px 2px 4px rgba(0,0,0,.28),0 1px rgba(240,224,179,.06); }
 .flow-time-display { color: #efc879; font-family: monospace; font-size: 18px; letter-spacing: 1px; }
 .nocturne-theme .flow-instrument { background-image: linear-gradient(145deg,#121717,#242929); }
 .nocturne-theme .flow-desk button.flow-selector { background-image: linear-gradient(145deg,#343b38,#242c28); }
 .nocturne-theme .flow-desk button.flow-selector:checked { background-image: linear-gradient(145deg,#151d18,#283025); }
 
-.flow-desk combobox button { border-radius: 12px; background-image: linear-gradient(135deg,#34382e,#242a22);
+.flow-desk combobox button { border-radius: 17px; background-image: linear-gradient(135deg,#34382e,#242a22);
  color: #ebdbb2; border: 1px solid rgba(235,219,178,.08); box-shadow: none; }
 .flow-desk scale trough { background: #121812; border-radius: 5px; min-height: 5px; }
 .flow-desk scale highlight { background: #d8ad53; border: none; border-radius: 5px; }
@@ -63,34 +62,9 @@ def button(value,callback,style='stage-quiet'):
     w.set_has_tooltip(False);w.connect('clicked',lambda *_:callback());return w
 
 
-@lru_cache(maxsize=8)
-def envelope(shape,cut):
-    paths=[]
-    for incoming,color in ((False,'#b9c9a5'),(True,'#ffbf5b')):
-        points=[]
-        for i in range(101):
-            gain=(float(i==100) if incoming else float(i<100)) if cut else curve(i/100,shape)[int(incoming)]
-            points.append(f'{22+i*3.86:.2f},{26+(1-gain)*88:.2f}')
-        points=' '.join(points)
-        paths.append(f'<polyline points="{points}" fill="none" stroke="{color}" stroke-opacity=".13" stroke-width="8" stroke-linejoin="round"/>'
-                     f'<polyline points="{points}" fill="none" stroke="{color}" stroke-opacity=".3" stroke-width="4" stroke-linejoin="round"/>'
-                     f'<polyline points="{points}" fill="none" stroke="{color}" stroke-width="1.5" stroke-linejoin="round"/>')
-    grid=''.join(f'<path d="M{x} 20V120"/>' for x in range(22,410,32))+''.join(f'<path d="M22 {y}H408"/>' for y in range(26,116,22))
-    svg='''<svg xmlns="http://www.w3.org/2000/svg" width="432" height="144">
-      <defs><radialGradient id="phosphor" cx=".48" cy=".4" r=".75"><stop stop-color="#23352a"/><stop offset="1" stop-color="#0b1410"/></radialGradient>
-      <linearGradient id="glass" x2=".2" y2="1"><stop stop-color="#d7e4c2" stop-opacity=".09"/><stop offset=".47" stop-color="#9caf8a" stop-opacity="0"/><stop offset="1" stop-color="#b5c6a3" stop-opacity=".025"/></linearGradient></defs>
-      <rect x="1" y="1" width="430" height="142" rx="17" fill="url(#phosphor)" stroke="#080d0a" stroke-width="2"/>
-    '''+f'<g stroke="#b4c6a6" stroke-opacity=".08" stroke-width=".65">{grid}</g>'+''.join(paths)+'''
-      <rect x="2.5" y="2.5" width="427" height="139" rx="16" fill="url(#glass)" stroke="#c7d6b1" stroke-opacity=".09"/>
-      <path d="M17 8Q214 1 415 8" fill="none" stroke="#e9efdb" stroke-opacity=".12"/>
-      <g fill="#a7b09b" opacity=".55" font-family="monospace" font-size="7"><text x="22" y="133">A / OUT</text><text x="366" y="133">B / IN</text></g>
-    </svg>'''
-    return pixbuf(svg,432,144)
-
-
 class FlowEditor(Gtk.Box):
     def __init__(self,service,artwork,key,items,back):
-        super().__init__(orientation=Gtk.Orientation.VERTICAL,spacing=12)
+        super().__init__(orientation=Gtk.Orientation.VERTICAL,spacing=8)
         self.get_style_context().add_class('flow-desk')
         self.service=service;self.flow=service.flow;self.artwork=artwork;self.key=key;self.items=items
         self.index=0;self.updating=False;self.closed=False
@@ -110,21 +84,18 @@ class FlowEditor(Gtk.Box):
         for renderer in self.pairs.get_cells():
             if isinstance(renderer,Gtk.CellRendererText):renderer.set_property('ellipsize',Pango.EllipsizeMode.END);renderer.set_property('width-chars',32)
         self.pairs.connect('changed',self.choose);self.pack_start(self.pairs,False,False,0)
-        decks=Gtk.Box(spacing=16);decks.set_homogeneous(True);self.deck_images=[];self.deck_titles=[];self.deck_artists=[]
+        decks=self.decks=Gtk.Box(spacing=16);decks.set_homogeneous(True);self.deck_images=[];self.deck_titles=[];self.deck_artists=[]
         for name in (text('OUTGOING','УХОДЯЩИЙ'),text('INCOMING','СЛЕДУЮЩИЙ')):
             deck=Gtk.Box(spacing=14);deck.get_style_context().add_class('flow-deck')
-            image=Gtk.Image();image.set_size_request(92,92);frame=Gtk.Box();frame.get_style_context().add_class('flow-cover');frame.pack_start(image,False,False,0);deck.pack_start(frame,False,False,0);self.deck_images.append(image)
+            image=Gtk.Image();image.set_size_request(60,60);frame=Gtk.Box();frame.get_style_context().add_class('flow-cover');frame.pack_start(image,False,False,0);deck.pack_start(frame,False,False,0);self.deck_images.append(image)
             names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=6);names.pack_start(label(name,'stage-library-source'),False,False,0)
             song=label('','stage-card-title');artist=label('');self.deck_titles.append(song);self.deck_artists.append(artist)
             names.pack_start(song,False,False,0);names.pack_start(artist,False,False,0);deck.pack_start(names,True,True,0)
             decks.pack_start(deck,True,True,0)
         self.pack_start(decks,False,False,0)
-        graph=Gtk.Box(spacing=20);self.graph=Gtk.Stack();self.graph.set_transition_type(Gtk.StackTransitionType.CROSSFADE);self.graph.set_transition_duration(350)
-        self.graph_images=[Gtk.Image(),Gtk.Image()];self.graph_frame=0;self.graph_key=None
-        for i,image in enumerate(self.graph_images):self.graph.add_named(image,str(i))
-        self.graph.get_style_context().add_class('flow-envelope')
-        graph.pack_start(self.graph,True,False,0)
-        controls=self.controls=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=9);controls.set_hexpand(True)
+        self.timeline=FlowTimeline(self.timeline_changed);self.pack_start(self.timeline,False,False,0)
+        controls=self.controls=Gtk.Box(spacing=18);controls.set_hexpand(True)
+        options=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8);controls.pack_start(options,True,True,0)
         self.mode=Gtk.ComboBoxText();self.shape=Gtk.ComboBoxText()
         self.mode_buttons={};self.shape_buttons={}
         for combo,values,buttons in ((self.mode,(('auto','Ember · auto','Эмбер · авто'),('manual','By hand','Вручную'),('cut','No mix','Без сведения')),self.mode_buttons),
@@ -135,9 +106,9 @@ class FlowEditor(Gtk.Box):
                 b=Gtk.ToggleButton(label=text(en,ru));b.get_style_context().add_class('flow-selector');b.set_has_tooltip(False)
                 b.connect('clicked',lambda w,c=combo,k=key:self.select_choice(c,k))
                 buttons[key]=b;selectors.pack_start(b,True,True,0)
-            controls.pack_start(selectors,False,False,0)
+            options.pack_start(selectors,False,False,0)
         instruments=Gtk.Box(spacing=12);instruments.get_style_context().add_class('flow-instrument')
-        self.length=Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL,1,8,.5)
+        self.length=Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL,1,8,.1)
         self.knob=TimeDial(lambda v:self.length.set_value(round((1+7*v)*2)/2))
         instruments.pack_start(self.knob,False,False,0)
         dial_names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=7)
@@ -147,11 +118,13 @@ class FlowEditor(Gtk.Box):
         instruments.pack_start(dial_names,True,True,0)
         self.beats=BeatSwitch();instruments.pack_end(self.beats,False,False,0)
         beat_name=label(text('BEAT\nSYNC','РИТМ\nСИНХР.'),'flow-engraving');instruments.pack_end(beat_name,False,False,0)
-        controls.pack_start(instruments,False,False,0);graph.pack_start(controls,True,True,0);self.pack_start(graph,False,False,0)
+        controls.pack_start(instruments,True,True,0);self.pack_start(controls,False,False,0)
+        self.eq_panel=EQPanel(self.edit);self.pack_start(self.eq_panel,False,False,0)
+        self.eq_panel.toggle.connect('toggled',lambda b:(self.decks.set_no_show_all(b.get_active()),self.decks.set_visible(not b.get_active())))
         for control,signal in ((self.mode,'changed'),(self.shape,'changed'),(self.length,'value-changed'),(self.beats,'toggled')):control.connect(signal,self.edit)
         foot=Gtk.Box(spacing=12);self.status=label('');self.status.set_line_wrap(True);self.status.set_lines(3)
         foot.pack_start(self.status,True,True,0)
-        self.preview_button=button('▶ '+text('Listen to transition','Послушать переход'),self.preview,'stage-accent');foot.pack_end(self.preview_button,False,False,0)
+        self.preview_button=button('▶ '+text('Listen to transition','Послушать переход'),self.preview,'stage-accent');title.pack_end(self.preview_button,False,False,0)
         self.pack_start(foot,False,False,0)
         note=self.note=label(text(f'Recipes stay in Ember · {len(items)-1} loaded pairs. Preview starts the outro; manually queued songs stay queued.',
             f'Настройки сохраняются в Ember · загружено пар: {len(items)-1}. Прослушивание включит конец трека; ручная очередь сохранится.'))
@@ -163,15 +136,15 @@ class FlowEditor(Gtk.Box):
         self.dense=dense
         context=self.get_style_context()
         context.add_class('flow-desk-compact') if dense else context.remove_class('flow-desk-compact')
-        self.set_spacing(6 if dense else 12);self.controls.set_spacing(3 if dense else 9)
+        self.set_spacing(5 if dense else 8);self.controls.set_spacing(8 if dense else 18)
         self.note.set_no_show_all(dense);self.note.set_visible(not dense)
-        self.graph_key=None;self.visuals()
+        self.timeline.set_dense(dense);self.eq_panel.resize(dense);self.visuals()
         # Album thumbnails keep their original cached pixels; only allocation changes.
         for image in self.deck_images:
             original=getattr(image,'_flow_original',None) or image.get_pixbuf()
             if original:
                 from gi.repository import GdkPixbuf
-                image._flow_original=original;size=44 if dense else 92
+                image._flow_original=original;size=44 if dense else 60
                 image.set_from_pixbuf(original.scale_simple(size,size,GdkPixbuf.InterpType.BILINEAR));image.set_size_request(size,size)
 
     def select_choice(self,combo,key):
@@ -186,13 +159,15 @@ class FlowEditor(Gtk.Box):
         for image in self.deck_images:image._flow_original=None
         a,b=self.items[index:index+2]
         for n,item in enumerate((a,b)):
-            self.artwork.load(self.deck_images[n],item.get('image',''),44 if getattr(self,'dense',False) else 92,10)
+            self.artwork.load(self.deck_images[n],item.get('image',''),44 if getattr(self,'dense',False) else 60,10)
             self.deck_titles[n].set_text(item['title']);self.deck_artists[n].set_text(item.get('artist',''))
         value=self.flow.plans.get(self.key,a,b) or recipe({})
         self.mode.set_active_id(value['mode']);self.shape.set_active_id(value['shape']);self.length.set_value(value['seconds']);self.beats.set_active(value['beats'])
+        self.eq_panel.set_plan(value,self.flow.eq_supported)
+        self.timeline.cancel();self.timeline.set_plan(value,[a['title'],b['title']])
         self.updating=False;self.visuals()
 
-    def value(self):return recipe(dict(mode=self.mode.get_active_id(),shape=self.shape.get_active_id(),seconds=self.length.get_value(),beats=self.beats.get_active()))
+    def value(self):return recipe(dict(mode=self.mode.get_active_id(),shape=self.shape.get_active_id(),seconds=self.length.get_value(),beats=self.beats.get_active(),**self.eq_panel.value()))
 
     def visuals(self):
         value=self.value();auto=value['mode']=='auto';cut=value['mode']=='cut'
@@ -204,16 +179,13 @@ class FlowEditor(Gtk.Box):
         self.updating=False
         self.beats.set_sensitive(not cut and self.flow.beats_supported)
         self.length_label.set_text(text('AUTO · ≤8 s','АВТО · ≤8 с') if auto else '—' if cut else text(f'{value["seconds"]:g} s',f'{value["seconds"]:g} с'))
-        key=value['shape'],cut,getattr(self,'dense',False)
-        if self.graph_key!=key:
-            from gi.repository import GdkPixbuf
-            previous=self.graph_key;self.graph_key=key;self.graph_frame=1-self.graph_frame
-            pixels=envelope(value['shape'],cut)
-            if key[2]:pixels=pixels.scale_simple(300,100,GdkPixbuf.InterpType.BILINEAR)
-            self.graph_images[self.graph_frame].set_from_pixbuf(pixels)
-            # Both stack children share the same allocation when resized.
-            if previous is None or previous[2]!=key[2]:self.graph_images[1-self.graph_frame].set_from_pixbuf(pixels)
-            self.graph.set_visible_child_name(str(self.graph_frame))
+        self.timeline.set_plan(value)
+        self.eq_panel.available=self.flow.eq_supported;self.eq_panel.sync()
+
+    def timeline_changed(self,seconds,commit):
+        self.updating=True;self.mode.set_active_id('manual');self.length.set_value(seconds);self.updating=False
+        if commit:self.edit()
+        else:self.visuals()
 
     def save(self,pairs):
         try:self.flow.plans.put(self.key,pairs)
@@ -226,7 +198,7 @@ class FlowEditor(Gtk.Box):
         if self.save([(a,b,self.value())]):self.sync()
 
     def automatic(self):
-        value=recipe({})
+        value=recipe(dict(eq_mode='auto' if self.flow.eq_supported else 'off'))
         if self.save([(a,b,value) for a,b in zip(self.items,self.items[1:])]):
             self.choose();self.sync()
 
@@ -236,6 +208,8 @@ class FlowEditor(Gtk.Box):
     def sync(self):
         if self.closed:return
         supported=self.flow.supported
+        if self.eq_panel.available!=self.flow.eq_supported:
+            self.eq_panel.available=self.flow.eq_supported;self.eq_panel.sync()
         preparing=bool(self.service.transition_preview)
         self.preview_button.set_sensitive(supported and not preparing)
         self.preview_button.set_label(text('Warming decks…','Готовим дорожки…') if preparing else '▶ '+text('Listen to transition','Послушать переход'))
@@ -244,6 +218,8 @@ class FlowEditor(Gtk.Box):
         elif self.service.transition_preview:message=text('Warming both decks for a real preview…','Готовим две дорожки для прослушивания…')
         elif not self.flow.enabled:message=text('Saved. Turn on the EmberFlow lamp to hear your transitions.',
             'Сохранено. Включи лампу EmberFlow, чтобы услышать переходы.')
+        elif not self.flow.eq_supported:message=text('Saved · drag A or B to set overlap. Transition EQ currently requires Apple Music.',
+            'Сохранено · двигай A или B для настройки сведения. Эквалайзер перехода пока доступен в Apple Music.')
         else:message=text('Saved · auto follows real silence and clear rhythm; native Lossless/Atmos uses smooth overlap without beat sync.',
             'Сохранено · Эмбер учитывает тишину и ясный ритм; в нативных Lossless/Atmos — плавное сведение без подгонки битов.')
         self.status.set_text(message)

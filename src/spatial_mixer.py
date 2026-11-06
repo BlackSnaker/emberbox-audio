@@ -4,6 +4,7 @@ import collections,json,os,resource,struct,sys,threading,time
 import numpy as np
 from spatial_mix import RATE,BLOCK,BUFFER,blend,curve
 from headphone_dsp import HeadphoneProcessor
+from flow_eq import BandEQ,ease
 # A session uses one rate for both decks; ordinary Atmos stays at 48 kHz.
 RATE=int(os.environ.get('EMBERBOX_SPATIAL_RATE',RATE))
 if RATE not in (48000,192000):raise RuntimeError('SPATIAL_PCM_FORMAT')
@@ -20,7 +21,7 @@ class Slot:
         self.generation=generation;self.origin=float(origin);self.parts=collections.deque()
         self.frames=0;self.received=0;self.consumed=0;self.total=None;self.start=0;self.ready=False;self.padding=0
         self.preroll=max(.12,min(2.,float(preroll)))
-        self.seeking=False;self.attack=0
+        self.seeking=False;self.attack=0;self.history=np.empty((0,2),np.float32)
     def take(self,n):
         parts=[]
         while n and self.parts:
@@ -28,7 +29,9 @@ class Slot:
             if count==len(value):self.parts.popleft()
             else:self.parts[0]=value[count:]
             n-=count;self.frames-=count;self.consumed+=count
-        return parts[0].copy() if len(parts)==1 else np.concatenate(parts) if parts else np.empty((0,2),np.float32)
+        result=parts[0].copy() if len(parts)==1 else np.concatenate(parts) if parts else np.empty((0,2),np.float32)
+        if len(result):self.history=np.concatenate((self.history,result))[-RATE//20:]
+        return result
     def ended(self):return self.total is not None and self.consumed>=self.total
 
 class Mixer:
@@ -107,9 +110,14 @@ class Mixer:
                 duration=max(.15,min(8.,float(p['duration'])))
                 outgoing=self.slots[self.current]
                 if outgoing.total is not None:duration=min(duration,max(.01,(outgoing.total-outgoing.consumed)/RATE))
+                equalizers={}
+                if p.get('manual') is not True and p.get('eq') is not None:
+                    for slot,role in ((self.current,'out'),(other,'in')):
+                        eq=BandEQ(RATE,p['eq'][role]);eq.warm(self.slots[slot].history);equalizers[slot]=eq
                 target.start=self.frames;self.fade={'old':self.current,'next':other,'start':self.frames,
                     'length':round(duration*RATE),'initial':0.,'announced':False,'key':p['key'],
                     'flow':p.get('manual') is not True,'shape':'smooth' if p.get('shape')=='smooth' else 'shared'}
+                if equalizers:self.fade['eq']=equalizers
                 self.finished=False;self.condition.notify_all()
         elif action=='cancel':
             with self.condition:
@@ -118,6 +126,7 @@ class Mixer:
                     gain=fade['initial']+(1.-fade['initial'])*float(curve(x,flow=fade.get('flow',False),shape=fade.get('shape','shared')))
                     if int(p.get('keep',self.current))==fade['old']:
                         fade['old'],fade['next']=fade['next'],fade['old'];gain=1.-gain
+                    if fade.get('eq'):fade['eq_cancel']={slot:eq.amount for slot,eq in fade['eq'].items()}
                     fade.update(initial=gain,start=self.frames,length=round(.18*RATE),rendered=False,announced=True,flow=False)
                 else:self.slots[1-self.current]=None
                 self.condition.notify_all()
@@ -159,7 +168,16 @@ class Mixer:
                 if n:out[:n]*=curve((np.arange(n)+old.attack)/max(1,length-1))[:,None]
                 old.attack+=len(out)
             if fade and len(out)<count:out=np.pad(out,((0,count-len(out)),(0,0)))
-            if fade:out=blend(out,new.take(count),self.frames-fade['start'],fade['length'],fade['initial'],flow=fade.get('flow',False),shape=fade.get('shape','shared'))
+            if fade:
+                incoming=new.take(count)
+                if fade.get('eq'):
+                    position=ease((self.frames-fade['start']+np.arange(count))/max(1,fade['length']-1))
+                    for slot,data in ((fade['old'],out),(fade['next'],incoming)):
+                        amount=(1-position)*fade['eq_cancel'][slot] if fade.get('eq_cancel') else position if slot==fade['old'] else 1-position
+                        rendered=fade['eq'][slot].process(data,amount)
+                        if slot==fade['old']:out=rendered
+                        else:incoming=rendered
+                out=blend(out,incoming,self.frames-fade['start'],fade['length'],fade['initial'],flow=fade.get('flow',False),shape=fade.get('shape','shared'))
             self.frames+=count
             if fade and self.frames>=fade['start']+fade['length']:
                 fade['rendered']=True;self.current=fade['next']

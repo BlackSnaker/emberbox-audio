@@ -27,14 +27,24 @@ def recipe(value):
     if mode not in ('auto','manual','cut') or shape not in ('shared','smooth'):raise ValueError('Invalid transition')
     seconds=float(value.get('seconds',8))
     if not math.isfinite(seconds) or not 1<=seconds<=8:raise ValueError('Invalid duration')
-    return dict(mode=mode,seconds=round(seconds,1),shape=shape,beats=value.get('beats',True) is True)
+    eq_mode=value.get('eq_mode','off')
+    if eq_mode not in ('off','auto','manual'):raise ValueError('Invalid transition EQ mode')
+    # Validate without importing the DSP/SciPy stack into the GTK startup path.
+    def cuts(name):
+        raw=value.get(name,[0,0,0])
+        if not isinstance(raw,(list,tuple)) or len(raw)!=3:raise ValueError('Invalid transition EQ')
+        values=[float(v) for v in raw]
+        if not all(math.isfinite(v) and -12<=v<=0 for v in values):raise ValueError('Invalid transition EQ')
+        return values
+    return dict(mode=mode,seconds=round(seconds,1),shape=shape,beats=value.get('beats',True) is True,
+                eq_mode=eq_mode,eq_out=cuts('eq_out'),eq_in=cuts('eq_in'))
 
 
 class FlowPlans:
     def __init__(self,path):
         self.path=Path(path);self.data={};self.revision=0
         try:
-            if self.path.stat().st_size>5_000_000:return
+            if self.path.stat().st_size>10_000_000:return
             raw=json.loads(self.path.read_text())
             if not isinstance(raw,dict):return
             for key,values in list(raw.items())[:MAX_PLAYLISTS]:
@@ -49,7 +59,7 @@ class FlowPlans:
 
     def get(self,key,a,b):
         value=self.data.get(key,{}).get(pair_key(a,b))
-        return dict(value) if value else None
+        return recipe(value) if value else None
 
     def for_tracks(self,a,b):
         key=a.get('flow_playlist')
@@ -88,3 +98,9 @@ def duration(plan,outgoing,incoming,quiet=False,grid=None):
     result=min(wanted,max(2.,outgoing*.1),max(2.,incoming*.1) if incoming>0 else 8.)
     if quiet and (not plan or plan['mode']=='auto'):result=min(result,1.4)
     return result
+
+
+def configuration(plan):
+    if not plan or plan.get('eq_mode','off')=='off':return None
+    if plan['eq_mode']=='auto':return {'out':[-9.,0.,0.],'in':[-6.,0.,0.]}
+    return {'out':list(plan['eq_out']),'in':list(plan['eq_in'])}

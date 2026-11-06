@@ -3,6 +3,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {spawn}=require('node:child_process');
 const {Scenes,signature}=require('./scene.cjs');
+const {validateEQ}=require('./flow_eq.cjs');
 const source=fs.readFileSync(path.join(__dirname,'spatial_source.js'),'utf8');
 const errors=new Set(['SIGN_IN_REQUIRED','SUBSCRIPTION_REQUIRED','DEVICE_LIMIT','INVALID_ARGUMENTS',
  'SPATIAL_NETWORK','SPATIAL_SOURCE_LIMIT','SPATIAL_SOURCE_UNSUPPORTED','SPATIAL_NO_ATMOS_ASSET',
@@ -416,6 +417,7 @@ class SpatialPlayback {
    }catch(e){if(revision===r.flowRevision&&deck&&r.standby===deck)this.dropDeck(r,deck);throw e;}
   }
   if(p.operation==='transition'){
+   const equalizer=validateEQ(p.eq);
    const deck=r.standby;if(!deck?.ready||!deck.quality||deck.key!==p.key||r.transition||r.paused||r.active.metadata.duration-r.state.position>23)throw Error('FLOW_NOT_READY');
    const requested=Math.max(.15,Math.min(8,Number(p.duration)||8)),revision=r.flowRevision,until=Date.now()+14000;
    while(r.active.metadata.duration-r.state.position>requested+.65&&Date.now()<until){
@@ -425,7 +427,7 @@ class SpatialPlayback {
    if(this.session!==r||revision!==r.flowRevision||r.paused||r.standby!==deck)throw Error('FLOW_CANCELLED');
    if(r.active.metadata.duration-r.state.position>requested+1)throw Error('FLOW_NOT_READY');
    const duration=Math.max(.15,Math.min(requested,r.active.metadata.duration-r.state.position-.4));
-   return new Promise((resolve,reject)=>{r.transition={key:p.key,resolve,reject,timer:setTimeout(()=>this.failed(r,'SPATIAL_MIX_TIMEOUT'),6000)};this.send(r.mixer,{type:'transition',key:p.key,duration,shape:p.shape==='smooth'?'smooth':'shared'});});
+   return new Promise((resolve,reject)=>{r.transition={key:p.key,resolve,reject,timer:setTimeout(()=>this.failed(r,'SPATIAL_MIX_TIMEOUT'),6000)};this.send(r.mixer,{type:'transition',key:p.key,duration,shape:p.shape==='smooth'?'smooth':'shared',eq:equalizer});});
   }
   throw Error('INVALID_ARGUMENTS');
  }

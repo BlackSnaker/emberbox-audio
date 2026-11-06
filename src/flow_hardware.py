@@ -63,6 +63,42 @@ class TimeDial(VolumeKnob):
         self.shown=self.value;self._render()
 
 
+class CutDial(TimeDial):
+    def __init__(self,changed,name):
+        super().__init__(lambda v:changed(round(-12+12*v)))
+        self.get_accessible().set_name(name)
+        self.small=False
+
+    def set_db(self,db,available):
+        self.set_state((db+12)/12,False,available)
+        self.get_accessible().set_description(text(f'{db:g} dB. Cuts only; applies during the transition.',
+            f'{db:g} дБ. Ослабление только во время перехода.'))
+
+    def _render(self):
+        index=round(max(0,min(1,self.shown))*200);small=getattr(self,'small',False)
+        key=index,small
+        if self.frame!=key:
+            pixels=time_dial(index)
+            if small:
+                from gi.repository import GdkPixbuf
+                pixels=pixels.scale_simple(54,54,GdkPixbuf.InterpType.BILINEAR)
+            self.image.set_from_pixbuf(pixels);self.frame=key
+
+    def _key(self,_widget,event):
+        name=Gdk.keyval_name(event.keyval)
+        steps={'Up':1/12,'Right':1/12,'Down':-1/12,'Left':-1/12,'Page_Up':3/12,'Page_Down':-3/12}
+        if name in steps:self._change(self.value+steps[name]);return True
+        return VolumeKnob._key(self,_widget,event)
+
+    def _scroll(self,_widget,event):
+        if event.direction==Gdk.ScrollDirection.SMOOTH:
+            ok,_dx,dy=event.get_scroll_deltas()
+            if not ok or abs(dy)<.01:return True
+            sign=-1 if dy>0 else 1
+        else:sign=1 if event.direction in (Gdk.ScrollDirection.UP,Gdk.ScrollDirection.RIGHT) else -1
+        self._change(self.value+sign/12);return True
+
+
 class BeatSwitch(MuteToggle):
     __gsignals__={'toggled':(GObject.SignalFlags.RUN_LAST,None,())}
     def __init__(self):

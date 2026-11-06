@@ -89,6 +89,7 @@ jobs:
           node tests/spatial_source_test.js
           node tests/spatial_playback_test.cjs
           node tests/flow_engine_checks.cjs
+          node tests/flow_eq_checks.cjs
           node tests/scene_test.cjs
       - name: Headphone voicing and small-screen controls
         run: |

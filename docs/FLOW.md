@@ -38,6 +38,38 @@ make a small analogue mixing desk inside Ember.
   Repeated identical pairs in one playlist share a recipe; inserting or
   reordering another song never assigns it somebody else's transition.
 
+
+### Two lanes and transition EQ · 0.29
+
+The timeline shows **16 seconds of A's outro and B's intro**, with real gain
+envelopes and a highlighted overlap. Drag either track: moving A right increases
+overlap; moving B right decreases it. The range is **1–8 seconds**, in 0.1 s
+steps. Shift gives finer movement; up/down selects a lane, left/right moves it.
+Dragging selects manual mode. A recipe is written on release, while drawing
+follows GTK's frame clock. Automatic changes ease into place and settle;
+system reduced-animation preferences are respected. Songs remain complete;
+this edits the overlap without extracting audio files.
+
+**Transition EQ** opens two sets of physical low/mid/high dials, one per track.
+The **0…−12 dB** cut range leaves room for the next song's bass or voice while
+reserving peak headroom. **Ember · bass handover** gradually releases A's low
+frequencies and restores B's. It is a lightweight automatic profile, without
+a neural model. **By hand** saves your own cuts; **Direct** bypasses EQ.
+Switching from automatic to manual preserves the current dial positions.
+
+EQ supports **in-player Apple Music**, including native AAC, Lossless, Hi-Res
+and Atmos. MusicKit uses ordinary nodes in its authorized Web Audio graph;
+an unavailable graph safely falls back to ordinary track switching.
+YouTube supports the lanes and envelopes, with **EQ disabled in the UI**.
+Spotify/Yandex retain their existing mixing limitation.
+
+Two fixed crossover filters form three complementary bands. Attenuation moves
+smoothly per sample, with headroom calculated from the impulse response.
+The incoming track finishes at its original tone; cancellation smoothly
+releases filtering. Native output rate, source codec, existing spatial
+processing and audio buffers stay intact. A private recipe stores only pair
+placement/settings and six EQ values.
+
 ![EmberFlow hardware desk with original offline demonstration media](../assets/screenshots/flow-editor.en.png)
 
 Playback mixing supports **in-player Apple Music and YouTube**. Spotify and Yandex

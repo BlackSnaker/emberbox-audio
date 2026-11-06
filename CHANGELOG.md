@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.29.0 — 2026-11-06
+
+- Add draggable A/B lanes, precise overlap and finite eased automatic placement. Use rounded housings, soft selectors and illuminated envelopes under glass.
+- Add Apple Music transition EQ: six physical cut dials, manual three-band control and automatic bass handover. Complementary filters, impulse-based headroom and smooth cancellation retain source/output rates and existing buffers.
+- Save on mouse release, support keyboard movement and migrate private recipes compatibly. YouTube retains lanes/envelopes while honestly disabling unsupported EQ.
+- Check real PCM at 48/192 kHz, peaks, spectrum, cancellation, Web Audio routing, packaged dependencies and gestures in both languages and three sizes.
+
 ## 0.28.0 — 2026-11-06
 
 - Add an in-playlist EmberFlow desk: manual 1–8 second overlaps, two gain shapes, a no-mix pair option and adaptive Ember selection for the loaded list.

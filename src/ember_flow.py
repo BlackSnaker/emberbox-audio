@@ -2,7 +2,7 @@
 import json,time
 from listening_queue import matches
 from source_picker import text
-from flow_plans import FlowPlans,duration as plan_duration
+from flow_plans import FlowPlans,duration as plan_duration,configuration
 
 
 class EmberFlow:
@@ -33,6 +33,10 @@ class EmberFlow:
         h=self.host
         return self.supported and not (h.source=='apple-music' and h.apple_mode=='native'
             and getattr(h.apple_web,'state',{}).get('emberBeatSync') is False)
+
+    @property
+    def eq_supported(self):
+        return self.supported and self.host.source=='apple-music' and getattr(self.host.apple_web,'state',{}).get('emberFlowEQ') is True
 
     @property
     def message(self):
@@ -157,6 +161,7 @@ class EmberFlow:
                 deck=self.youtube
             deck.beat_sync=beats and mixing and self.enabled
             deck.shape=plan['shape'] if plan else 'shared'
+            deck.eq=configuration(plan) if self.eq_supported else None
             try:deck.prepare(next_item)
             except Exception:self.preparing=False;deck.cancel()
             s.changed()

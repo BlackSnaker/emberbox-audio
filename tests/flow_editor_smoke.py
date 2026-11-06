@@ -36,7 +36,7 @@ items=[dict(uri=f'apple:songs:{100+i}',id=str(100+i),kind='songs',title=name,
             artist='Emberbox Sessions',image='fixture:cover',duration_ms=180000+i*8000)
        for i,name in enumerate(('Afterglow','Amber Lines','Night Drive','Тёплый воздух'))]
 playlist=dict(uri='apple:library-playlists:p.fixture',kind='library-playlists',id='p.fixture',title='Slow Evenings',image='fixture:cover')
-host=f.FixtureHost();host.source='apple-music';host.apple_web=SimpleNamespace(state={'emberFlow':True,'emberBeatSync':False})
+host=f.FixtureHost();host.source='apple-music';host.apple_web=SimpleNamespace(state={'emberFlow':True,'emberBeatSync':False,'emberFlowEQ':True})
 host.appearance=Appearance();host.appearance.set_theme('nocturne');host.settings.appearance=host.appearance
 with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected network')),\
      patch.object(fullscreen,'LyricsClient',f.FixtureLyrics),patch.object(fullscreen.Artwork,'load',f.image_load):
@@ -62,11 +62,26 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         event=Gdk.Event.new(Gdk.EventType.KEY_PRESS);event.keyval=Gdk.KEY_Up;event.state=Gdk.ModifierType(0)
         desk.knob.emit('key-press-event',event);assert desk.length.get_value()==5
         desk.shape_buttons['smooth'].clicked();assert desk.shape.get_active_id()=='smooth'
-        assert desk.graph.get_transition_running() or not Gtk.Settings.get_default().get_property('gtk-enable-animations')
-        settle(.5);assert not desk.graph.get_transition_running() and desk.knob.tick==0
+        assert desk.timeline.shape=='smooth'
+        settle(.5);assert desk.timeline.morph_tick==0
+        # Native mouse gestures move both lanes; saving happens once on release.
+        lane=desk.timeline;before=service.flow.plans.revision
+        scale,end,start=lane.positions();event=Gdk.Event.new(Gdk.EventType.BUTTON_PRESS)
+        event.button=1;event.x=20+(start+4)*scale;event.y=100;event.x_root=event.x;event.y_root=event.y
+        lane.emit('button-press-event',event);assert lane.drag
+        motion=Gdk.Event.new(Gdk.EventType.MOTION_NOTIFY);motion.x_root=event.x_root+scale;motion.y_root=100;motion.state=Gdk.ModifierType.BUTTON1_MASK
+        lane.emit('motion-notify-event',motion);settle(.08)
+        assert service.flow.plans.revision==before and desk.length.get_value()==4
+        release=Gdk.Event.new(Gdk.EventType.BUTTON_RELEASE);release.button=1;lane.emit('button-release-event',release)
+        assert service.flow.plans.revision==before+1 and lane.tick==0
+        desk.eq_panel.mode_buttons['manual'].clicked();desk.eq_panel.dials[0]._change(.5)
+        assert service.flow.plans.get(key,items[0],items[1])['eq_out'][0]==-6
+        desk.eq_panel.mode_buttons['auto'].clicked();settle(.5)
+        assert desk.knob.tick==0
         service.flow.set_enabled(True);settle(.8)
         target=os.environ.get('EMBERBOX_FLOW_EDITOR_PREVIEW')
         for width,height in ((1920,1080),(1280,720),(1024,600)):
+            if width<1920:desk.eq_panel.toggle.set_active(False);settle(.4)
             stage.window.unfullscreen();stage.window.resize(width,height);settle(.4)
             assert stage.window.get_size()==(width,height),(stage.window.get_size(),width,height)
             fits(stage,[desk.pairs,desk.auto_button,desk.preview_button,stage.play_button,stage.knob])
