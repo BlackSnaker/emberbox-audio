@@ -6,6 +6,16 @@
   <p><a href="#get-started">Get started</a> · <a href="#system-requirements">System requirements</a> · <a href="docs/DESIGN.md">Grunesphism</a> · <a href="README.ru.md">Русский</a> · <a href="https://github.com/BlackSnaker/emberbox-video">Emberbox Video</a></p>
 </div>
 
+## Nocturne · A quieter room
+
+Charcoal surfaces, quiet reflected artwork light and subdued brass. The music
+and artwork take centre stage, with amber lamps against a deep dark backdrop.
+
+Select **Settings → Nocturne**. Your choice persists across desktop, Mini and
+fullscreen. Christmas decorations and snow remain part of Winter Glow.
+
+![Nocturne fixture interface with original Emberbox Sessions artwork](assets/nocturne.en.png)
+
 **Album rooms, reimagined.** Large complete artwork, softly reflected light and a clear record table. [See the album design →](docs/DESIGN.md#the-album-room)
 
 ## Ember Mashups · Two songs. One spark.

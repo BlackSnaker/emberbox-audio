@@ -137,6 +137,8 @@ class FavoriteButton(Gtk.Button):
         if phase=='saving':return
         if not self.note:
             self.note=Gtk.Popover.new(self);self.note.get_style_context().add_class('favorite-note')
+            appearance=getattr(self.get_toplevel(),'ember_appearance',None)
+            if appearance:appearance.decorate_popup(self.note)
             self.note.set_position(Gtk.PositionType.TOP);self.note.set_modal(False)
             if hasattr(self.note,'set_transitions_enabled'):self.note.set_transitions_enabled(False)
             box=Gtk.Box(spacing=9);box.set_border_width(10);self.note.add(box)

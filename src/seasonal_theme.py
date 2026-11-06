@@ -1,4 +1,4 @@
-"""Opt-in Winter Glow theme. Local preference, scoped CSS and finite decoration."""
+"""Local classic, Winter Glow and Nocturne themes with scoped materials."""
 from concurrent.futures import ThreadPoolExecutor
 import json
 import os
@@ -10,6 +10,7 @@ from gi.repository import Gdk,Gtk,GLib
 from paths import CONFIG_DIR
 from source_picker import text
 from winter_art import winter_image
+from night_theme import CSS as NIGHT_CSS,preview as night_preview
 
 CSS=b'''
 .christmas-theme .card {
@@ -88,17 +89,24 @@ window.ember-stage.christmas-theme.stage-opening { background-color: transparent
 
 class Appearance:
     def __init__(self,path=None):
-        self.path=Path(path or CONFIG_DIR/'appearance.json');self.christmas=False;self.snow_enabled=False
+        self.path=Path(path or CONFIG_DIR/'appearance.json');self.theme='classic';self.snow_enabled=False
         try:
             if self.path.stat().st_size<4096:
-                data=json.loads(self.path.read_text());self.christmas=data.get('theme')=='christmas'
+                data=json.loads(self.path.read_text())
+                if data.get('theme') in ('classic','christmas','nocturne'):self.theme=data['theme']
                 self.snow_enabled=data.get('snow') is True
         except (OSError,ValueError,TypeError,AttributeError):pass
         self.listeners=[];self.surfaces=[];self.closed=False
         self.pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-winter-art')
-        self.provider=Gtk.CssProvider();self.provider.load_from_data(CSS)
+        self.provider=Gtk.CssProvider();self.provider.load_from_data(CSS+NIGHT_CSS)
         self.screen=Gdk.Screen.get_default()
         Gtk.StyleContext.add_provider_for_screen(self.screen,self.provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+15)
+
+    @property
+    def christmas(self):return self.theme=='christmas'
+
+    @property
+    def nocturne(self):return self.theme=='nocturne'
 
     def subscribe(self,callback):
         self.listeners.append(callback)
@@ -108,39 +116,49 @@ class Appearance:
         if self.closed:return False
         enabled=bool(enabled)
         if enabled==self.christmas:return True
-        return self.save_preferences(enabled,self.snow_enabled)
+        return self.set_theme('christmas' if enabled else 'classic')
+
+    def set_theme(self,theme):
+        if self.closed or theme not in ('classic','christmas','nocturne'):return False
+        if theme==self.theme:return True
+        return self.save_preferences(theme,self.snow_enabled)
 
     def set_snow(self,enabled):
         if self.closed:return False
         if bool(enabled)==self.snow_enabled:return True
-        return self.save_preferences(self.christmas,bool(enabled))
+        return self.save_preferences(self.theme,bool(enabled))
 
-    def save_preferences(self,enabled,snow):
+    def save_preferences(self,theme,snow):
         temporary=self.path.with_suffix('.next.json')
         try:
             self.path.parent.mkdir(parents=True,exist_ok=True)
             fd=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
-            with os.fdopen(fd,'w') as file:json.dump({'theme':'christmas' if enabled else 'classic','snow':snow},file)
+            with os.fdopen(fd,'w') as file:json.dump({'theme':theme,'snow':snow},file)
             temporary.chmod(0o600);temporary.replace(self.path)
         except OSError:return False
-        theme_changed=self.christmas!=enabled
-        self.christmas=enabled;self.snow_enabled=snow
+        theme_changed=self.theme!=theme
+        self.theme=theme;self.snow_enabled=snow
         for surface in tuple(self.surfaces):
             if theme_changed:surface.apply(animate=True)
-            else:surface.snow.set_enabled(enabled and snow)
+            else:surface.snow.set_enabled(self.christmas and snow)
         for callback in tuple(self.listeners):callback()
         return True
 
     def attach(self,window,overlay,stage=False):
+        window.ember_appearance=self
         surface=WinterSurface(self,window,overlay,stage);self.surfaces.append(surface)
         return surface
 
     def decorate_popup(self,popup):
         def update():
-            context=popup.get_style_context()
-            context.add_class('christmas-theme') if self.christmas else context.remove_class('christmas-theme')
+            self.apply_classes(popup)
         update();unsubscribe=self.subscribe(update)
         popup.connect('destroy',lambda *_:unsubscribe())
+
+    def apply_classes(self,widget):
+        context=widget.get_style_context()
+        for name,enabled in (('christmas-theme',self.christmas),('nocturne-theme',self.nocturne)):
+            context.add_class(name) if enabled else context.remove_class(name)
 
     def close(self):
         if self.closed:return
@@ -168,8 +186,7 @@ class WinterSurface:
 
     def apply(self,animate=False):
         if self.closed:return
-        context=self.window.get_style_context();enabled=self.appearance.christmas
-        context.add_class('christmas-theme') if enabled else context.remove_class('christmas-theme')
+        enabled=self.appearance.christmas;self.appearance.apply_classes(self.window)
         self.generation+=1;self.key=None;self.settle()
         self.snow.set_enabled(enabled and self.appearance.snow_enabled)
         if enabled:
@@ -223,6 +240,30 @@ class WinterSurface:
             if self.window.handler_is_connected(signal):self.window.disconnect(signal)
         for image in (self.top,self.corner):image.destroy()
         if self in self.appearance.surfaces:self.appearance.surfaces.remove(self)
+
+
+def night_choice(appearance):
+    """Quiet, static material preview; selection only changes scoped styles."""
+    tile=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8)
+    tile.get_style_context().add_class('theme-choice');tile.get_style_context().add_class('night-choice')
+    tile.pack_start(Gtk.Image.new_from_pixbuf(night_preview()),False,False,0)
+    row=Gtk.Box(spacing=10);tile.pack_start(row,False,False,0)
+    title=Gtk.Label(label=text('Nocturne','Тёплая ночь'));title.set_xalign(0)
+    title.get_style_context().add_class('theme-choice-title');row.pack_start(title,True,True,0)
+    switch=Gtk.Switch();switch.set_active(appearance.nocturne);switch.set_valign(Gtk.Align.CENTER)
+    switch.set_has_tooltip(False);switch.get_accessible().set_name(text('Nocturne · warm dark theme','Тёплая ночь · тёмная тема'))
+    row.pack_end(switch,False,False,0)
+    note=Gtk.Label(label=text('Charcoal, amber & quiet light','Тёплый уголь, янтарь и тихий свет'))
+    note.set_xalign(0);note.set_line_wrap(True);note.set_max_width_chars(32)
+    note.get_style_context().add_class('theme-choice-note');tile.pack_start(note,False,False,0)
+    def changed(_switch,_param):
+        if switch.get_active()==appearance.nocturne:return
+        if not appearance.set_theme('nocturne' if switch.get_active() else 'classic'):
+            switch.set_active(appearance.nocturne);note.set_text(text('Could not save the theme','Не удалось сохранить тему'))
+    switch.connect('notify::active',changed)
+    unsubscribe=appearance.subscribe(lambda:switch.set_active(appearance.nocturne))
+    tile.connect('destroy',lambda *_:unsubscribe())
+    return tile,switch
 
 
 def theme_choice(appearance):

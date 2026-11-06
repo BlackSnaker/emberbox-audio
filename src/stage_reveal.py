@@ -83,6 +83,7 @@ class StageReveal(Gtk.GLArea):
                 self.cover_origin=(self.origin[0]+point[0]+(image.get_allocated_width()-w)/2,
                                    self.origin[1]+point[1]+(image.get_allocated_height()-h)/2,w,h)
         self.pigment=tuple(max(26,min(140,67+(value-base)*8))/255 for value,base in zip(palette,BASE_COLOR))
+        if getattr(getattr(host,'appearance',None),'nocturne',False):self.pigment=(.065,.069,.067)
         self.active=True;self.started=None;self.progress=1. if reverse else 0.;self.handed_off=False
         self.reversing=reverse
         self.fallback=self.driver is None

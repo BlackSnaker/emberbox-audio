@@ -21,6 +21,8 @@ class SourcePicker:
         if self.popover:
             self.popover.destroy()
         popup = self.popover = Gtk.Popover.new(anchor)
+        appearance=getattr(anchor.get_toplevel(),'ember_appearance',None)
+        if appearance:appearance.decorate_popup(popup)
         popup.get_style_context().add_class('source-popover')
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=7)
         box.set_border_width(12)

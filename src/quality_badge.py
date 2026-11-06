@@ -35,6 +35,7 @@ class FrostedPanel(Gtk.Overlay):
         self.image=Gtk.Image();self.add(self.image)
         self.connect('size-allocate',lambda *_:self.render())
         self.connect('map',lambda *_:self.render())
+        self.connect('style-updated',lambda *_:self.render())
         if FrostedPanel.grain is None:
             rng=random.Random(19);pixels=bytearray()
             for _ in range(64*64):
@@ -70,27 +71,32 @@ class FrostedPanel(Gtk.Overlay):
         width,height=self.get_allocated_width(),self.get_allocated_height()
         if min(width,height)<2:return
         point=self.translate_coordinates(self.host,0,0) if self.host else None
-        x,y=point or (0,0);key=(width,height,x,y,id(self.backdrop))
+        appearance=getattr(self.host,'ember_appearance',None)
+        night=bool(appearance and appearance.nocturne)
+        x,y=point or (0,0);key=(width,height,x,y,id(self.backdrop),night)
         if key==self.render_key:return
         self.render_key=key
         if self.backdrop and point:
             sx,sy=self.scale
             image=self.backdrop.transform((width,height),Image.Transform.AFFINE,
-                (1/sx,0,x/sx,0,1/sy,y/sy),Image.Resampling.BILINEAR,fillcolor=(47,54,46,255))
-        else:image=Image.new('RGBA',(width,height),(40,48,40,255))
+                (1/sx,0,x/sx,0,1/sy,y/sy),Image.Resampling.BILINEAR,fillcolor=(22,24,24,255) if night else (47,54,46,255))
+        else:image=Image.new('RGBA',(width,height),(22,24,24,255) if night else (40,48,40,255))
         # Milk-coloured condensation and a fading upper reflection.
         wash=Image.new('RGBA',(1,height));rows=[]
         for row in range(height):
             t=row/max(1,height-1);shine=max(0,1-t/.42)*.07
-            rows.append((round((.38-.16*t+shine)*255),round((.40-.14*t+shine)*255),
-                         round((.34-.12*t+shine)*255),round((.78+.07*t)*255)))
+            if night:
+                rows.append((round(29-8*t+shine*65),round(30-8*t+shine*60),round(29-8*t+shine*50),225))
+            else:
+                rows.append((round((.38-.16*t+shine)*255),round((.40-.14*t+shine)*255),
+                             round((.34-.12*t+shine)*255),round((.78+.07*t)*255)))
         wash.putdata(rows);image=Image.alpha_composite(image,wash.resize((width,height)))
         grain=Image.new('RGBA',(width,height))
         for gy in range(0,height,64):
             for gx in range(0,width,64):grain.paste(self.grain,(gx,gy))
         image=Image.alpha_composite(image,grain)
         edge=Image.new('RGBA',(width,height))
-        ImageDraw.Draw(edge).rounded_rectangle((0,0,width-1,height-1),radius=17,outline=(247,240,215,35),width=1)
+        ImageDraw.Draw(edge).rounded_rectangle((0,0,width-1,height-1),radius=17,outline=(215,186,140,25) if night else (247,240,215,35),width=1)
         image=Image.alpha_composite(image,edge)
         mask=Image.new('L',(width,height));ImageDraw.Draw(mask).rounded_rectangle((0,0,width-1,height-1),radius=17,fill=255)
         image.putalpha(mask)
@@ -122,6 +128,8 @@ class QualityBadge(Gtk.Button):
         if self.popover and self.popover.get_visible():self.popover.popdown();return
         if not self.popover:
             self.popover=Gtk.Popover.new(self);self.popover.get_style_context().add_class('ember-quality-popover')
+            appearance=getattr(self.get_toplevel(),'ember_appearance',None)
+            if appearance:appearance.decorate_popup(self.popover)
             self.panel=FrostedPanel();self.popover.add(self.panel)
             self.popover.connect('closed',lambda *_:setattr(self.panel,'backdrop',None))
         self.populate();self.panel.prepare(self.get_toplevel());self.popover.popup()

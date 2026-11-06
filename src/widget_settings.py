@@ -72,8 +72,10 @@ class SettingsMenu:
         box.pack_start(heading, False, False, 0)
         appearance=getattr(self,'appearance',None)
         if appearance:
-            from seasonal_theme import theme_choice
+            from seasonal_theme import theme_choice,night_choice
             appearance.decorate_popup(popup)
+            night,self.night_switch=night_choice(appearance)
+            box.pack_start(night,False,False,5)
             tile,self.theme_switch=theme_choice(appearance)
             self.snow_switch=tile.snow_switch
             box.pack_start(tile,False,False,5)
@@ -111,6 +113,7 @@ class SettingsMenu:
                     popup.popdown()
                     if getattr(self,'scene_popup',None):self.scene_popup.destroy()
                     self.scene_popup=Gtk.Popover.new(anchor);self.scene_popup.get_style_context().add_class('scene-popover')
+                    if appearance:appearance.decorate_popup(self.scene_popup)
                     self.scene_control=SceneControl(apple);self.scene_popup.add(self.scene_control)
                     self.scene_popup.connect('closed',lambda item:item.destroy());self.scene_popup.show_all();self.scene_popup.popup()
                 scene.connect('clicked',open_scene);box.pack_start(scene,False,False,4)

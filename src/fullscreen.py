@@ -128,7 +128,7 @@ def label(value, style, wrap=False):
 
 
 @lru_cache(maxsize=4)
-def background(width,height,color,christmas=False):
+def background(width,height,color,christmas=False,nocturne=False):
     # A small cached gradient avoids rasterising tens of thousands of SVG
     # pattern elements. NumPy does the work outside GTK; upscale only once.
     ratio=min(1.,640/max(width,height))
@@ -150,6 +150,15 @@ def background(width,height,color,christmas=False):
         pixels=pixels*.22+green*.78
         pixels=pixels*(1-warmth)+np.array((150,104,56),dtype=np.float32)*warmth
         pixels=pixels*(1-vignette*.5)+np.array((8,20,15),dtype=np.float32)*vignette*.5
+    elif nocturne:
+        # A fixed, quiet material with just a trace of cover pigment. Keep
+        # bright/blue artwork from turning the dark room into a blue flood.
+        base=np.array((15,17,17),dtype=np.float32)
+        tint=np.clip(np.asarray(color,dtype=np.float32)-BASE_COLOR,-9,9)*.20
+        ember=np.maximum(0.,1.-np.sqrt(((x-1180)/1050)**2+((y-130)/870)**2))[...,None]
+        reflected=np.maximum(0.,1.-np.sqrt(((x-370)/850)**2+((y-390)/740)**2))[...,None]
+        pixels=base+ember*np.array((7,5,3),dtype=np.float32)+reflected*(np.array((3,3,2),dtype=np.float32)+tint)
+        pixels=pixels*(1-vignette*.25)+np.array((9,10,10),dtype=np.float32)*vignette*.25
     raw=np.clip(pixels,0,255).astype(np.uint8).tobytes()
     image=GdkPixbuf.Pixbuf.new_from_bytes(GLib.Bytes.new(raw),GdkPixbuf.Colorspace.RGB,False,8,w,h,w*3)
     return image.scale_simple(width,height,GdkPixbuf.InterpType.BILINEAR)
@@ -362,9 +371,12 @@ class FullscreenPlayer:
 
     def theme_changed(self):
         if self.closed:return
-        if getattr(self,'applied_christmas',None)==self.appearance.christmas:return
-        self.applied_christmas=self.appearance.christmas
-        self.edition_label.set_text(text('CHRISTMAS, IN YOUR RHYTHM','РОЖДЕСТВО В ТВОЁМ РИТМЕ') if self.appearance.christmas else text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'))
+        if getattr(self,'applied_theme',None)==self.appearance.theme:return
+        self.applied_theme=self.appearance.theme
+        edition=text('CHRISTMAS, IN YOUR RHYTHM','РОЖДЕСТВО В ТВОЁМ РИТМЕ') if self.appearance.christmas else (
+            text('NOCTURNE · THE LISTENING ROOM','ТЁПЛАЯ НОЧЬ · КОМНАТА ПРОСЛУШИВАНИЯ') if self.appearance.nocturne else
+            text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'))
+        self.edition_label.set_text(edition)
         self.bg_key=None;self.paint_background()
 
     def button(self,value,callback,*styles):
@@ -657,11 +669,12 @@ class FullscreenPlayer:
     def paint_background(self,width=None,height=None):
         if width is None:width,height=self.window.get_size()
         christmas=bool(self.appearance and self.appearance.christmas)
-        key=(width,height,self.palette,christmas)
+        nocturne=bool(self.appearance and self.appearance.nocturne)
+        key=(width,height,self.palette,christmas,nocturne)
         if key==self.bg_key:return
         self.bg_key=key
         # SVG parsing/rasterisation must not block the first animation frames.
-        future=self.artwork.pool.submit(background,max(1,width),max(1,height),self.palette,christmas)
+        future=self.artwork.pool.submit(background,max(1,width),max(1,height),self.palette,christmas,nocturne)
         def completed(result):
             try:pixels=result.result()
             except Exception:return

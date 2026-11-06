@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.27.0 — 2026-11-06
+
+- Add Nocturne / «Тёплая ночь»: charcoal surfaces, quiet reflected artwork light, readable warm text and subdued brass. Select it in desktop, Mini or fullscreen settings; preferences persist.
+- Theme collection, artist/album surroundings, DJ, karaoke, mashups, source/soundstage popovers and the frosted quality panel. Original artwork and existing physical-control pixels stay intact.
+- Use static materials and background-prepared backdrop pixels, without new continuous animations. Selecting Nocturne stops winter decorations/snow while preserving the saved snow preference.
+- Check three-theme live selection, private persistence, decoration cleanup, cover-tint precedence, two languages and three window sizes, without changing transport, source or audio.
+
 ## 0.26.1 — 2026-11-05
 
 - Give automatic EmberFlow an audible shared phrase: introduce the next song gently, let both share the foreground, then dissolve the outgoing tail. An eight-second transition has about 2.2 seconds in the middle phase.

@@ -8,6 +8,17 @@ Grunesphism is the name we use for Emberbox’s visual language. It combines a G
 
 ## Surfaces and colour
 
+**Nocturne / «Тёплая ночь»** uses neutral charcoal materials: a near-black
+backdrop, graphite panels and readable warm text. Brass and amber stay in
+controls and lamps; a faint artwork reflection adds depth without tinting the
+whole screen. Select it in desktop, Mini or fullscreen settings.
+
+Backdrop pixels are prepared outside GTK and cached; materials are static.
+Nocturne stops Christmas decorations and snow while retaining their preferences
+for Winter Glow. Three-theme selection does not change the source or audio settings.
+
+![Nocturne with original demonstration artwork](../assets/nocturne.en.png)
+
 | Token | Colour | Role |
 | --- | --- | --- |
 | Body | `#2c2c29` | Warm olive-charcoal shell |
