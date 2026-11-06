@@ -19,7 +19,7 @@ class TimelineImage(Gtk.Image):
 
 class FlowTimeline(Gtk.EventBox):
     def __init__(self,changed):
-        super().__init__();self.changed=changed;self.set_visible_window(False);self.set_can_focus(True)
+        super().__init__();self.ember_key_handler=self.key;self.changed=changed;self.set_visible_window(False);self.set_can_focus(True)
         self.image=TimelineImage();self.add(self.image);self.image.set_hexpand(True)
         self.seconds=self.shown=8.;self.morph_tick=0;self.morph_start=None;self.anchor=0.;self.mode='auto';self.shape='shared';self.names=['A','B']
         self.drag=None;self.selected=1;self.tick=0;self.pending=None;self.width=800;self.height=178;self.dense=False

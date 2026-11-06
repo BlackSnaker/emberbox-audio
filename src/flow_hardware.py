@@ -32,6 +32,7 @@ def time_dial(index):
 class TimeDial(VolumeKnob):
     def __init__(self,changed):
         super().__init__(changed,large=True)
+        self.ember_key_handler=self._key
         self.get_accessible().set_name(text('Overlap duration','Длительность смешивания'))
         self.connect('unmap',self.settle);self.connect('destroy',self.settle)
 

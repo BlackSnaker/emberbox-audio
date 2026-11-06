@@ -790,6 +790,8 @@ class FullscreenPlayer:
             self.show_page('library');self.library_view.select('search');self.library_view.entry.grab_focus();return True
         if isinstance(self.window.get_focus(),(Gtk.Entry,Gtk.TextView)):return False
         focus=self.window.get_focus()
+        local_keys=getattr(focus,'ember_key_handler',None)
+        if local_keys and local_keys(focus,event):return True
         if focus and (isinstance(focus,Gtk.ListBoxRow) or focus.get_ancestor(Gtk.ListBox)):
             if isinstance(focus,Gtk.ListBoxRow) and key in ('space','Return','KP_Enter'):
                 focus.activate();return True

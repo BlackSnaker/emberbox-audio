@@ -74,8 +74,14 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         assert service.flow.plans.revision==before and desk.length.get_value()==4
         release=Gdk.Event.new(Gdk.EventType.BUTTON_RELEASE);release.button=1;lane.emit('button-release-event',release)
         assert service.flow.plans.revision==before+1 and lane.tick==0
+        calls=list(host.calls);lane.grab_focus();f.key(stage.window,'Right')
+        assert desk.length.get_value()==3.5 and host.calls==calls,'Timeline arrow sought the song'
+        f.key(stage.window,'Left');assert desk.length.get_value()==4
         desk.eq_panel.mode_buttons['manual'].clicked();desk.eq_panel.dials[0]._change(.5)
         assert service.flow.plans.get(key,items[0],items[1])['eq_out'][0]==-6
+        dial=desk.eq_panel.dials[0];dial.grab_focus();calls=list(host.calls);volume=host.sound.volume
+        f.key(stage.window,'Up');assert service.flow.plans.get(key,items[0],items[1])['eq_out'][0]==-5
+        assert host.calls==calls and host.sound.volume==volume,'EQ arrow changed master volume'
         desk.eq_panel.mode_buttons['auto'].clicked();settle(.5)
         assert desk.knob.tick==0
         service.flow.set_enabled(True);settle(.8)
