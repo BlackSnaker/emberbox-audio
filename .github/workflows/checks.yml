@@ -136,6 +136,10 @@ jobs:
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1280x720x24' /usr/bin/python3 tests/reveal_smoke.py
       - name: Fullscreen collection and listening queue
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/library_smoke.py
+      - name: Playlist transition desk, physical controls and saved recipes
+        run: |
+          EMBERBOX_LANGUAGE=en GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/flow_editor_smoke.py
+          EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/flow_editor_smoke.py
       - name: Readable record lists and independent controls
         run: |
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/record_list_smoke.py

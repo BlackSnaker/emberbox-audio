@@ -425,7 +425,7 @@ class SpatialPlayback {
    if(this.session!==r||revision!==r.flowRevision||r.paused||r.standby!==deck)throw Error('FLOW_CANCELLED');
    if(r.active.metadata.duration-r.state.position>requested+1)throw Error('FLOW_NOT_READY');
    const duration=Math.max(.15,Math.min(requested,r.active.metadata.duration-r.state.position-.4));
-   return new Promise((resolve,reject)=>{r.transition={key:p.key,resolve,reject,timer:setTimeout(()=>this.failed(r,'SPATIAL_MIX_TIMEOUT'),6000)};this.send(r.mixer,{type:'transition',key:p.key,duration});});
+   return new Promise((resolve,reject)=>{r.transition={key:p.key,resolve,reject,timer:setTimeout(()=>this.failed(r,'SPATIAL_MIX_TIMEOUT'),6000)};this.send(r.mixer,{type:'transition',key:p.key,duration,shape:p.shape==='smooth'?'smooth':'shared'});});
   }
   throw Error('INVALID_ARGUMENTS');
  }

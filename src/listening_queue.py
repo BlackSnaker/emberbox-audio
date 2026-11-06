@@ -18,6 +18,8 @@ def track(value,source):
            re.fullmatch(r'youtube:[A-Za-z0-9_-]{11}',uri) if source=='youtube' else
            re.fullmatch(r'yandex:track:\d{1,20}',uri))
     if not valid or not result['title'] or value.get('playable') is False:return None
+    context=value.get('flow_playlist')
+    if isinstance(context,str) and re.fullmatch('[0-9a-f]{64}',context):result['flow_playlist']=context
     result['source']=source;result['id']=uri.rsplit(':',1)[-1]
     result['origin']=value.get('origin') if value.get('origin') in ('context','dj') else 'manual'
     if source=='apple-music':result['kind']=uri.split(':')[1]

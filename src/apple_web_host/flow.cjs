@@ -3,8 +3,9 @@ const {detectBeat,matchBeats,attachTap}=require('./rhythm.cjs');
 // Three C2-continuous phases: reveal the intro, share the foreground,
 // release the old ambience. The complementary gains retain peak headroom.
 // The same curve drives mpv (flow_youtube.py); tests compare both engines.
-function mixCurve(position){
+function mixCurve(position,shape='shared'){
  const t=Math.max(0,Math.min(1,position));let x,start,span;
+ if(shape==='smooth')return t*t*t*(t*(t*6-15)+10);
  if(t<.36){x=t/.36;start=0;span=.4;}
  else if(t<.64){x=(t-.36)/.28;start=.4;span=.2;}
  else{x=(t-.64)/.36;start=.6;span=.4;}
@@ -47,7 +48,7 @@ class FlowDecks {
   try{await Promise.race([context.resume(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('FLOW_NOT_READY')),750);})]);
    return (${attachTap.toString()})(a,${gain},context);
   }catch(e){context.close().catch(()=>{});throw e;}finally{clearTimeout(timer);}})()`);}
- async gain(win,to,duration=0,from=to,startsAt=Date.now()){return win.webContents.executeJavaScript(`(()=>{const a=${MEDIA};if(!a)throw Error('FLOW_UNAVAILABLE');
+ async gain(win,to,duration=0,from=to,startsAt=Date.now(),shape='shared'){return win.webContents.executeJavaScript(`(()=>{const a=${MEDIA};if(!a)throw Error('FLOW_UNAVAILABLE');
   const nativeVolume=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'volume');
   if(window.__emberFlowVolume===undefined){window.__emberFlowVolume=a.volume;
     Object.defineProperty(a,'volume',{configurable:true,get(){return window.__emberFlowVolume;},set(v){window.__emberFlowVolume=v;nativeVolume.set.call(a,v*(window.__emberFlowAudio?.media===a?1:window.__emberFlowMultiplier??1));}});}
@@ -59,7 +60,7 @@ class FlowDecks {
    const stamp=graph.context.getOutputTimestamp(),wall=performance.timeOrigin+stamp.performanceTime;
    const start=Math.max(graph.context.currentTime,stamp.contextTime+(${Number(startsAt)}-wall)/1000);
    const values=new Float32Array(1025),curve=${mixCurve.toString()};
-   for(let i=0;i<values.length;i++)values[i]=${from}+(${to}-${from})*curve(i/(values.length-1));
+   for(let i=0;i<values.length;i++)values[i]=${from}+(${to}-${from})*curve(i/(values.length-1),${JSON.stringify(shape==='smooth'?'smooth':'shared')});
    graph.gain.gain.cancelScheduledValues(0);
    if(${duration}>0)graph.gain.gain.setValueCurveAtTime(values,start,${duration});else graph.gain.gain.value=${to};
    return true;
@@ -67,7 +68,7 @@ class FlowDecks {
   const start=performance.now()+(${Number(startsAt)}-Date.now()),set=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'volume').set;
   const envelope=${mixCurve.toString()};
   const step=()=>{const t=${duration}>0?Math.max(0,Math.min(1,(performance.now()-start)/(${duration}*1000))):1;
-   const x=envelope(t);window.__emberFlowMultiplier=${from}+(${to}-${from})*x;
+   const x=envelope(t,${JSON.stringify(shape==='smooth'?'smooth':'shared')});window.__emberFlowMultiplier=${from}+(${to}-${from})*x;
    set.call(a,window.__emberFlowVolume*window.__emberFlowMultiplier);if(t>=1)clearInterval(window.__emberFlowTimer);};
   step();if(${duration}>0)window.__emberFlowTimer=setInterval(step,16);return true;})()`);}
  async cancel(){
@@ -80,7 +81,7 @@ class FlowDecks {
   if(!['songs','library-songs'].includes(p.kind)||!/^\w[\w.-]{0,199}$/.test(String(p.id))||
     typeof p.key!=='string'||p.key.length>80)throw Error('INVALID_ARGUMENTS');
   if(this.key===p.key&&this.next)return {ready:true};
-  await this.cancel();this.beatSync=p.beatSync===true;const generation=this.generation,w=this.make(false);this.next=w;
+  await this.cancel();this.beatSync=p.beatSync===true;this.shape=p.shape==='smooth'?'smooth':'shared';const generation=this.generation,w=this.make(false);this.next=w;
   if(this.beatSync)await this.tap(this.current).catch(()=>false);
   w.webContents.setBackgroundThrottling?.(true);
   const alive=()=>generation===this.generation&&!w.isDestroyed();
@@ -199,7 +200,7 @@ class FlowDecks {
    const remaining=this.pendingState.duration-this.pendingState.position-(a.time-this.tailStartTime)-.1;
    const duration=a.playing?Math.max(.15,Math.min(8,Number(p.duration)||8,remaining)):.15;
    const startsAt=Date.now()+250;
-   await Promise.all([this.gain(old,0,duration,1,startsAt),this.gain(next,1,duration,0,startsAt)]);
+   await Promise.all([this.gain(old,0,duration,1,startsAt,this.shape),this.gain(next,1,duration,0,startsAt,this.shape)]);
    if(generation!==this.generation)throw Error('FLOW_CANCELLED');
    const recovery=beatPlan?Math.max(1.5,Math.min(3.5,240/beatPlan.bpm)):0;
    if(beatPlan)await this.restoreRate(next,beatPlan.rate,recovery,startsAt+duration*1000);

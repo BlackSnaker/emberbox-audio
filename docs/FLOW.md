@@ -12,6 +12,48 @@ first installation.
 
 ![EmberFlow in the listening console, with original demonstration media](../assets/emberflow.png)
 
+## Transition desk · 0.28
+
+Open a playlist in **Collection → EmberFlow · Transitions**. Two recessed decks,
+a machined time dial, tactile selectors and softly lit curves behind glass
+make a small analogue mixing desk inside Ember.
+
+- Select an adjacent pair and **By hand**. Set **1–8 seconds** by dragging the dial,
+  scrolling or using arrow keys. Very short songs and slow preparation can
+  shorten the actual overlap.
+- **Shared phrase** holds both songs in the foreground longer; **Dissolve**
+  transfers gain evenly and gently. **No mix** keeps ordinary switching for that
+  pair. The screen shows gain envelopes, not an invented audio waveform.
+- **Let Ember choose** selects adaptive mode for every **loaded** pair. It does
+  not run a neural model over the whole playlist: during playback the existing
+  meter observes real energy and a clear pulse. A confident rhythm suggests
+  eight beats, capped at eight seconds; a quiet ending shortens the transition.
+  Uncertain measurements retain a conservative smooth blend.
+- **Listen to transition** uses the real playback engines: warm both decks,
+  seek into the first song's outro, then continue the list. Manually queued
+  songs remain; the pair's next song moves ahead of them for audition.
+  Audition enables EmberFlow, changes current playback and does not produce an audio file.
+- Turn on the **EmberFlow** lamp to enable mixing. Editing a recipe never starts
+  playback. Recipes are local to a playlist and an ordered pair of track URIs.
+  Repeated identical pairs in one playlist share a recipe; inserting or
+  reordering another song never assigns it somebody else's transition.
+
+![EmberFlow hardware desk with original offline demonstration media](../assets/screenshots/flow-editor.en.png)
+
+Playback mixing supports **in-player Apple Music and YouTube**. Spotify and Yandex
+recipes can be saved, but mixing auditions are unavailable. Native Apple
+Lossless/Hi-Res/Atmos supports both curves and manual duration,
+**without beat alignment**; its rhythm switch is disabled. Source formats,
+decoding, output buffers and the existing spatial processing stay intact.
+
+The editor covers up to 200 loaded songs; load additional pages before opening
+it. Storage holds 100 playlists and 199 distinct pairs per playlist, refuses
+full writes without evicting recipes, and contains no audio, cookies or keys.
+There is no new neural model, mandatory download or paid API. Glass and metal
+use small cached sprites. Dial, switch and envelope animations run only after
+an action and stop when settled or closed. Audio analysis stays outside GTK.
+
+
 ## Listen as one continuous set
 
 Add songs to Ember's **Queue**, play an album/search result list or start an

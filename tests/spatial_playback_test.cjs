@@ -76,8 +76,8 @@ p.loadDeck=async(r,deck,prepared)=>{deck.context=prepared.contextId;deck.child=c
  await p.configure(true);p.merge(win,metadata);r=p.session;r.state.position=174;r.state.phase='playing';r.active.quality=quality;
  assert.deepEqual(await p.flow(r,{operation:'prepare',key:'entry',kind:'songs',id:'456'}),{ready:true});
  const standby=r.standby,old=r.active;
- const transition=p.flow(r,{operation:'transition',key:'entry',duration:6});
- assert.equal(commands.at(-1).type,'transition');assert.equal(r.active,old,'Promoted before audible output');
+ const transition=p.flow(r,{operation:'transition',key:'entry',duration:6,shape:'smooth'});
+ assert.equal(commands.at(-1).type,'transition');assert.equal(commands.at(-1).shape,'smooth');assert.equal(r.active,old,'Promoted before audible output');
  p.mixerMessage(r,{type:'flow-started',key:'entry',slot:1,duration:6});
  assert.equal((await transition).overlap,true);assert.equal(r.active,standby);
  out=p.merge(win,next);assert.equal(out.id,'456');assert.equal(out.audioQuality.variant,'dolby-atmos');

@@ -6,6 +6,16 @@
   <p><a href="#get-started">Get started</a> · <a href="#system-requirements">System requirements</a> · <a href="docs/DESIGN.md">Grunesphism</a> · <a href="README.ru.md">Русский</a> · <a href="https://github.com/BlackSnaker/emberbox-video">Emberbox Video</a></p>
 </div>
 
+## EmberFlow · Transition desk
+
+Shape your playlist: **Collection → playlist → EmberFlow · Transitions**.
+A machined dial, recessed selectors and glowing envelopes behind glass.
+Tune each pair yourself or let Ember adapt the transition during playback.
+**In-player Apple Music and YouTube**; [capabilities and limits →](docs/FLOW.md)
+
+![EmberFlow transition desk](assets/screenshots/flow-editor.en.png)
+
+
 ## Nocturne · A quieter room
 
 Charcoal surfaces, quiet reflected artwork light and subdued brass. The music

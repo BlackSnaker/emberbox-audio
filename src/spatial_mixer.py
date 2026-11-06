@@ -109,13 +109,13 @@ class Mixer:
                 if outgoing.total is not None:duration=min(duration,max(.01,(outgoing.total-outgoing.consumed)/RATE))
                 target.start=self.frames;self.fade={'old':self.current,'next':other,'start':self.frames,
                     'length':round(duration*RATE),'initial':0.,'announced':False,'key':p['key'],
-                    'flow':p.get('manual') is not True}
+                    'flow':p.get('manual') is not True,'shape':'smooth' if p.get('shape')=='smooth' else 'shared'}
                 self.finished=False;self.condition.notify_all()
         elif action=='cancel':
             with self.condition:
                 if self.fade:
                     fade=self.fade;x=(self.frames-fade['start'])/max(1,fade['length']-1)
-                    gain=fade['initial']+(1.-fade['initial'])*float(curve(x,flow=fade.get('flow',False)))
+                    gain=fade['initial']+(1.-fade['initial'])*float(curve(x,flow=fade.get('flow',False),shape=fade.get('shape','shared')))
                     if int(p.get('keep',self.current))==fade['old']:
                         fade['old'],fade['next']=fade['next'],fade['old'];gain=1.-gain
                     fade.update(initial=gain,start=self.frames,length=round(.18*RATE),rendered=False,announced=True,flow=False)
@@ -159,7 +159,7 @@ class Mixer:
                 if n:out[:n]*=curve((np.arange(n)+old.attack)/max(1,length-1))[:,None]
                 old.attack+=len(out)
             if fade and len(out)<count:out=np.pad(out,((0,count-len(out)),(0,0)))
-            if fade:out=blend(out,new.take(count),self.frames-fade['start'],fade['length'],fade['initial'],flow=fade.get('flow',False))
+            if fade:out=blend(out,new.take(count),self.frames-fade['start'],fade['length'],fade['initial'],flow=fade.get('flow',False),shape=fade.get('shape','shared'))
             self.frames+=count
             if fade and self.frames>=fade['start']+fade['length']:
                 fade['rendered']=True;self.current=fade['next']

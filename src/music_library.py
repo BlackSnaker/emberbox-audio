@@ -128,6 +128,7 @@ class MusicService:
         self.prime_timer=0
         self.pause_after=set()
         self.previous_restart=None
+        self.transition_preview=None
         self.browse_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-collection')
         self.play_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-queue')
         self.youtube=Search(self._youtube_results);self.youtube_done=None
@@ -248,6 +249,48 @@ class MusicService:
         if self.book.queues[self.host.source]:self.start(0)
         else:self.changed()
 
+    def preview_transition(self,items,index):
+        """Audition through the real decks; keep manually queued songs."""
+        if not self.flow.supported or not 0<=index<len(items)-1:return False
+        source=self.host.source
+        before=self.play_generation
+        if not self.play_context(items[index],items) or before==self.play_generation:return False
+        current=self.book.indices[source];queue=self.book.queues[source]
+        if current<0 or queue[current]['uri']!=items[index]['uri']:return False
+        self.flow.set_enabled(True)
+        target=next((i for i in range(current+1,len(queue)) if queue[i]['uri']==items[index+1]['uri']),None)
+        if target is None:return False
+        item=queue.pop(target);item['flow_playlist']=queue[current].get('flow_playlist','')
+        queue.insert(current+1,item);self.book.save()
+        self.transition_preview=(self.play_generation,queue[current]['entry'],time.monotonic()+25)
+        self.changed();return True
+
+    def poll_transition_preview(self,state):
+        pending=self.transition_preview
+        if not pending:return
+        generation,entry,deadline=pending;item=self.book.current(self.host.source)
+        if generation!=self.play_generation or not item or item['entry']!=entry:
+            self.transition_preview=None;return
+        if time.monotonic()>deadline:
+            self.transition_preview=None
+            self.error=text('Preview preparation timed out; normal playback continues.',
+                            'Не удалось подготовить прослушивание вовремя — музыка продолжает играть.')
+            self.changed();return
+        following=self.book.upcoming(self.host.source)
+        if not following:self.transition_preview=None;return
+        plan=self.flow.plans.for_tracks(item,following[0][1])
+        if self.loading or not matches(item,state) or not state.get('playing') or state.get('duration',0)<20:return
+        if not self.flow.ready and (plan or {}).get('mode')!='cut':return
+        self.transition_preview=None
+        from flow_plans import duration
+        seconds=duration(plan,state['duration'],following[0][1].get('duration_ms',0)/1000)
+        # Leave enough real playback for the authorized MusicKit intro probe.
+        lead=12 if self.host.source=='apple-music' and self.flow.beats_supported else 5
+        target=max(0,state['duration']-seconds-lead)
+        self.flow.cancel()
+        self.host.seek_to(target)
+        self.changed()
+
     def play_dj(self,items):
         """Start a DJ block while preserving every pending non-DJ entry."""
         source=self.host.source
@@ -277,6 +320,7 @@ class MusicService:
 
     def start(self,index=None):
         self.cancel_prime()
+        self.transition_preview=None
         self.flow.cancel(preserve_apple=True)
         self.awaiting_native=None
         self.previous_restart=None
@@ -345,6 +389,7 @@ class MusicService:
             if session:h.monitor.call(session,'Pause')
 
     def stop(self,pause_pending=False):
+        self.transition_preview=None
         self.flow.cancel()
         self.awaiting_native=None
         self.previous_restart=None
@@ -377,6 +422,7 @@ class MusicService:
             item=self.book.current(source);state=snapshot(self.host)
             if item and matches(item,state) and state['position']<=3:self.previous_restart=None
         self.flow.tick(snapshot(self.host))
+        self.poll_transition_preview(snapshot(self.host))
         if self.flow.busy:return True
         if self.book.active==source and not self.loading:
             item=self.book.current(source);result=self.watch.observe(item,snapshot(self.host)) if item else None

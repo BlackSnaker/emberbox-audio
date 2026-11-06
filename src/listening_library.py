@@ -6,6 +6,8 @@ from discovery_panel import clear
 from listening_queue import track,LIMIT
 from music_library import NAMES,snapshot
 from track_list import RecordList,RecordRow,CSS as RECORD_CSS
+from flow_editor import FlowEditor,CSS as FLOW_CSS
+from flow_plans import playlist_key
 
 CSS=b'''
 .stage-nav { background-color: rgba(13,21,16,.48); border-radius: 21px; padding: 3px; }
@@ -52,7 +54,7 @@ CSS=b'''
 .library-dense .record-header { padding: 6px 12px; }
 .library-dense .record-list row.record-row { padding-top: 6px; padding-bottom: 6px; }
 '''
-CSS+=RECORD_CSS
+CSS+=RECORD_CSS+FLOW_CSS
 
 
 def label(value,style,width=0):
@@ -122,9 +124,9 @@ class LibraryView(Gtk.Box):
         self.open_artist=open_artist
         self.source=service.host.source;self.category='home';self.selected=None;self.items=[]
         self.cache={};self.next_offset=None;self.busy=False;self.active=False;self.updating=False
-        self.card_size=160;self.request=0;self.song_buttons=[];self.album_buttons=[]
+        self.editor=None;self.card_size=160;self.request=0;self.song_buttons=[];self.album_buttons=[]
         self.track_table=None;self.playback_key=None;self.list_width=1000;self.dense=False
-        hero=Gtk.Box(spacing=24);names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5)
+        hero=self.hero=Gtk.Box(spacing=24);names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5)
         self.hero_image=Gtk.Image();self.hero_image.set_no_show_all(True);hero.pack_start(self.hero_image,False,False,0)
         self.title=label(text('A little more discovery.','Ещё немного открытий.'),'stage-library-title',35)
         self.subtitle=label('','stage-library-note',65)
@@ -151,6 +153,9 @@ class LibraryView(Gtk.Box):
         self.play_all_button.get_style_context().add_class('stage-accent')
         self.add_all_button=button('+ '+text('Add tracks','Добавить треки'),lambda:self.add(self.songs()))
         self.context.pack_start(self.back_button,False,False,0)
+        self.transition_button=button('EmberFlow · '+text('Transitions','Переходы'),self.open_transitions)
+        self.transition_button.set_no_show_all(True)
+        self.context.pack_start(self.transition_button,False,False,0)
         if open_artist:
             self.artist_button=button(text('Artist','Артист')+'  ›',lambda:open_artist(self.selected))
             self.context.pack_start(self.artist_button,False,False,0)
@@ -191,6 +196,7 @@ class LibraryView(Gtk.Box):
         self.load()
 
     def deactivate(self):
+        self.close_editor(render=False)
         self.active=False;self.request+=1;self.busy=False;self.spinner.stop();self.service.cancel_browse()
 
     def select(self,category):
@@ -245,7 +251,29 @@ class LibraryView(Gtk.Box):
 
     def back(self):self.selected=None;self.load()
 
-    def songs(self):return [v for v in self.items if not collection(v) and track(v,self.source)]
+    def songs(self):
+        values=[v for v in self.items if not collection(v) and track(v,self.source)]
+        if self.is_playlist():
+            key=playlist_key(self.source,self.selected)
+            return [dict(v,flow_playlist=key) for v in values]
+        return values
+
+    def is_playlist(self):
+        return bool(self.selected and ('playlist' in self.selected.get('kind','') or ':playlist:' in self.selected.get('uri','')))
+
+    def open_transitions(self):
+        values=self.songs()
+        if not self.is_playlist() or len(values)<2:return
+        self.close_editor(render=False);clear(self.content);self.track_table=None;self.song_buttons=[]
+        self.editor=FlowEditor(self.service,self.artwork,playlist_key(self.source,self.selected),values,self.close_editor)
+        self.hero.hide();self.filters.hide();self.context.hide()
+        self.editor.resize(self.dense)
+        self.content.pack_start(self.editor,False,False,0);self.content.show_all();self.scroll.get_vadjustment().set_value(0)
+
+    def close_editor(self,render=True):
+        if self.editor:self.editor.destroy();self.editor=None
+        if render:self.render()
+
 
     def add(self,items):
         count=self.service.add(items)
@@ -256,6 +284,8 @@ class LibraryView(Gtk.Box):
         self.service.stop();self.service.host.start_yandex_wave()
 
     def render(self):
+        self.close_editor(render=False)
+        self.hero.show();self.filters.show()
         if self.category=='favorites':self.render_favorites();return
         self.favorite_tables=[];self.source_badge.set_text(NAMES[self.source].upper())
         clear(self.content);self.song_buttons=[];self.album_buttons=[];self.track_table=None;self.playback_key=None
@@ -270,6 +300,8 @@ class LibraryView(Gtk.Box):
             owner=self.selected.get('artist') or self.selected.get('subtitle') or NAMES[self.source]
             self.subtitle.set_text(owner+'  ·  '+song_count(count)+('  ·  '+length if seconds else ''))
             if self.open_artist:self.artist_button.set_visible(self.selected.get('kind') in ('album','library-albums') and bool(self.selected.get('artist')))
+            self.transition_button.set_visible(self.is_playlist())
+            self.transition_button.set_sensitive(len(self.songs())>1)
             self.context.show();count=len(self.songs());self.add_all_button.set_label('+ '+text(f'Queue {count}',f'В очередь · {count}'))
             self.play_all_button.set_label('▶ '+text(f'Play {count}',f'Слушать · {count}'))
             self.play_all_button.set_sensitive(bool(count));self.add_all_button.set_sensitive(bool(count))
@@ -352,6 +384,7 @@ class LibraryView(Gtk.Box):
             else:self.pack_start(self.context,False,False,0);self.reorder_child(self.context,2)
             self.source_badge.set_visible(not dense)
             fit_art(self.hero_image,48 if dense else 68)
+        if self.editor:self.editor.resize(dense)
         if self.track_table:self.track_table.resize(width)
         for _source,table in self.favorite_tables:table.resize(width)
 

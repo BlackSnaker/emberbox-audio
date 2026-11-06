@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.28.0 — 2026-11-06
+
+- Add an in-playlist EmberFlow desk: manual 1–8 second overlaps, two gain shapes, a no-mix pair option and adaptive Ember selection for the loaded list.
+- Use physical glass, recessed selectors, a machined mouse/keyboard time dial and smooth metal switch. Animations settle; no new neural model is required.
+- Save private recipes per playlist and exact ordered track pair. Audition through real decks while keeping manually queued songs. Apple Music/YouTube mixing supports both shapes, including native Apple Lossless/Atmos without claiming beat alignment.
+- Check routing, real PCM, cancellation, privacy, three sizes and both languages. Preserve existing audio buffers.
+
 ## 0.27.0 — 2026-11-06
 
 - Add Nocturne / «Тёплая ночь»: charcoal surfaces, quiet reflected artwork light, readable warm text and subdued brass. Select it in desktop, Mini or fullscreen settings; preferences persist.
