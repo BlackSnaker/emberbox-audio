@@ -230,10 +230,17 @@ window.ember-stage.nocturne-theme.stage-opening { background-color: transparent;
  background-image: linear-gradient(to bottom,#cba66d,#96703d); color: #21180f;
 }
 .nocturne-theme entry.mashup-name { color: #e0cba8; }
-.nocturne-theme .karaoke-current, .nocturne-theme button.stage-line.stage-line-active { color: #f1dfbd; text-shadow: none; }
 .nocturne-theme .karaoke-neighbour, .nocturne-theme button.stage-line.stage-line-past { color: #a4947b; }
-.nocturne-theme button.stage-line { color: #776a57; }
+.nocturne-theme button.stage-line {
+ color: #776a57; transition-property: color,text-shadow; transition-duration: 420ms;
+}
 .nocturne-theme button.stage-line:hover { color: #ccba98; }
+.nocturne-theme .karaoke-current,
+.nocturne-theme button.stage-line.stage-line-active,
+.nocturne-theme button.stage-line.stage-line-active:hover {
+ color: #ffe6aa;
+ text-shadow: 0 0 3px rgba(255,193,92,.32),0 0 14px rgba(244,151,49,.22);
+}
 .nocturne-theme .karaoke-divider, .nocturne-theme .editorial-rule { background-color: rgba(215,175,112,.07); }
 .nocturne-theme.settings-popover, .nocturne-theme .settings-popover,
 .nocturne-theme.source-popover, .nocturne-theme .source-popover,
