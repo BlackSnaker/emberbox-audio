@@ -4,6 +4,7 @@ import json
 import math
 import re
 from pathlib import Path
+from flow_curves import point as curve_point
 
 MAX_PLAYLISTS=100
 MAX_PAIRS=199
@@ -24,9 +25,9 @@ def valid_key(key):return isinstance(key,str) and re.fullmatch('[0-9a-f]{64}',ke
 def recipe(value):
     if not isinstance(value,dict):raise ValueError('Invalid transition')
     mode=value.get('mode','auto');shape=value.get('shape','shared')
-    if mode not in ('auto','manual','cut') or shape not in ('shared','smooth'):raise ValueError('Invalid transition')
+    if mode not in ('auto','manual','cut') or shape not in ('shared','smooth','custom'):raise ValueError('Invalid transition')
     seconds=float(value.get('seconds',8))
-    if not math.isfinite(seconds) or not 1<=seconds<=8:raise ValueError('Invalid duration')
+    if not math.isfinite(seconds) or not 1<=seconds<=30:raise ValueError('Invalid duration')
     eq_mode=value.get('eq_mode','off')
     if eq_mode not in ('off','auto','manual'):raise ValueError('Invalid transition EQ mode')
     # Validate without importing the DSP/SciPy stack into the GTK startup path.
@@ -37,7 +38,7 @@ def recipe(value):
         if not all(math.isfinite(v) and -12<=v<=0 for v in values):raise ValueError('Invalid transition EQ')
         return values
     return dict(mode=mode,seconds=round(seconds,1),shape=shape,beats=value.get('beats',True) is True,
-                eq_mode=eq_mode,eq_out=cuts('eq_out'),eq_in=cuts('eq_in'))
+                eq_mode=eq_mode,eq_out=cuts('eq_out'),eq_in=cuts('eq_in'),curve_point=curve_point(value.get('curve_point')))
 
 
 class FlowPlans:
@@ -95,6 +96,8 @@ def duration(plan,outgoing,incoming,quiet=False,grid=None):
             bpm=float(grid.get('bpm',0));confidence=float(grid.get('confidence',0))
             if 80<=bpm<=180 and .72<=confidence<=1:wanted=min(8.,480/bpm)
         except (ValueError,TypeError,OverflowError):pass
+    if plan and plan['mode']=='manual':
+        return min(wanted,max(1.,outgoing-2),max(1.,incoming-2) if incoming>0 else wanted)
     result=min(wanted,max(2.,outgoing*.1),max(2.,incoming*.1) if incoming>0 else 8.)
     if quiet and (not plan or plan['mode']=='auto'):result=min(result,1.4)
     return result

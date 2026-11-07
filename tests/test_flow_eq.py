@@ -65,7 +65,7 @@ class TransitionEQ(unittest.TestCase):
             self.assertEqual(FlowPlans(store.path).get(key,a,b)['eq_mode'],'manual')
     def test_both_lane_directions_and_drag_bounds(self):
         self.assertEqual(overlap(4,2,0),6);self.assertEqual(overlap(4,2,1),2)
-        self.assertEqual(overlap(4,100,0),8);self.assertEqual(overlap(4,100,1),1)
+        self.assertEqual(overlap(4,100,0),30);self.assertEqual(overlap(4,100,1),1)
 
 
 if __name__=='__main__':unittest.main()

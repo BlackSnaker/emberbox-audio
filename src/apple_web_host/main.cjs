@@ -11,7 +11,7 @@ const {FlowDecks}=require('./flow.cjs');let flow=null;
 const {SpatialPlayback}=require('./spatial.cjs');let spatial=null;
 const yandex = process.env.EMBERBOX_WEB_SERVICE === 'yandex';
 const spotify = process.env.EMBERBOX_WEB_SERVICE === 'spotify';
-const integrationVersion = yandex?7:spotify?2:28;
+const integrationVersion = yandex?7:spotify?2:30;
 const service = yandex ? {title:'Yandex Music',origin:'https://music.yandex.ru/',
   url:'https://music.yandex.ru/',command:'emberboxYandexCommand',page:'yandex.js',error:'YANDEX_REQUEST_FAILED'} :
   spotify ? {title:'Spotify',origin:'https://open.spotify.com/',url:'https://open.spotify.com/',
@@ -198,7 +198,7 @@ async function pageRequest(win, request, navigations=0) {
     hasTrack:!!result.title,windowVisible:win.isVisible()});
   if(request.method==='status') {
     result.integrationVersion=integrationVersion;
-    if(!yandex&&!spotify){result.emberFlow=true;result.emberBeatSync=true;result.emberFlowEQ=true;}
+    if(!yandex&&!spotify){result.emberFlow=true;result.emberBeatSync=true;result.emberFlowEQ=true;result.emberFlowPeaks=spatial?.enabled===true&&spatial.info().available===true;}
     result.audioQuality=win.emberboxQuality?.snapshot(String(result.id||result.title||''))||{};
     record({audioQuality:result.audioQuality,maximumQualityRequested:result.qualityPreference?.applied===true});
     if(yandex)record({capabilities:Object.fromEntries(['player','wave','navigation','metadata','store','legacy'].map(key=>[key,result.capabilities?.[key]===true]))});

@@ -30,7 +30,7 @@ class Recipes(unittest.TestCase):
         normalized=track(a,'youtube');book=QueueBook(Path(self.tmp.name)/'queue.json');book.add('youtube',[normalized])
         self.assertEqual(QueueBook(book.path).queues['youtube'][0]['flow_playlist'],self.key)
     def test_invalid_and_oversized_recipes_do_not_replace_saved_state(self):
-        for value in (dict(seconds=float('nan')),dict(seconds=float('inf')),dict(seconds=20),dict(shape='inject'),dict(mode='other')):
+        for value in (dict(seconds=float('nan')),dict(seconds=float('inf')),dict(seconds=31),dict(shape='inject'),dict(mode='other')):
             with self.assertRaises(ValueError):self.store.put(self.key,[(self.a,self.b,value)])
         self.assertFalse(self.store.path.exists())
         self.store.path.write_text('{broken');self.assertEqual(FlowPlans(self.store.path).data,{})
@@ -42,7 +42,7 @@ class Recipes(unittest.TestCase):
         self.assertEqual(duration(recipe({}),180,180,False,grid),3)
         self.assertEqual(duration(recipe({}),180,180,True,grid),1.4)
         self.assertEqual(duration(recipe({}),180,180,False,dict(bpm=160,confidence=.1)),8)
-        self.assertEqual(duration(recipe(dict(mode='manual',seconds=8)),180,20),2)
+        self.assertEqual(duration(recipe(dict(mode='manual',seconds=8)),180,20),8)
     def test_both_curves_keep_headroom_and_match_all_three_engines(self):
         import shutil
         if not shutil.which('node'):self.skipTest('Node unavailable')
@@ -70,6 +70,12 @@ class PlannedPlayback(unittest.TestCase):
         self.now=22.5;self.flow.tick(self.state(176.5));self.decks.transition.assert_not_called()
         self.now=23;self.flow.tick(self.state(176.8));self.decks.transition.assert_called_once()
         self.assertAlmostEqual(self.decks.transition.call_args.args[0],3)
+    def test_long_manual_mix_is_prepared_early_and_reaches_the_deck(self):
+        self.plan(dict(mode='manual',seconds=30,beats=False))
+        self.flow.tick(self.state(128));self.decks.prepare.assert_called_once()
+        self.now=21.7;self.flow.tick(self.state(149.7))
+        self.decks.transition.assert_called_once_with(30)
+
     def test_cut_preserves_ordinary_queue_and_never_starts_mixing(self):
         self.plan(dict(mode='cut'));self.flow.tick(self.state())
         self.now=25;self.flow.tick(self.state(179));self.decks.prepare.assert_not_called();self.decks.transition.assert_not_called()

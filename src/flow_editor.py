@@ -6,6 +6,7 @@ from flow_plans import recipe
 from flow_hardware import TimeDial,BeatSwitch,screw
 from flow_timeline import FlowTimeline
 from flow_eq_panel import EQPanel
+from flow_waveforms import WaveformClient
 
 CSS=b'''
 .flow-desk { background-image: linear-gradient(145deg,rgba(51,53,46,.94),rgba(22,27,23,.96));
@@ -67,7 +68,8 @@ class FlowEditor(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL,spacing=8)
         self.get_style_context().add_class('flow-desk')
         self.service=service;self.flow=service.flow;self.artwork=artwork;self.key=key;self.items=items
-        self.index=0;self.updating=False;self.closed=False
+        self.index=0;self.updating=False;self.closed=False;self.wave_capable=False;self.curve_point=[.5,.5]
+        self.waveforms=WaveformClient(service,self.waveforms_changed)
         top=Gtk.Box(spacing=12)
         top.pack_start(Gtk.Image.new_from_pixbuf(screw()),False,False,0)
         top.pack_start(label('EMBERFLOW / '+text('TRANSITION DESK','МАСТЕРСКАЯ ПЕРЕХОДОВ'),'stage-library-source'),True,True,0)
@@ -94,12 +96,19 @@ class FlowEditor(Gtk.Box):
             decks.pack_start(deck,True,True,0)
         self.pack_start(decks,False,False,0)
         self.timeline=FlowTimeline(self.timeline_changed);self.pack_start(self.timeline,False,False,0)
+        zoom=Gtk.Box(spacing=7);self.wave_notice=label('','stage-library-note');zoom.pack_start(self.wave_notice,True,True,0)
+        self.peaks_button=button(text('Read peaks','Прочитать пики'),lambda:self.load_peaks(True))
+        zoom.pack_start(self.peaks_button,False,False,0)
+        self.extend_peaks=button(text('Peaks · 64 s','Пики · 64 с'),lambda:self.load_peaks(True,64));zoom.pack_start(self.extend_peaks,False,False,0)
+        for name,action in (('‹',lambda:self.timeline.pan(-1)),('−',lambda:self.timeline.zoom(2)),('+',lambda:self.timeline.zoom(.5)),('›',lambda:self.timeline.pan(1)),('↺',self.timeline.home)):
+            zoom.pack_start(button(name,action),False,False,0)
+        self.pack_start(zoom,False,False,0)
         controls=self.controls=Gtk.Box(spacing=18);controls.set_hexpand(True)
         options=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8);controls.pack_start(options,True,True,0)
         self.mode=Gtk.ComboBoxText();self.shape=Gtk.ComboBoxText()
         self.mode_buttons={};self.shape_buttons={}
         for combo,values,buttons in ((self.mode,(('auto','Ember · auto','Эмбер · авто'),('manual','By hand','Вручную'),('cut','No mix','Без сведения')),self.mode_buttons),
-                (self.shape,(('shared','Shared phrase','Общий момент'),('smooth','Dissolve','Растворение')),self.shape_buttons)):
+                (self.shape,(('shared','Shared phrase','Общий момент'),('smooth','Dissolve','Растворение'),('custom','Custom curve','Своя кривая')),self.shape_buttons)):
             selectors=Gtk.Box(spacing=6);selectors.set_homogeneous(True)
             for key,en,ru in values:
                 combo.append(key,text(en,ru))
@@ -108,19 +117,19 @@ class FlowEditor(Gtk.Box):
                 buttons[key]=b;selectors.pack_start(b,True,True,0)
             options.pack_start(selectors,False,False,0)
         instruments=Gtk.Box(spacing=12);instruments.get_style_context().add_class('flow-instrument')
-        self.length=Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL,1,8,.1)
-        self.knob=TimeDial(lambda v:self.length.set_value(round((1+7*v)*2)/2))
+        self.length=Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL,1,30,.1)
+        self.knob=TimeDial(lambda v:self.length.set_value(round((1+29*v)*2)/2))
         instruments.pack_start(self.knob,False,False,0)
         dial_names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=7)
         dial_names.pack_start(label(text('OVERLAP','ВРЕМЯ СВЕДЕНИЯ'),'flow-engraving'),False,False,0)
         self.length_label=label('','flow-time-display');dial_names.pack_start(self.length_label,False,False,0)
-        dial_names.pack_start(label(text('1—8 s · drag / scroll','1—8 с · поворот / колесо')),False,False,0)
+        dial_names.pack_start(label(text('1—30 s · drag / scroll','1—30 с · поворот / колесо')),False,False,0)
         instruments.pack_start(dial_names,True,True,0)
         self.beats=BeatSwitch();instruments.pack_end(self.beats,False,False,0)
         beat_name=label(text('BEAT\nSYNC','РИТМ\nСИНХР.'),'flow-engraving');instruments.pack_end(beat_name,False,False,0)
         controls.pack_start(instruments,True,True,0);self.pack_start(controls,False,False,0)
         self.eq_panel=EQPanel(self.edit);self.pack_start(self.eq_panel,False,False,0)
-        self.eq_panel.toggle.connect('toggled',lambda b:(self.decks.set_no_show_all(b.get_active()),self.decks.set_visible(not b.get_active())))
+        self.eq_panel.toggle.connect('toggled',self.eq_drawer_changed)
         for control,signal in ((self.mode,'changed'),(self.shape,'changed'),(self.length,'value-changed'),(self.beats,'toggled')):control.connect(signal,self.edit)
         foot=Gtk.Box(spacing=12);self.status=label('');self.status.set_line_wrap(True);self.status.set_lines(3)
         foot.pack_start(self.status,True,True,0)
@@ -137,7 +146,7 @@ class FlowEditor(Gtk.Box):
         context=self.get_style_context()
         context.add_class('flow-desk-compact') if dense else context.remove_class('flow-desk-compact')
         self.set_spacing(5 if dense else 8);self.controls.set_spacing(8 if dense else 18)
-        self.note.set_no_show_all(dense);self.note.set_visible(not dense)
+        self.note.set_no_show_all(dense or self.eq_panel.toggle.get_active());self.note.set_visible(not dense and not self.eq_panel.toggle.get_active())
         self.timeline.set_dense(dense);self.eq_panel.resize(dense);self.visuals()
         # Album thumbnails keep their original cached pixels; only allocation changes.
         for image in self.deck_images:
@@ -146,6 +155,11 @@ class FlowEditor(Gtk.Box):
                 from gi.repository import GdkPixbuf
                 image._flow_original=original;size=44 if dense else 60
                 image.set_from_pixbuf(original.scale_simple(size,size,GdkPixbuf.InterpType.BILINEAR));image.set_size_request(size,size)
+
+    def eq_drawer_changed(self,button):
+        opened=button.get_active();self.decks.set_no_show_all(opened);self.decks.set_visible(not opened)
+        self.timeline.set_eq_open(opened);self.set_spacing(5 if getattr(self,'dense',False) else 6 if opened else 8)
+        self.note.set_no_show_all(opened or getattr(self,'dense',False));self.note.set_visible(not opened and not getattr(self,'dense',False))
 
     def select_choice(self,combo,key):
         if self.updating:return
@@ -162,12 +176,31 @@ class FlowEditor(Gtk.Box):
             self.artwork.load(self.deck_images[n],item.get('image',''),44 if getattr(self,'dense',False) else 60,10)
             self.deck_titles[n].set_text(item['title']);self.deck_artists[n].set_text(item.get('artist',''))
         value=self.flow.plans.get(self.key,a,b) or recipe({})
+        self.curve_point=list(value['curve_point'])
         self.mode.set_active_id(value['mode']);self.shape.set_active_id(value['shape']);self.length.set_value(value['seconds']);self.beats.set_active(value['beats'])
         self.eq_panel.set_plan(value,self.flow.eq_supported)
         self.timeline.cancel();self.timeline.set_plan(value,[a['title'],b['title']])
-        self.updating=False;self.visuals()
+        self.updating=False;self.visuals();self.load_peaks()
 
-    def value(self):return recipe(dict(mode=self.mode.get_active_id(),shape=self.shape.get_active_id(),seconds=self.length.get_value(),beats=self.beats.get_active(),**self.eq_panel.value()))
+    def load_peaks(self,force=False,seconds=None):
+        if self.closed:return
+        values=self.items[self.index:self.index+2]
+        self.waveforms.load(values,seconds or self.waveforms.seconds,force)
+
+    def waveforms_changed(self):
+        if self.closed:return
+        waves=self.waveforms;self.timeline.set_waves(waves.data,waves.states,waves.seconds)
+        reading='loading' in waves.states;ready=sum(v in ('ready','partial') for v in waves.states)
+        self.peaks_button.set_sensitive(not reading);self.extend_peaks.set_sensitive(not reading and waves.seconds<64)
+        self.peaks_button.set_label(text('Reading peaks…','Читаем пики…') if reading else text('Retry peaks','Повторить пики'))
+        if reading:message=text(f'Measured audio · preparing {ready+1}/2 · editing stays available',f'Измеряем звук · подготовка {min(2,ready+1)}/2 · можно продолжать настройку')
+        elif 'error' in waves.states:message=text('Some peaks are unavailable. Retry when playback is stable; no synthetic waveform is shown.',
+            'Часть пиков недоступна. Повтори после подготовки воспроизведения; выдуманные волны не рисуются.')
+        else:message=text('Actual PCM peaks before transition EQ · drag tracks · zoom/pan to inspect',
+            'Настоящие пики PCM до EQ перехода · двигай дорожки · меняй масштаб и прокручивай')
+        self.wave_notice.set_text(message)
+
+    def value(self):return recipe(dict(mode=self.mode.get_active_id(),shape=self.shape.get_active_id(),curve_point=self.curve_point,seconds=self.length.get_value(),beats=self.beats.get_active(),**self.eq_panel.value()))
 
     def visuals(self):
         value=self.value();auto=value['mode']=='auto';cut=value['mode']=='cut'
@@ -182,8 +215,10 @@ class FlowEditor(Gtk.Box):
         self.timeline.set_plan(value)
         self.eq_panel.available=self.flow.eq_supported;self.eq_panel.sync()
 
-    def timeline_changed(self,seconds,commit):
-        self.updating=True;self.mode.set_active_id('manual');self.length.set_value(seconds);self.updating=False
+    def timeline_changed(self,seconds,commit,point=None):
+        self.updating=True;self.mode.set_active_id('manual');self.length.set_value(seconds)
+        if point is not None:self.curve_point=list(point);self.shape.set_active_id('custom')
+        self.updating=False
         if commit:self.edit()
         else:self.visuals()
 
@@ -208,6 +243,9 @@ class FlowEditor(Gtk.Box):
     def sync(self):
         if self.closed:return
         supported=self.flow.supported
+        capable=self.service.host.source=='youtube' or getattr(self.service.host.apple_web,'state',{}).get('emberFlowPeaks') is True
+        if capable and not self.wave_capable:self.load_peaks()
+        self.wave_capable=capable
         if self.eq_panel.available!=self.flow.eq_supported:
             self.eq_panel.available=self.flow.eq_supported;self.eq_panel.sync()
         preparing=bool(self.service.transition_preview)
@@ -225,5 +263,5 @@ class FlowEditor(Gtk.Box):
         self.status.set_text(message)
 
     def destroyed(self,*_):
-        self.closed=True
+        self.closed=True;self.waveforms.close()
         if hasattr(self,'unsubscribe'):self.unsubscribe()

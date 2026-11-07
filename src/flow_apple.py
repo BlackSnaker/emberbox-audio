@@ -5,14 +5,14 @@ from concurrent.futures import ThreadPoolExecutor
 class AppleDecks:
     def __init__(self,host):
         self.host=host;self.pool=ThreadPoolExecutor(max_workers=2,thread_name_prefix='emberflow-apple')
-        self.prepared=None;self.transitioning=None;self.reset=None;self.active=False;self.key='';self.beat_sync=True;self.shape='shared';self.eq=None
+        self.prepared=None;self.transitioning=None;self.reset=None;self.active=False;self.key='';self.beat_sync=True;self.shape='shared';self.eq=None;self.point=[.5,.5]
     def request(self,operation,**params):return self.host.apple_web.request('flow',operation=operation,**params)
     def prepare(self,item):
         self.cancel();self.active=True;self.key=item['entry']
-        reset=self.reset;key=self.key;beats=self.beat_sync;shape=self.shape;eq=self.eq
+        reset=self.reset;key=self.key;beats=self.beat_sync;shape=self.shape;eq=self.eq;point=self.point
         def load():
             if reset:reset.result(timeout=4)
-            return self.request('prepare',key=key,kind=item['kind'],id=item['id'],beatSync=beats,shape=shape,eq=eq)
+            return self.request('prepare',key=key,kind=item['kind'],id=item['id'],beatSync=beats,shape=shape,eq=eq,point=point)
         self.prepared=self.pool.submit(load)
     @property
     def ready(self):
@@ -23,7 +23,7 @@ class AppleDecks:
     def failed(self):
         return bool(self.prepared and self.prepared.done() and not self.ready)
     def transition(self,duration):
-        self.transitioning=self.pool.submit(self.request,'transition',key=self.key,duration=duration,shape=self.shape,eq=self.eq)
+        self.transitioning=self.pool.submit(self.request,'transition',key=self.key,duration=duration,shape=self.shape,eq=self.eq,point=self.point)
     def result(self):
         if not self.transitioning or not self.transitioning.done():return None
         future=self.transitioning;self.transitioning=None

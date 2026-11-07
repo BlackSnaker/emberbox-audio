@@ -2,6 +2,14 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.30.0 — 2026-11-07
+
+- Draw real decoded min/max/RMS peaks for native Apple Music and YouTube: 32-second outro/intro windows, optional 64 seconds, zoom and pan. Never substitute decorative audio waves.
+- Extend manual overlaps to 30 seconds, with earlier staging; adaptive automatic mixes remain capped at eight seconds. Preserve source formats, output rates and playback buffers.
+- Add draggable gold curve points, keyboard precision and private per-pair storage. Monotone complementary envelopes match the native sample mixer, MusicKit and YouTube; cancellation retains the current gain without a jump.
+- Isolate sequential peak preparation in a low-priority disposable decoder, with transport priority, cancellation and eight RAM summaries. No PCM/audio-file persistence or extra audio output.
+- Check real live-account Apple peak windows, engine isolation, measured impulse peaks, cross-engine curves, PCM headroom and both-language GTK gestures at three sizes.
+
 ## 0.29.0 — 2026-11-06
 
 - Add draggable A/B lanes, precise overlap and finite eased automatic placement. Use rounded housings, soft selectors and illuminated envelopes under glass.

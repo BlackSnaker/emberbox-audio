@@ -5,6 +5,7 @@ import numpy as np
 from spatial_mix import RATE,BLOCK,BUFFER,blend,curve
 from headphone_dsp import HeadphoneProcessor
 from flow_eq import BandEQ,ease
+from flow_curves import point as curve_point
 # A session uses one rate for both decks; ordinary Atmos stays at 48 kHz.
 RATE=int(os.environ.get('EMBERBOX_SPATIAL_RATE',RATE))
 if RATE not in (48000,192000):raise RuntimeError('SPATIAL_PCM_FORMAT')
@@ -107,23 +108,24 @@ class Mixer:
                 other=1-self.current;target=self.slots[other]
                 minimum=RATE*(.12 if p.get('manual') is True else 1.)
                 if self.fade or not target or target.frames<minimum:raise ValueError('Spatial next not ready')
-                duration=max(.15,min(8.,float(p['duration'])))
+                duration=max(.15,min(30.,float(p['duration'])))
                 outgoing=self.slots[self.current]
                 if outgoing.total is not None:duration=min(duration,max(.01,(outgoing.total-outgoing.consumed)/RATE))
+                point=curve_point(p.get('point'))
                 equalizers={}
                 if p.get('manual') is not True and p.get('eq') is not None:
                     for slot,role in ((self.current,'out'),(other,'in')):
                         eq=BandEQ(RATE,p['eq'][role]);eq.warm(self.slots[slot].history);equalizers[slot]=eq
                 target.start=self.frames;self.fade={'old':self.current,'next':other,'start':self.frames,
                     'length':round(duration*RATE),'initial':0.,'announced':False,'key':p['key'],
-                    'flow':p.get('manual') is not True,'shape':'smooth' if p.get('shape')=='smooth' else 'shared'}
+                    'flow':p.get('manual') is not True,'shape':p.get('shape') if p.get('shape') in ('smooth','custom') else 'shared','point':point}
                 if equalizers:self.fade['eq']=equalizers
                 self.finished=False;self.condition.notify_all()
         elif action=='cancel':
             with self.condition:
                 if self.fade:
                     fade=self.fade;x=(self.frames-fade['start'])/max(1,fade['length']-1)
-                    gain=fade['initial']+(1.-fade['initial'])*float(curve(x,flow=fade.get('flow',False),shape=fade.get('shape','shared')))
+                    gain=fade['initial']+(1.-fade['initial'])*float(curve(x,flow=fade.get('flow',False),shape=fade.get('shape','shared'),point=fade.get('point',[.5,.5])))
                     if int(p.get('keep',self.current))==fade['old']:
                         fade['old'],fade['next']=fade['next'],fade['old'];gain=1.-gain
                     if fade.get('eq'):fade['eq_cancel']={slot:eq.amount for slot,eq in fade['eq'].items()}
@@ -177,7 +179,7 @@ class Mixer:
                         rendered=fade['eq'][slot].process(data,amount)
                         if slot==fade['old']:out=rendered
                         else:incoming=rendered
-                out=blend(out,incoming,self.frames-fade['start'],fade['length'],fade['initial'],flow=fade.get('flow',False),shape=fade.get('shape','shared'))
+                out=blend(out,incoming,self.frames-fade['start'],fade['length'],fade['initial'],flow=fade.get('flow',False),shape=fade.get('shape','shared'),point=fade.get('point',[.5,.5]))
             self.frames+=count
             if fade and self.frames>=fade['start']+fade['length']:
                 fade['rendered']=True;self.current=fade['next']

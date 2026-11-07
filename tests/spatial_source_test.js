@@ -132,6 +132,16 @@ const call=params=>context.emberboxSpatialSource(params);
  assert.equal(context.window.__emberSpatialContexts.size,1);
  await call({action:'cancel-prepare',requestKey:'native-102'});assert.equal(context.window.__emberSpatialContexts.size,0);
  await assert.rejects(call({action:'segment',contextId:lateContext.contextId,index:0}),/STALE/);
+ // The analyzer has one separate context; both playback decks retain theirs.
+ const playerA=await call({action:'prepare',kind:'songs',id:'789',fairplay:true});
+ const playerB=await call({action:'prepare',kind:'songs',id:'789',fairplay:true});
+ const peaks=await call({action:'prepare',kind:'songs',id:'789',fairplay:true,waveform:true,requestKey:'native-103'});
+ assert.equal(context.window.__emberSpatialContexts.size,3);
+ await assert.rejects(call({action:'prepare',kind:'songs',id:'789',fairplay:true}),/SPATIAL_BUSY/);
+ await assert.rejects(call({action:'prepare',kind:'songs',id:'789',fairplay:true,waveform:true}),/SPATIAL_BUSY/);
+ await call({action:'close',contextId:peaks.contextId});
+ assert(context.window.__emberSpatialContexts.has(playerA.contextId)&&context.window.__emberSpatialContexts.has(playerB.contextId));
+ await call({action:'close',contextId:playerA.contextId});await call({action:'close',contextId:playerB.contextId});
  music.isAuthorized=false;await assert.rejects(call({action:'prepare'}),/SIGN_IN_REQUIRED/);
  assert.equal(context.window.__emberSpatialRecent,undefined,'Sign-out must discard recent descriptors');
  console.log('PASS spatial source: enhanced rendition, key rotation, ranges, bounds, stale contexts and private URL/token isolation');

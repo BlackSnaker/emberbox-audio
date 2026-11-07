@@ -1,5 +1,6 @@
 """Sample-based headphone transitions. No codecs, resampling or UI work here."""
 import numpy as np
+from flow_curves import slope
 
 RATE=48000
 CHANNELS=2
@@ -7,8 +8,14 @@ BLOCK=960
 BUFFER=RATE*4
 
 
-def curve(position,flow=False,shape='shared'):
+def curve(position,flow=False,shape='shared',point=(.5,.5)):
     t=np.clip(np.asarray(position,dtype=np.float64),0.,1.)
+    if flow and shape=='custom':
+        knee,level=point;m=slope(knee,level)
+        a=t/knee;b=(t-knee)/(1-knee)
+        left=(-2*a**3+3*a*a)*level+(a**3-a*a)*knee*m
+        right=(2*b**3-3*b*b+1)*level+(b**3-2*b*b+b)*(1-knee)*m-2*b**3+3*b*b
+        return np.clip(np.where(t<=knee,left,right),0.,1.)
     if flow and shape=='smooth':return t*t*t*(t*(t*6.-15.)+10.)
     if flow:
         # Match the audible shared phrase in MusicKit and YouTube. Manual
@@ -23,10 +30,10 @@ def curve(position,flow=False,shape='shared'):
     return start+span*x*x*x*(x*(x*6.-15.)+10.)
 
 
-def blend(outgoing,incoming,offset,length,initial=0.,flow=False,shape='shared'):
+def blend(outgoing,incoming,offset,length,initial=0.,flow=False,shape='shared',point=(.5,.5)):
     if outgoing.shape!=incoming.shape or outgoing.ndim!=2 or outgoing.shape[1]!=CHANNELS:
         raise ValueError('Invalid spatial mix shape')
     t=(offset+np.arange(len(outgoing),dtype=np.float64))/max(1,length-1)
-    gain=(initial+(1.-initial)*curve(t,flow=flow,shape=shape)).astype(np.float32)[:,None]
+    gain=(initial+(1.-initial)*curve(t,flow=flow,shape=shape,point=point)).astype(np.float32)[:,None]
     # Complementary gains preserve peak headroom even for correlated masters.
     return outgoing*(1.-gain)+incoming*gain

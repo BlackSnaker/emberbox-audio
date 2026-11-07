@@ -41,13 +41,13 @@ class TimeDial(VolumeKnob):
         if self.frame!=index:self.image.set_from_pixbuf(time_dial(index));self.frame=index
 
     def set_seconds(self,seconds,available):
-        self.set_state((seconds-1)/7,False,available)
+        self.set_state((seconds-1)/29,False,available)
         self.get_accessible().set_description(text(f'{seconds:g} seconds. Drag, scroll or use arrow keys.',
             f'{seconds:g} секунды. Перетаскивание, колесо или клавиши со стрелками.'))
 
     def _key(self,_widget,event):
         name=Gdk.keyval_name(event.keyval)
-        steps={'Up':1/14,'Right':1/14,'Down':-1/14,'Left':-1/14,'Page_Up':2/7,'Page_Down':-2/7}
+        steps={'Up':.5/29,'Right':.5/29,'Down':-.5/29,'Left':-.5/29,'Page_Up':2/29,'Page_Down':-2/29}
         if name in steps:self._change(self.value+steps[name]);return True
         return super()._key(_widget,event)
 
@@ -57,7 +57,7 @@ class TimeDial(VolumeKnob):
             if not ok or abs(dy)<.01:return True
             sign=-1 if dy>0 else 1
         else:sign=1 if event.direction in (Gdk.ScrollDirection.UP,Gdk.ScrollDirection.RIGHT) else -1
-        self._change(self.value+sign/14);return True
+        self._change(self.value+sign*.5/29);return True
 
     def settle(self,*_):
         if self.tick:self.remove_tick_callback(self.tick);self.tick=0

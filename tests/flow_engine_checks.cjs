@@ -19,7 +19,7 @@ async function cancellation() {
  assert(!a.dead&&b.dead);
 }
 
-async function envelope(shape='shared') {
+async function envelope(shape='shared',point=[.5,.5]) {
  let now=0,tick=null,physical=1,logical=1,guard=null;
  class Node{};class Media extends Node{};
  Object.defineProperty(Media.prototype,'volume',{get(){return physical;},set(v){physical=v;
@@ -31,18 +31,19 @@ async function envelope(shape='shared') {
   performance:{now:()=>now},Date:{now:()=>now},setInterval:fn=>(tick=fn,1),clearInterval:()=>tick=null,Map,Set,Object,Number,Math};
  const page={isDestroyed:()=>false,webContents:{executeJavaScript:code=>Promise.resolve(vm.runInNewContext(code,sandbox))}};
  const flow=new FlowDecks(page,null,null,null);
- await flow.gain(page,0,8,1,0,shape);
+ await flow.gain(page,0,8,1,0,shape,point);
  for(let i=0;i<=1000;i++){
-  now=i*8;tick();assert(Math.abs(physical-(1-mixCurve(i/1000,shape)))<1e-10);
+  now=i*8;tick();assert(Math.abs(physical-(1-mixCurve(i/1000,shape,point)))<1e-10);
   assert(physical>=0&&physical<=1);assert.equal(media.volume,1);
  }
  // A second fade exercises an ordinary source-volume change in mid-mix.
- now=0;await flow.gain(page,0,8,1,0,shape);now=4000;tick();
- assert(Math.abs(physical-.5)<1e-9);assert.equal(media.volume,1);assert.equal(logical,1,'The fade rewrote MusicKit logical volume');
- media.volume=.6;tick();assert(Math.abs(physical-.3)<1e-9,'A source-volume change lost its envelope');
+ now=0;await flow.gain(page,0,8,1,0,shape,point);now=4000;tick();
+ const half=1-mixCurve(.5,shape,point);
+ assert(Math.abs(physical-half)<1e-9);assert.equal(media.volume,1);assert.equal(logical,1,'The fade rewrote MusicKit logical volume');
+ media.volume=.6;tick();assert(Math.abs(physical-.6*half)<1e-9,'A source-volume change lost its envelope');
  await flow.cancel();assert.equal(physical,.6);assert.equal(media.volume,.6);assert(!guard);
- now=1200;await flow.gain(page,1,8,0,1000,shape);
- assert(Math.abs(physical-.6*mixCurve(.025,shape))<1e-10,'A delayed page restarted the envelope instead of catching up');
+ now=1200;await flow.gain(page,1,8,0,1000,shape,point);
+ assert(Math.abs(physical-.6*mixCurve(.025,shape,point))<1e-10,'A delayed page restarted the envelope instead of catching up');
  await flow.cancel();
 }
 
@@ -71,5 +72,5 @@ async function cancelWhileScheduling(){
 }
 
 const deadline=setTimeout(()=>{console.error('Timed out while exercising an engine race');process.exitCode=1;},12000);
-(async()=>{await cancellation();await envelope();await envelope('smooth');await longMix();await cancelWhileScheduling();console.log('PASS Apple cancellation, eight-second synchronized mix, three-phase envelope and logical-volume isolation');})()
+(async()=>{await cancellation();await envelope();await envelope('smooth');await envelope('custom',[.3,.8]);await longMix();await cancelWhileScheduling();console.log('PASS Apple cancellation, synchronized mix, custom envelope and logical-volume isolation');})()
  .catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>clearTimeout(deadline));

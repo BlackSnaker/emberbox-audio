@@ -18,12 +18,13 @@ Open a playlist in **Collection → EmberFlow · Transitions**. Two recessed dec
 a machined time dial, tactile selectors and softly lit curves behind glass
 make a small analogue mixing desk inside Ember.
 
-- Select an adjacent pair and **By hand**. Set **1–8 seconds** by dragging the dial,
+- Select an adjacent pair and **By hand**. Set **1–30 seconds** by dragging the dial,
   scrolling or using arrow keys. Very short songs and slow preparation can
   shorten the actual overlap.
 - **Shared phrase** holds both songs in the foreground longer; **Dissolve**
   transfers gain evenly and gently. **No mix** keeps ordinary switching for that
-  pair. The screen shows gain envelopes, not an invented audio waveform.
+  pair. **Custom curve** lets you shape the fade with gold points over measured
+  audio peaks.
 - **Let Ember choose** selects adaptive mode for every **loaded** pair. It does
   not run a neural model over the whole playlist: during playback the existing
   meter observes real energy and a clear pulse. A confident rhythm suggests
@@ -39,16 +40,37 @@ make a small analogue mixing desk inside Ember.
   reordering another song never assigns it somebody else's transition.
 
 
-### Two lanes and transition EQ · 0.29
+### Measured lanes, custom curves and transition EQ · 0.30
 
-The timeline shows **16 seconds of A's outro and B's intro**, with real gain
-envelopes and a highlighted overlap. Drag either track: moving A right increases
-overlap; moving B right decreases it. The range is **1–8 seconds**, in 0.1 s
+The timeline shows **measured peaks from 32 seconds of A's outro and B's intro**,
+with gain envelopes and a highlighted overlap. Drag either track: moving A right increases
+overlap; moving B right decreases it. The range is **1–30 seconds**, in 0.1 s
 steps. Shift gives finer movement; up/down selects a lane, left/right moves it.
 Dragging selects manual mode. A recipe is written on release, while drawing
 follows GTK's frame clock. Automatic changes ease into place and settle;
 system reduced-animation preferences are respected. Songs remain complete;
 this edits the overlap without extracting audio files.
+
+**Custom curve.** Pull a gold point horizontally to move the handover time,
+vertically to change the level at that point. Both envelopes are linked: their
+gains sum to one to retain peak headroom. A smooth monotone curve with gentle
+endpoints drives the actual Apple Music (including native Lossless/Atmos) and
+YouTube engines. Ctrl+arrows moves the selected lane's point; Ctrl+Shift is
+finer. Mouse edits save on release.
+
+**Zoom and peaks.** −/+ zooms, ‹/› pans and ↺ restores the overview.
+“Peaks · 64 s” extends the analyzed window to 64 seconds. These are real decoded
+minimum/maximum/RMS values before transition EQ, not individual instrument stems.
+Partial coverage is never stretched over the entire window. Unavailable peaks
+are clearly labeled and can be retried.
+
+Peaks support **native Apple Music and YouTube**, using existing access to each
+track. MusicKit, Spotify and Yandex do not currently provide them to this editor.
+Preparation is sequential, outside GTK, using one extra low-priority decoder.
+It takes time and network data; Apple transport/seek requests take priority.
+Closing the editor cancels analysis. Only eight short peak summaries remain in
+RAM; neither audio files nor PCM are saved. Native Apple uses an isolated source
+context without evicting either playback deck.
 
 **Transition EQ** opens two sets of physical low/mid/high dials, one per track.
 The **0…−12 dB** cut range leaves room for the next song's bass or voice while
@@ -68,13 +90,13 @@ smoothly per sample, with headroom calculated from the impulse response.
 The incoming track finishes at its original tone; cancellation smoothly
 releases filtering. Native output rate, source codec, existing spatial
 processing and audio buffers stay intact. A private recipe stores only pair
-placement/settings and six EQ values.
+placement/settings, the curve point and six EQ values.
 
 ![EmberFlow hardware desk with original offline demonstration media](../assets/screenshots/flow-editor.en.png)
 
 Playback mixing supports **in-player Apple Music and YouTube**. Spotify and Yandex
 recipes can be saved, but mixing auditions are unavailable. Native Apple
-Lossless/Hi-Res/Atmos supports both curves and manual duration,
+Lossless/Hi-Res/Atmos supports all three curves and manual duration,
 **without beat alignment**; its rhythm switch is disabled. Source formats,
 decoding, output buffers and the existing spatial processing stay intact.
 
@@ -154,7 +176,8 @@ normal queue. With no next item there is nothing to mix.
 
 - No neural model or playback re-encoding. Short analysis runs in memory; no PCM
   is saved to disk and no microphone is used.
-- At most one extra deck is staged, beginning within the last 28 seconds.
+- At most one extra playback deck is staged: usually within the last 28 seconds,
+  earlier for long manual overlaps. Native Apple prepares ahead of time.
   It is paused while preparing, and the outgoing deck is released after mixing.
 - Apple uses two authorized MusicKit pages inside Ember's existing engine.
   The hidden staged page is throttled until playback. This temporarily adds a
@@ -172,7 +195,8 @@ normal queue. With no next item there is nothing to mix.
 - The outgoing YouTube grid reuses the lamp meter's worker and updates at most
   once a second. Turning Beats off stops this analysis and intro decoding.
 - The GTK switch animates only while changing state. No continuous switch timer
-  or extra audio process runs while Flow is off.
+  or background mix runs while Flow is off. Peak preparation in the open editor
+  is separate from enabling playback mixing.
 
 Apple support depends on MusicKit's current playback implementation. The engine
 keeps a short, already authorized outgoing media element alive during handover;

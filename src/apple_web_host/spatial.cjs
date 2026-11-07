@@ -3,7 +3,8 @@ const fs=require('node:fs');
 const path=require('node:path');
 const {spawn}=require('node:child_process');
 const {Scenes,signature}=require('./scene.cjs');
-const {validateEQ}=require('./flow_eq.cjs');
+const {validateEQ,validatePoint}=require('./flow_eq.cjs');
+const {Waveforms}=require('./waveforms.cjs');
 const source=fs.readFileSync(path.join(__dirname,'spatial_source.js'),'utf8');
 const errors=new Set(['SIGN_IN_REQUIRED','SUBSCRIPTION_REQUIRED','DEVICE_LIMIT','INVALID_ARGUMENTS',
  'SPATIAL_NETWORK','SPATIAL_SOURCE_LIMIT','SPATIAL_SOURCE_UNSUPPORTED','SPATIAL_NO_ATMOS_ASSET',
@@ -27,12 +28,13 @@ class SpatialPlayback {
  constructor(page,cancelFlow){
   this.page=page;this.cancelFlow=cancelFlow;this.source=sourceRequest;this.session=null;
   this.blocked=new Set();this.error='';this.revision=0;this.generation=0;
-  this.scenes=new Scenes(process.env.EMBERBOX_SPATIAL_CONFIG);this.enabled=this.scenes.enabled;
+  this.waves=new Waveforms(this);this.scenes=new Scenes(process.env.EMBERBOX_SPATIAL_CONFIG);this.enabled=this.scenes.enabled;
  }
  info(){const r=this.session;return {enabled:this.enabled,available:!!runtime(),losslessAvailable:!!fairplayRuntime(),fastSwitch:true,fastSeek:true,seeking:!!r?.seeking,seekStage:r?.active.seekStage||'',phase:r?.state.phase||'idle',error:this.error,switching:!!r?.manual,switchError:this.switchError||null,
   flow:r&&(r.transition||!r.standby&&r.decks.filter(Boolean).length>1)?'mixing':r?.standby?.ready?'ready':r?.standby?'preparing':'idle',flowError:this.flowError||'',workerExit:this.workerExit||null,fragment:this.fragmentDebug||null,mix:this.mixDebug||null,switchTiming:this.switchTiming||null,
   scene:{...this.scenes.snapshot(),headphoneStatus:r?.headphoneStatus||null,changing:!!(r?.scenePending||r?.seeking)}};}
  async configure(enabled){
+  if(!enabled)this.waves.cancel();
   if(typeof enabled!=='boolean')throw Error('INVALID_ARGUMENTS');
   if(enabled&&!runtime())throw Error('SPATIAL_SETUP_REQUIRED');
   this.enabled=enabled;this.blocked.clear();this.error='';this.switchError=null;
@@ -417,9 +419,10 @@ class SpatialPlayback {
    }catch(e){if(revision===r.flowRevision&&deck&&r.standby===deck)this.dropDeck(r,deck);throw e;}
   }
   if(p.operation==='transition'){
-   const equalizer=validateEQ(p.eq);
-   const deck=r.standby;if(!deck?.ready||!deck.quality||deck.key!==p.key||r.transition||r.paused||r.active.metadata.duration-r.state.position>23)throw Error('FLOW_NOT_READY');
-   const requested=Math.max(.15,Math.min(8,Number(p.duration)||8)),revision=r.flowRevision,until=Date.now()+14000;
+   this.waves.cancel();
+   const equalizer=validateEQ(p.eq),point=validatePoint(p.point);
+   const deck=r.standby;if(!deck?.ready||!deck.quality||deck.key!==p.key||r.transition||r.paused||r.active.metadata.duration-r.state.position>45)throw Error('FLOW_NOT_READY');
+   const requested=Math.max(.15,Math.min(30,Number(p.duration)||8)),revision=r.flowRevision,until=Date.now()+14000;
    while(r.active.metadata.duration-r.state.position>requested+.65&&Date.now()<until){
     if(this.session!==r||revision!==r.flowRevision||r.paused)throw Error('FLOW_CANCELLED');
     await new Promise(resolve=>setTimeout(resolve,40));
@@ -427,7 +430,7 @@ class SpatialPlayback {
    if(this.session!==r||revision!==r.flowRevision||r.paused||r.standby!==deck)throw Error('FLOW_CANCELLED');
    if(r.active.metadata.duration-r.state.position>requested+1)throw Error('FLOW_NOT_READY');
    const duration=Math.max(.15,Math.min(requested,r.active.metadata.duration-r.state.position-.4));
-   return new Promise((resolve,reject)=>{r.transition={key:p.key,resolve,reject,timer:setTimeout(()=>this.failed(r,'SPATIAL_MIX_TIMEOUT'),6000)};this.send(r.mixer,{type:'transition',key:p.key,duration,shape:p.shape==='smooth'?'smooth':'shared',eq:equalizer});});
+   return new Promise((resolve,reject)=>{r.transition={key:p.key,resolve,reject,timer:setTimeout(()=>this.failed(r,'SPATIAL_MIX_TIMEOUT'),6000)};this.send(r.mixer,{type:'transition',key:p.key,duration,shape:['smooth','custom'].includes(p.shape)?p.shape:'shared',eq:equalizer,point});});
   }
   throw Error('INVALID_ARGUMENTS');
  }
@@ -451,6 +454,7 @@ class SpatialPlayback {
    position:r.state.position,paused:r.paused||r.state.phase==='ended'}});
  }
  async stop(restore=false){
+  this.waves.cancel();
   this.cancelPrime();
   const r=this.session;if(!r)return;this.session=null;const revision=++this.revision;
   clearTimeout(r.watchdog);clearTimeout(r.seekTimer);clearInterval(r.stall);r.flowRevision++;
@@ -461,6 +465,8 @@ class SpatialPlayback {
   if(restore)await this.restore(r,revision);
  }
  async intercept(win,request){
+  if(request.method==='flow'&&String(request.params?.operation).startsWith('waveform-'))return this.waves.command(win,request.params,runtime());
+  if(['play','seek','enable'].includes(request.method))this.waves.cancel();
   if(request.method==='spatial'&&['scene','output'].includes(request.params?.operation)){
    if(request.params.operation==='scene')this.scenes.set(request.params);
    else this.scenes.setOutput(request.params);

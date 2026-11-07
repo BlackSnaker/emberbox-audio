@@ -38,4 +38,9 @@ function installEQ(graph){
   }
  };return graph.eq;
 }
-module.exports={validateEQ,installEQ};
+function validatePoint(value){
+ if(value==null)return [.5,.5];
+ if(!Array.isArray(value)||value.length!==2||!value.every(Number.isFinite)||value[0]<.1||value[0]>.9||value[1]<.05||value[1]>.95)throw Error('INVALID_ARGUMENTS');
+ return value.slice();
+}
+module.exports={validateEQ,installEQ,validatePoint};

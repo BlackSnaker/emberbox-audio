@@ -1,11 +1,17 @@
 'use strict';
 const {detectBeat,matchBeats,attachTap}=require('./rhythm.cjs');
-const {validateEQ,installEQ}=require('./flow_eq.cjs');
+const {validateEQ,installEQ,validatePoint}=require('./flow_eq.cjs');
 // Three C2-continuous phases: reveal the intro, share the foreground,
 // release the old ambience. The complementary gains retain peak headroom.
 // The same curve drives mpv (flow_youtube.py); tests compare both engines.
-function mixCurve(position,shape='shared'){
+function mixCurve(position,shape='shared',point=[.5,.5]){
  const t=Math.max(0,Math.min(1,position));let x,start,span;
+ if(shape==='custom'){
+  const [k,l]=point,a=l/k,b=(1-l)/(1-k),m=Math.min(3*Math.min(a,b),3/((2-k)/a+(1+k)/b));let result;
+  if(t<=k){const u=t/k;result=(-2*u**3+3*u*u)*l+(u**3-u*u)*k*m;}
+  else{const u=(t-k)/(1-k);result=(2*u**3-3*u*u+1)*l+(u**3-2*u*u+u)*(1-k)*m-2*u**3+3*u*u;}
+  return Math.max(0,Math.min(1,result));
+ }
  if(shape==='smooth')return t*t*t*(t*(t*6-15)+10);
  if(t<.36){x=t/.36;start=0;span=.4;}
  else if(t<.64){x=(t-.36)/.28;start=.4;span=.2;}
@@ -60,7 +66,7 @@ class FlowDecks {
   const start=Math.max(g.context.currentTime,stamp.contextTime+(${Number(startsAt)}-wall)/1000);
   (${installEQ.toString()})(g).schedule(${JSON.stringify(db)},${incoming===true},start,${Number(duration)});if(${!this.beatSync})g.stop();return true;
  })()`);}
- async gain(win,to,duration=0,from=to,startsAt=Date.now(),shape='shared'){return win.webContents.executeJavaScript(`(()=>{const a=${MEDIA};if(!a)throw Error('FLOW_UNAVAILABLE');
+ async gain(win,to,duration=0,from=to,startsAt=Date.now(),shape='shared',point=[.5,.5]){return win.webContents.executeJavaScript(`(()=>{const a=${MEDIA};if(!a)throw Error('FLOW_UNAVAILABLE');
   const nativeVolume=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'volume');
   if(window.__emberFlowVolume===undefined){window.__emberFlowVolume=a.volume;
     Object.defineProperty(a,'volume',{configurable:true,get(){return window.__emberFlowVolume;},set(v){window.__emberFlowVolume=v;nativeVolume.set.call(a,v*(window.__emberFlowAudio?.media===a?1:window.__emberFlowMultiplier??1));}});}
@@ -72,7 +78,7 @@ class FlowDecks {
    const stamp=graph.context.getOutputTimestamp(),wall=performance.timeOrigin+stamp.performanceTime;
    const start=Math.max(graph.context.currentTime,stamp.contextTime+(${Number(startsAt)}-wall)/1000);
    const values=new Float32Array(1025),curve=${mixCurve.toString()};
-   for(let i=0;i<values.length;i++)values[i]=${from}+(${to}-${from})*curve(i/(values.length-1),${JSON.stringify(shape==='smooth'?'smooth':'shared')});
+   for(let i=0;i<values.length;i++)values[i]=${from}+(${to}-${from})*curve(i/(values.length-1),${JSON.stringify(['smooth','custom'].includes(shape)?shape:'shared')},${JSON.stringify(validatePoint(point))});
    graph.gain.gain.cancelScheduledValues(0);
    if(${duration}>0)graph.gain.gain.setValueCurveAtTime(values,start,${duration});else graph.gain.gain.value=${to};
    return true;
@@ -80,7 +86,7 @@ class FlowDecks {
   const start=performance.now()+(${Number(startsAt)}-Date.now()),set=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'volume').set;
   const envelope=${mixCurve.toString()};
   const step=()=>{const t=${duration}>0?Math.max(0,Math.min(1,(performance.now()-start)/(${duration}*1000))):1;
-   const x=envelope(t,${JSON.stringify(shape==='smooth'?'smooth':'shared')});window.__emberFlowMultiplier=${from}+(${to}-${from})*x;
+   const x=envelope(t,${JSON.stringify(['smooth','custom'].includes(shape)?shape:'shared')},${JSON.stringify(validatePoint(point))});window.__emberFlowMultiplier=${from}+(${to}-${from})*x;
    set.call(a,window.__emberFlowVolume*window.__emberFlowMultiplier);if(t>=1)clearInterval(window.__emberFlowTimer);};
   step();if(${duration}>0)window.__emberFlowTimer=setInterval(step,16);return true;})()`);}
  async cancel(){
@@ -93,8 +99,8 @@ class FlowDecks {
   if(!['songs','library-songs'].includes(p.kind)||!/^\w[\w.-]{0,199}$/.test(String(p.id))||
     typeof p.key!=='string'||p.key.length>80)throw Error('INVALID_ARGUMENTS');
   if(this.key===p.key&&this.next)return {ready:true};
-  const equalizer=validateEQ(p.eq);
-  await this.cancel();this.beatSync=p.beatSync===true;this.shape=p.shape==='smooth'?'smooth':'shared';this.eq=equalizer;const generation=this.generation,w=this.make(false);this.next=w;
+  const equalizer=validateEQ(p.eq),point=validatePoint(p.point);
+  await this.cancel();this.beatSync=p.beatSync===true;this.shape=['smooth','custom'].includes(p.shape)?p.shape:'shared';this.point=point;this.eq=equalizer;const generation=this.generation,w=this.make(false);this.next=w;
   w.webContents.setBackgroundThrottling?.(true);
   const alive=()=>generation===this.generation&&!w.isDestroyed();
   try{
@@ -124,7 +130,7 @@ class FlowDecks {
    const release=()=>{if(released)return;released=true;for(const f of undo)f();m.removeEventListener?.('mediaPlaybackError',release);};
    window.__emberFlowRelease=release;m.addEventListener?.('mediaPlaybackError',release);
    // A bounded lease survives a lost IPC connection. EME/CDM checks remain intact.
-   setTimeout(()=>{if(!released){release();a.pause();}},24000);return true;})()`);
+   setTimeout(()=>{if(!released){release();a.pause();}},60000);return true;})()`);
  }
  async startMuted(win,beats=false){
   await win.webContents.executeJavaScript(`(()=>{const proto=HTMLMediaElement.prototype,play=proto.play,
@@ -208,19 +214,19 @@ class FlowDecks {
     const end=Date.now()+6000;
     while(Date.now()<end){if(generation!==this.generation)throw Error('FLOW_CANCELLED');await new Promise(r=>setTimeout(r,100));}
     const oldState=await this.inspect(old),left=this.pendingState.duration-this.pendingState.position-(oldState.time-this.tailStartTime);
-    const notBefore=Date.now()+Math.max(0,left-Math.min(8,Number(p.duration)||8)-.35)*1000;
+    const notBefore=Date.now()+Math.max(0,left-Math.min(30,Number(p.duration)||8)-.35)*1000;
     beatPlan=await this.align(next,await this.rhythm(old),await this.rhythm(next),generation,notBefore);
    }
    const a=await this.inspect(old);
    if(generation!==this.generation)throw Error('FLOW_CANCELLED');
    if(!a||!b?.playing)throw Error('FLOW_UNAVAILABLE');
    const remaining=this.pendingState.duration-this.pendingState.position-(a.time-this.tailStartTime)-.1;
-   const duration=a.playing?Math.max(.15,Math.min(8,Number(p.duration)||8,remaining)):.15;
+   const duration=a.playing?Math.max(.15,Math.min(30,Number(p.duration)||8,remaining)):.15;
    if(this.eq)await this.prepareEQ(next);
    if(generation!==this.generation)throw Error('FLOW_CANCELLED');
    const startsAt=Date.now()+250;
    if(this.eq)await Promise.all([this.equalize(old,this.eq.out,false,startsAt,duration),this.equalize(next,this.eq.in,true,startsAt,duration)]);
-   await Promise.all([this.gain(old,0,duration,1,startsAt,this.shape),this.gain(next,1,duration,0,startsAt,this.shape)]);
+   await Promise.all([this.gain(old,0,duration,1,startsAt,this.shape,this.point),this.gain(next,1,duration,0,startsAt,this.shape,this.point)]);
    if(generation!==this.generation)throw Error('FLOW_CANCELLED');
    const recovery=beatPlan?Math.max(1.5,Math.min(3.5,240/beatPlan.bpm)):0;
    if(beatPlan)await this.restoreRate(next,beatPlan.rate,recovery,startsAt+duration*1000);

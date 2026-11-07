@@ -2,9 +2,10 @@
 import math,time
 from gi.repository import GLib
 from youtube_audio import YouTubeAudio
+from flow_curves import custom
 
 
-def curve(position,shape='shared'):
+def curve(position,shape='shared',knee=.5,level=.5):
     """Introduce the new song, share the foreground, dissolve the tail.
 
     The middle keeps both songs audible instead of rushing through the blend.
@@ -13,6 +14,8 @@ def curve(position,shape='shared'):
     Keep this in sync with mixCurve in apple_web_host/flow.cjs.
     """
     t=max(0.,min(1.,position))
+    if shape=='custom':
+        incoming=custom(t,knee,level);return 1-incoming,incoming
     if shape=='smooth':return 1-t*t*t*(t*(t*6-15)+10),t*t*t*(t*(t*6-15)+10)
     if t<.36:x=t/.36;start,span=0.,.4
     elif t<.64:x=(t-.36)/.28;start,span=.4,.2
@@ -24,7 +27,7 @@ def curve(position,shape='shared'):
 class YouTubeDecks:
     def __init__(self,host):
         self.host=host;self.standby=None;self.outgoing=None;self.timer=0;self.key=''
-        self.shape='shared';self.beat_sync=True;self.preview=None;self.beat_plan=None;self.start_at=0.;self.play_sent=False;self.prepared_rate=1.
+        self.shape='shared';self.point=[.5,.5];self.beat_sync=True;self.preview=None;self.beat_plan=None;self.start_at=0.;self.play_sent=False;self.prepared_rate=1.
         self.recovery=0.;self.recovering=False
 
     def prepare(self,item):
@@ -95,7 +98,7 @@ class YouTubeDecks:
             # outgoing deck audible until the new playback clock has advanced.
             if new.position<=.01 and now<self.wait_until:return True
             self.waiting=False;self.started=now
-        t=(now-self.started)/self.duration;a,b=curve(t,self.shape)
+        t=(now-self.started)/self.duration;a,b=curve(t,self.shape,*self.point)
         # mpv's percentage uses a cubic gain law. Undo it so the actual PCM
         # envelopes remain complementary instead of dipping deeply mid-fade.
         if old and old.mpv:old.mpv.command_async('set','volume',a**(1/3)*100)

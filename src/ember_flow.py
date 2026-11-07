@@ -147,7 +147,7 @@ class EmberFlow:
         if self.last_position is not None and abs(position-self.last_position)>max(1.5,now-self.last_time+1.5):
             self.cancel();return
         self.last_position=position;self.last_time=now
-        if not self.attempted and 7<remaining and (remaining<=28 or fast_apple and position>=1):
+        if not self.attempted and 7<remaining and (remaining<=max(28.,(plan or {}).get('seconds',8)+24) or fast_apple and position>=1):
             self.attempted=True;self.preparing=True;self.prepare_started=now
             if source=='apple-music':
                 if self.apple is None:
@@ -161,6 +161,7 @@ class EmberFlow:
                 deck=self.youtube
             deck.beat_sync=beats and mixing and self.enabled
             deck.shape=plan['shape'] if plan else 'shared'
+            deck.point=list(plan['curve_point']) if plan else [.5,.5]
             deck.eq=configuration(plan) if self.eq_supported else None
             try:deck.prepare(next_item)
             except Exception:self.preparing=False;deck.cancel()

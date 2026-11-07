@@ -12,7 +12,7 @@ import struct
 def pack(source,destination):
     source,destination = Path(source),Path(destination)
     files,data,offset = {},[],0
-    for name in ('package.json','main.cjs','page.js','yandex.js','spotify.js','favorite_dom.js','media_quality.cjs','flow.cjs','flow_eq.cjs','rhythm.cjs','spatial.cjs','spatial_source.js','scene.cjs','headphone_profiles.json'):
+    for name in ('package.json','main.cjs','page.js','yandex.js','spotify.js','favorite_dom.js','media_quality.cjs','flow.cjs','flow_eq.cjs','waveforms.cjs','rhythm.cjs','spatial.cjs','spatial_source.js','scene.cjs','headphone_profiles.json'):
         raw = (source/name).read_bytes()
         block_size = 4*1024*1024
         files[name] = {'size':len(raw),'offset':str(offset),'integrity':{

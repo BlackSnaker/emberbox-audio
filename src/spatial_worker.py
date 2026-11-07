@@ -18,6 +18,7 @@ from spatial_aac import Aac,PcmResampler,configuration
 from spatial_alac import Alac,configuration as alac_configuration
 from spatial_fairplay import FairPlay
 from spatial_seek import Seeks,SeekCancelled,PcmWriter
+from flow_peaks import PeakBins
 
 resource.setrlimit(resource.RLIMIT_CORE,(0,0))
 # PR_SET_DUMPABLE also prevents system crash handlers from retaining audio.
@@ -25,6 +26,18 @@ import ctypes
 if ctypes.CDLL(None).prctl(4,0,0,0,0)!=0:raise RuntimeError('SPATIAL_DUMP_PROTECTION')
 if ctypes.CDLL(None).prctl(1,15,0,0,0)!=0:raise RuntimeError('SPATIAL_PARENT_PROTECTION')
 if os.getppid()==1:os._exit(1)
+
+class PeaksReady(Exception):pass
+
+
+class PeakWriter:
+    def __init__(self,rate,seconds,start):self.peaks=PeakBins(rate,seconds,start)
+    @property
+    def done(self):return self.peaks.done
+    def write(self,data,_generation,_cancelled):
+        import numpy as np
+        self.peaks.add(np.frombuffer(data,dtype='<f4').reshape(-1,2))
+
 
 lock=threading.Lock();pending={};stopping=threading.Event();bootstrap=queue.Queue(1)
 seeks=Seeks()
@@ -97,6 +110,7 @@ def decode_pass(args,prepared,runtime,rate,cdm,licensed,license_key,writer,origi
         writer.write(data,generation,cancelled);emitted+=len(data)//8
     try:
         for number in range(index,len(segments)):
+            if getattr(writer,'done',False):raise PeaksReady()
             if cancelled.is_set():raise SeekCancelled()
             segment=segments[number];key=segment['keyIndex'];license_key(key)
             if number==index:emit({'type':'timing','generation':generation,'stage':'licenseMs','ms':round((time.monotonic()-started)*1000)})
@@ -109,6 +123,7 @@ def decode_pass(args,prepared,runtime,rate,cdm,licensed,license_key,writer,origi
                 encrypted.extend(chunk)
             if number==index:emit({'type':'timing','generation':generation,'stage':'fragmentMs','ms':round((time.monotonic()-started)*1000)})
             for packet,crypto in samples(encrypted,part['initBytes'],part['originalOffset']):
+                if getattr(writer,'done',False):raise PeaksReady()
                 if cancelled.is_set():raise SeekCancelled()
                 # E-AC-3 access units are independently encrypted. Keep half a
                 # second of JOC/HRTF warm-up, without rendering many seconds of
@@ -145,6 +160,7 @@ def decode_pass(args,prepared,runtime,rate,cdm,licensed,license_key,writer,origi
                     emit({'type':'seek-state','generation':generation,'stage':'codec-ready'})
                 if isinstance(joc,Alac):joc.packet_duration=crypto['duration']
                 cdm.decode_sample(packet,crypto,licensed[key],joc.feed)
+            if getattr(writer,'done',False):raise PeaksReady()
             expected+=segment['duration']
             # The resampler delivers PCM on another thread. Its buffered tail
             # is not missing audio; validate it after finish() has drained it.
@@ -181,7 +197,8 @@ def main():
             cdm=FairPlay(runtime['fairplay'])
         else:
             cdm=Cdm(runtime['host'],args['cdm']);cdm.call('certificate',decode64(prepared['certificate'],131072))
-        writer=PcmWriter(3,stopping)
+        waveform=args.get('waveform')
+        writer=PeakWriter(rate,float(waveform['seconds']),float(args.get('position',0))) if waveform else PcmWriter(3,stopping)
         emit({'type':'host-ready','backend':'fairplay' if fairplay else 'widevine','capacity':16})
         licensed={};pass_args=args
         while value:=seeks.next_selection():
@@ -217,7 +234,11 @@ def main():
                     # every selection. Key rotation still goes through the
                     # same per-key authorization in decode_pass().
                 if prepared is None:raise RuntimeError('SPATIAL_SOURCE_UNSUPPORTED')
-                decode_pass(pass_args,prepared,runtime,rate,cdm,licensed,license_key,writer,origin,generation,cancelled)
+                try:decode_pass(pass_args,prepared,runtime,rate,cdm,licensed,license_key,writer,origin,generation,cancelled)
+                except PeaksReady:
+                    if not waveform:raise
+                if waveform:
+                    emit({'type':'waveform','generation':generation,'waveform':writer.peaks.result()});return
             except Exception:
                 if not cancelled.is_set():raise
             finally:

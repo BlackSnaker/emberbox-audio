@@ -1,7 +1,7 @@
 'use strict';
 const assert=require('node:assert/strict'),vm=require('node:vm');
-const {validateEQ,installEQ}=require('../src/apple_web_host/flow_eq.cjs');
-const {FlowDecks}=require('../src/apple_web_host/flow.cjs');
+const {validateEQ,installEQ,validatePoint}=require('../src/apple_web_host/flow_eq.cjs');
+const {FlowDecks,mixCurve}=require('../src/apple_web_host/flow.cjs');
 
 function context(rate=48000){
  const nodes=[];
@@ -23,6 +23,8 @@ function value(parameter,t){
 
 async function run(){
  assert.equal(validateEQ(null),null);
+ assert.deepEqual(validatePoint(null),[.5,.5]);
+ for(const p of [[0,.5],[.5,1],[NaN,.5],{},[.5]])assert.throws(()=>validatePoint(p),/INVALID_ARGUMENTS/);
  for(const eq of [{out:[1,0,0],in:[0,0,0]},{out:[-13,0,0],in:[0,0,0]},{out:[NaN,0,0],in:[0,0,0]},{out:[],in:[]}])assert.throws(()=>validateEQ(eq),/INVALID_ARGUMENTS/);
  const original={out:[-9,0,0],in:[-6,0,0]},copy=validateEQ(original);copy.out[0]=0;assert.equal(original.out[0],-9);
  for(const rate of [48000,192000]){
@@ -38,11 +40,16 @@ async function run(){
  }
  // Exercise the actual page-injection method and shared output-clock schedule.
  const graph=context();graph.source.connect(graph.gain);
+ class Media{get volume(){return this.level??1;}set volume(v){this.level=v;}addEventListener(){}}
+ const media=graph.media=new Media();
  const page={isDestroyed:()=>false,webContents:{executeJavaScript:code=>Promise.resolve(vm.runInNewContext(code,
-  {window:{__emberFlowAudio:graph},performance:{timeOrigin:1000},Math,Float32Array,Error}))}};
+  {window:{__emberFlowAudio:graph,__emberFlowMedia:media},HTMLMediaElement:Media,clearInterval(){},performance:{timeOrigin:1000},Math,Float32Array,Error}))}};
  const flow=new FlowDecks(page,()=>{throw Error('Unexpected renderer');},null,'');flow.beatSync=false;
  await flow.equalize(page,[-6,0,0],true,1500,4);
  assert.equal(graph.nodes.filter(n=>n.kind==='gain')[0].gain.curve.start,.5);assert(graph.stopped);
+ await flow.gain(page,1,30,0,1500,'custom',[.3,.8]);
+ for(let i=0;i<=1024;i++)assert(Math.abs(graph.gain.gain.curve.v[i]-mixCurve(i/1024,'custom',[.3,.8]))<1e-7);
+ assert.equal(graph.gain.gain.curve.duration,30);
  await assert.rejects(flow.prepare({kind:'songs',id:'123',key:'test',eq:{out:[99,0,0],in:[0,0,0]}}),/INVALID_ARGUMENTS/);
  console.log('PASS transition EQ validation, complementary graph, bounded curves, dry release and shared audio clock');
 }

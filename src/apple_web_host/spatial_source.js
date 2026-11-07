@@ -10,6 +10,8 @@ async function emberboxSpatialSource(params) {
  const canonical=uri=>{const raw=uri.includes('base64,')?decode(uri.split('base64,')[1]):new TextEncoder().encode(uri);return raw.length===16?'data:;base64,'+encode(raw):uri;};
  const widevine=a=>a.KEYFORMAT==='com.widevine'||a.KEYFORMAT==='urn:uuid:edef8ba9-79d6-4ace-a3c8-27dcd51d21ed';
  const contexts=window.__emberSpatialContexts||(window.__emberSpatialContexts=new Map());
+ const analysis=params.waveform===true;
+ const room=()=>analysis?[...contexts.values()].filter(v=>v.analysis).length<1&&contexts.size<3:[...contexts.values()].filter(v=>!v.analysis).length<2;
  const preparing=window.__emberSpatialPreparing||(window.__emberSpatialPreparing=new Map());
  const cancel=job=>{job.cancelled=true;for(const controller of job.controllers)controller.abort();};
  const close=(id,ctx)=>{
@@ -29,8 +31,8 @@ async function emberboxSpatialSource(params) {
  const playback=params.action==='prepare',priming=params.action==='prime';
  if((playback||priming)&&params.requestKey!==undefined){
   if(typeof params.requestKey!=='string'||!/^native-[0-9]{1,16}$/.test(params.requestKey))throw Error('INVALID_ARGUMENTS');
-  for(const older of preparing.values())cancel(older);
-  job={cancelled:false,controllers:new Set()};preparing.set(params.requestKey,job);
+  for(const older of preparing.values())if(playback&&!analysis||!!older.analysis===analysis)cancel(older);
+  job={cancelled:false,controllers:new Set(),analysis};preparing.set(params.requestKey,job);
  }
  const check=()=>{if(job?.cancelled)throw Error('SPATIAL_CANCELLED');};
  // Short-lived manifest descriptors only. No decrypted audio or DRM session is
@@ -61,15 +63,15 @@ async function emberboxSpatialSource(params) {
  }
  if(playback||priming||params.action==='inspect') {
   try{
-  if(params.action==='prepare'&&contexts.size>=2)throw Error('SPATIAL_BUSY');
+  if(params.action==='prepare'&&!room())throw Error('SPATIAL_BUSY');
   for(const [key,value] of recent.items)if(Date.now()-value.time>60000)recent.items.delete(key);
   const cached=(playback||priming)&&params.id!==undefined?recent.items.get(cacheKey):null;
   if(cached){
    if(await music._playbackController?.services?.store?.storekit?.hasMusicSubscription?.()!==true){recent.items.clear();throw Error('SUBSCRIPTION_REQUIRED');}
    check();if(priming)return {ready:true};
-   if(contexts.size>=2)throw Error('SPATIAL_BUSY');
+   if(!room())throw Error('SPATIAL_BUSY');
    const contextId=crypto.randomUUID(),c=cached.context;
-   contexts.set(contextId,{...c,licences:c.licences.map(v=>({...v})),cache:null,controllers:new Set(),requestKey:params.requestKey});
+   contexts.set(contextId,{...c,licences:c.licences.map(v=>({...v})),cache:null,controllers:new Set(),requestKey:params.requestKey,analysis});
    return {...cached.prepared,contextId};
   }
   const subscriptionReady=Promise.resolve(music._playbackController?.services?.store?.storekit?.hasMusicSubscription?.()).catch(()=>false);
@@ -173,10 +175,10 @@ async function emberboxSpatialSource(params) {
    }
   }
   if(!segments.length)throw Error('SPATIAL_SOURCE_UNSUPPORTED');
-  check();if(playback&&contexts.size>=2)throw Error('SPATIAL_BUSY');
+  check();if(playback&&!room())throw Error('SPATIAL_BUSY');
   const item=Object.create(current),contextId=playback?crypto.randomUUID():undefined;
   Object.defineProperty(item,'keyURLs',{value:{'hls-key-server-url':asset.keyServerURL,'widevine-cert-url':asset.keyCertURL}});
-  if(playback)contexts.set(contextId,{item,asset,licences,segments,cache:null,controllers:new Set(),requestKey:params.requestKey});
+  if(playback)contexts.set(contextId,{item,asset,licences,segments,cache:null,controllers:new Set(),requestKey:params.requestKey,analysis});
   const a=current.attributes||{},art=a.artwork?.url||'';
   const names={'atmos':'dolby-atmos','surround':'dolby-audio','hiResLossless':'hi-res-lossless'};
   const formats=[...new Set([...(Array.isArray(a.audioVariants)?a.audioVariants:[]),...(Array.isArray(a.audioTraits)?a.audioTraits:[])].map(v=>names[v]||v).filter(v=>['dolby-atmos','dolby-audio','hi-res-lossless','lossless','lossy-stereo'].includes(v)))];

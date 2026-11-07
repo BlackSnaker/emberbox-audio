@@ -10,7 +10,9 @@
 
 Shape your playlist: **Collection → playlist → EmberFlow · Transitions**.
 A machined dial, recessed selectors and glowing envelopes behind glass.
-Drag tracks A/B, shape overlap and use transition EQ in Apple Music.
+Real audio peaks, zoom and pan. Drag tracks A/B for up to **30 seconds** of overlap,
+pull the gold point to shape your own fade, and use transition EQ in Apple Music.
+Measured peaks support native Apple Music and YouTube.
 Tune each pair yourself or let Ember adapt the blend and bass handover.
 **In-player Apple Music and YouTube**; [capabilities and limits →](docs/FLOW.md)
 

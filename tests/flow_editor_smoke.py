@@ -5,6 +5,9 @@ from unittest.mock import patch
 from types import SimpleNamespace
 import fullscreen_smoke as f
 import fullscreen
+import flow_waveforms
+import numpy as np
+from flow_peaks import PeakBins
 from gi.repository import Gtk,Gdk,GLib
 from seasonal_theme import Appearance
 from flow_plans import playlist_key
@@ -36,10 +39,18 @@ items=[dict(uri=f'apple:songs:{100+i}',id=str(100+i),kind='songs',title=name,
             artist='Emberbox Sessions',image='fixture:cover',duration_ms=180000+i*8000)
        for i,name in enumerate(('Afterglow','Amber Lines','Night Drive','Тёплый воздух'))]
 playlist=dict(uri='apple:library-playlists:p.fixture',kind='library-playlists',id='p.fixture',title='Slow Evenings',image='fixture:cover')
+def measured_fixture(_client,item,lane,seconds,stop):
+    rate=48000;t=np.arange(round(rate*seconds))/rate
+    # Original synthesized stereo audio, measured by the production peak reducer.
+    envelope=.12+.55*np.maximum(0,np.sin(t*(1.2+lane*.3)))**4
+    pcm=np.column_stack((envelope*np.sin(2*np.pi*(220+lane*110)*t),envelope*np.sin(2*np.pi*441*t))).astype(np.float32)
+    peaks=PeakBins(rate,seconds,max(0,item['duration_ms']/1000-seconds) if lane==0 else 0);peaks.add(pcm);return peaks.result()
+
 host=f.FixtureHost();host.source='apple-music';host.apple_web=SimpleNamespace(state={'emberFlow':True,'emberBeatSync':False,'emberFlowEQ':True})
 host.appearance=Appearance();host.appearance.set_theme('nocturne');host.settings.appearance=host.appearance
 with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected network')),\
-     patch.object(fullscreen,'LyricsClient',f.FixtureLyrics),patch.object(fullscreen.Artwork,'load',f.image_load):
+     patch.object(fullscreen,'LyricsClient',f.FixtureLyrics),patch.object(fullscreen.Artwork,'load',f.image_load),\
+     patch.object(flow_waveforms.WaveformClient,'apple',measured_fixture):
     stage=fullscreen.FullscreenPlayer(host);host.fullscreen=stage
     service=stage.music;service.repository.load=lambda *a,**k:{'tracks':items}
     try:
@@ -47,6 +58,8 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         view=stage.library_view;view.open_collection(playlist);wait(lambda:len(view.song_buttons)==4)
         assert view.transition_button.get_visible();view.transition_button.clicked();settle(.3);desk=view.editor
         assert desk and not service.book.active,'Opening editor started playback'
+        wait(lambda:desk.waveforms.states==['ready','ready'])
+        assert all(v and v['evidence']=='decoded-pcm' for v in desk.timeline.waves)
         before=service.book.revision
         desk.mode.set_active_id('manual');desk.length.set_value(4.5);desk.shape.set_active_id('smooth');settle()
         key=playlist_key('apple-music',playlist)
@@ -67,9 +80,9 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         # Native mouse gestures move both lanes; saving happens once on release.
         lane=desk.timeline;before=service.flow.plans.revision
         scale,end,start=lane.positions();event=Gdk.Event.new(Gdk.EventType.BUTTON_PRESS)
-        event.button=1;event.x=20+(start+4)*scale;event.y=100;event.x_root=event.x;event.y_root=event.y
+        event.button=1;event.x=lane.time_to_x(start+4);event.y=30+(lane.height-48)/2+20;event.x_root=event.x;event.y_root=event.y
         lane.emit('button-press-event',event);assert lane.drag
-        motion=Gdk.Event.new(Gdk.EventType.MOTION_NOTIFY);motion.x_root=event.x_root+scale;motion.y_root=100;motion.state=Gdk.ModifierType.BUTTON1_MASK
+        motion=Gdk.Event.new(Gdk.EventType.MOTION_NOTIFY);motion.x_root=event.x_root+scale;motion.y_root=event.y;motion.state=Gdk.ModifierType.BUTTON1_MASK
         lane.emit('motion-notify-event',motion);settle(.08)
         assert service.flow.plans.revision==before and desk.length.get_value()==4
         release=Gdk.Event.new(Gdk.EventType.BUTTON_RELEASE);release.button=1;lane.emit('button-release-event',release)
@@ -77,6 +90,27 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         calls=list(host.calls);lane.grab_focus();f.key(stage.window,'Right')
         assert desk.length.get_value()==3.5 and host.calls==calls,'Timeline arrow sought the song'
         f.key(stage.window,'Left');assert desk.length.get_value()==4
+        # Gold knots edit the audible curve, independently of clip position.
+        desk.length.set_value(16);settle(.4);lane.zoom(.5);lane.pan(-1);lane.pan(1)
+        assert lane.span==40;lane.home();assert lane.span>=80
+        for index in (0,1):
+            before=service.flow.plans.revision;hx,hy=lane.handle(index);scale=lane.positions()[0]
+            press=Gdk.Event.new(Gdk.EventType.BUTTON_PRESS);press.button=1;press.x=press.x_root=hx;press.y=press.y_root=hy
+            lane.emit('button-press-event',press);assert lane.curve_drag and not lane.drag
+            move=Gdk.Event.new(Gdk.EventType.MOTION_NOTIFY);move.x_root=hx+scale;move.y_root=hy+5;move.state=Gdk.ModifierType.BUTTON1_MASK
+            lane.emit('motion-notify-event',move);settle(.08)
+            assert service.flow.plans.revision==before
+            assert desk.shape.get_active_id()=='custom' and desk.length.get_value()==16
+            lane.emit('button-release-event',release)
+            assert service.flow.plans.revision==before+1 and lane.tick==0 and not lane.curve_drag
+            assert service.flow.plans.get(key,items[0],items[1])['curve_point']==lane.point
+        saved=list(lane.point);desk.pairs.set_active(1);desk.pairs.set_active(0);assert lane.point==saved
+        calls=list(host.calls);lane.grab_focus()
+        control=Gdk.Event.new(Gdk.EventType.KEY_PRESS);control.keyval=Gdk.KEY_Right;control.state=Gdk.ModifierType.CONTROL_MASK
+        stage.window.emit('key-press-event',control)
+        assert lane.point[0]>saved[0] and host.calls==calls and desk.length.get_value()==16
+        desk.length.set_value(30);assert service.flow.plans.get(key,items[0],items[1])['seconds']==30
+        desk.length.set_value(16);settle(.4)
         desk.eq_panel.mode_buttons['manual'].clicked();desk.eq_panel.dials[0]._change(.5)
         assert service.flow.plans.get(key,items[0],items[1])['eq_out'][0]==-6
         dial=desk.eq_panel.dials[0];dial.grab_focus();calls=list(host.calls);volume=host.sound.volume
