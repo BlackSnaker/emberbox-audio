@@ -6,6 +6,18 @@
   <p><a href="#get-started">Get started</a> · <a href="#system-requirements">System requirements</a> · <a href="docs/DESIGN.md">Grunesphism</a> · <a href="README.ru.md">Русский</a> · <a href="https://github.com/BlackSnaker/emberbox-video">Emberbox Video</a></p>
 </div>
 
+## Mirrorball · A room made of light
+
+Mirrored facets become part of Ember's architecture: graphite, silver glass,
+champagne light and quiet indigo reflections. There is no literal disco ball.
+Light drifts across the glass while artwork and warm tubes keep centre stage.
+
+**Settings → Mirrorball.** Available in desktop, Mini and fullscreen; your choice
+persists across restarts. Reduced motion keeps the glass still, and hidden
+windows suspend the optical effect.
+
+![Mirrorball with original Emberbox Sessions demonstration artwork](assets/mirrorball.en.png)
+
 ## EmberFlow · Transition desk
 
 Shape your playlist: **Collection → playlist → EmberFlow · Transitions**.

@@ -160,6 +160,22 @@ try:
         app.change_compact();settle(.65)
     app.appearance.set_christmas(False);settle(.1)
     assert not app.winter_surface.top.get_visible()
+    # Mirror glass is a thin inlay above controls, never a floating ball.
+    app.appearance.set_theme('mirrorball');settle(.7)
+    mirror=app.winter_surface.mirror
+    wait(lambda:mirror.painter is not None,lambda:'Mirror inlay did not prepare')
+    assert mirror.area.get_allocated_height()<30 and mirror.area.get_mapped()
+    mirror_target=os.environ.get('EMBERBOX_MIRROR_WIDGET_PREVIEW')
+    for mini in (False,True):
+        if app.compact!=mini:app.change_compact();settle(.65)
+        assert app.window.get_size().width==(320 if mini else 460)
+        if mirror_target:
+            from gi.repository import Gdk
+            directory=Path(mirror_target);directory.mkdir(parents=True,exist_ok=True)
+            width,height=app.window.get_size()
+            Gdk.pixbuf_get_from_window(app.window.get_window(),0,0,width,height).savev(str(directory/('mirrorball-mini.png' if mini else 'mirrorball-widget.png')),'png',[],[])
+    app.change_compact();settle(.65);app.appearance.set_theme('classic');settle(.1)
+    assert not mirror.tick and not mirror.painter and not mirror.area.get_visible()
     app.settings_button.clicked();settle(.1)
     app.settings.mode_button.clicked()
     settle(.6)

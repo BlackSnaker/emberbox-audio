@@ -128,7 +128,10 @@ def label(value, style, wrap=False):
 
 
 @lru_cache(maxsize=4)
-def background(width,height,color,christmas=False,nocturne=False):
+def background(width,height,color,christmas=False,nocturne=False,mirrorball=False):
+    if mirrorball:
+        from mirror_art import room
+        return room(width,height)
     # A small cached gradient avoids rasterising tens of thousands of SVG
     # pattern elements. NumPy does the work outside GTK; upscale only once.
     ratio=min(1.,640/max(width,height))
@@ -374,6 +377,7 @@ class FullscreenPlayer:
         if getattr(self,'applied_theme',None)==self.appearance.theme:return
         self.applied_theme=self.appearance.theme
         edition=text('CHRISTMAS, IN YOUR RHYTHM','РОЖДЕСТВО В ТВОЁМ РИТМЕ') if self.appearance.christmas else (
+            text('MIRRORBALL · THE LISTENING ROOM','ЗЕРКАЛЬНЫЙ ЗАЛ · КОМНАТА ПРОСЛУШИВАНИЯ') if self.appearance.mirrorball else
             text('NOCTURNE · THE LISTENING ROOM','ТЁПЛАЯ НОЧЬ · КОМНАТА ПРОСЛУШИВАНИЯ') if self.appearance.nocturne else
             text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'))
         self.edition_label.set_text(edition)
@@ -496,7 +500,7 @@ class FullscreenPlayer:
 
     def suspend_desktop_visuals(self,suspended):
         surface=getattr(self.host,'winter_surface',None)
-        for component in (getattr(self.host,'frame_health',None),getattr(surface,'snow',None)):
+        for component in (getattr(self.host,'frame_health',None),getattr(surface,'snow',None),getattr(surface,'mirror',None)):
             if component:component.set_suspended(suspended)
 
     def hide(self):
@@ -670,11 +674,12 @@ class FullscreenPlayer:
         if width is None:width,height=self.window.get_size()
         christmas=bool(self.appearance and self.appearance.christmas)
         nocturne=bool(self.appearance and self.appearance.nocturne)
-        key=(width,height,self.palette,christmas,nocturne)
+        mirrorball=bool(self.appearance and self.appearance.mirrorball)
+        key=(width,height,self.palette,christmas,nocturne,mirrorball)
         if key==self.bg_key:return
         self.bg_key=key
         # SVG parsing/rasterisation must not block the first animation frames.
-        future=self.artwork.pool.submit(background,max(1,width),max(1,height),self.palette,christmas,nocturne)
+        future=self.artwork.pool.submit(background,max(1,width),max(1,height),self.palette,christmas,nocturne,mirrorball)
         def completed(result):
             try:pixels=result.result()
             except Exception:return

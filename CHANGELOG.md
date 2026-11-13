@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.0 — 2026-11-13
+
+- Add Mirrorball: mirrored architectural facets, quiet reflected light, silver/graphite chrome and champagne controls. No literal disco ball; artwork and lyrics stay readable.
+- Add live settings selection, a matching preview, private persistence and dark materials across desktop, Mini and fullscreen.
+- Bake optical normals and light frames in a bounded background job; blend cached surfaces without per-frame image generation or new dependencies. Hidden, suspended and reduced-motion views stop optical animation; stale jobs cannot revive it.
+- Check original offline previews, transparent input, theme migration, mutual selection, cleanup and three fullscreen sizes.
+
 ## 0.30.0 — 2026-11-07
 
 - Draw real decoded min/max/RMS peaks for native Apple Music and YouTube: 32-second outro/intro windows, optional 64 seconds, zoom and pan. Never substitute decorative audio waves.

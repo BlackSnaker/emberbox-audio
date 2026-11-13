@@ -72,7 +72,7 @@ class FrostedPanel(Gtk.Overlay):
         if min(width,height)<2:return
         point=self.translate_coordinates(self.host,0,0) if self.host else None
         appearance=getattr(self.host,'ember_appearance',None)
-        night=bool(appearance and appearance.nocturne)
+        night=bool(appearance and getattr(appearance,'dark',appearance.nocturne))
         x,y=point or (0,0);key=(width,height,x,y,id(self.backdrop),night)
         if key==self.render_key:return
         self.render_key=key

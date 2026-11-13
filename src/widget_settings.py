@@ -76,6 +76,9 @@ class SettingsMenu:
             appearance.decorate_popup(popup)
             night,self.night_switch=night_choice(appearance)
             box.pack_start(night,False,False,5)
+            from mirror_theme import mirror_choice
+            mirror,self.mirror_switch=mirror_choice(appearance)
+            box.pack_start(mirror,False,False,5)
             tile,self.theme_switch=theme_choice(appearance)
             self.snow_switch=tile.snow_switch
             box.pack_start(tile,False,False,5)
