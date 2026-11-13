@@ -60,6 +60,7 @@ class Glints:
         if self.closed or not owner or not owner.enabled:return False
         c=self.c
         for x,y,rx,ry,alpha,tone in self.dots:
+            alpha*=owner.rhythm.timing.gain
             if alpha<.003:continue
             for scale,strength in ((2.4,.12),(1.,.9)):
                 c.cairo_save(cr);c.cairo_translate(cr,x,y);c.cairo_scale(cr,rx*scale/24,ry*scale/24)

@@ -11,6 +11,9 @@ from gi.repository import Gtk,Gdk,GLib
 def settle(seconds=.15):
     until=time.monotonic()+seconds;context=GLib.MainContext.default()
     while time.monotonic()<until:
+        meter=getattr(globals().get('host'),'meter',None)
+        if meter:
+            meter.last_sample=time.monotonic();meter.beat_grid_at=meter.last_sample
         for _ in range(3):
             if context.pending():context.iteration(False)
         time.sleep(.002)
@@ -23,6 +26,12 @@ def wait(predicate,limit=8):
 
 
 host=f.FixtureHost();host.appearance=Appearance();host.settings.appearance=host.appearance
+host.meter.interests={};host.meter.rms_level=.4
+host.meter.beat_grid=dict(bpm=120.,period=.5,phase=.137,confidence=.95)
+def request(consumer,key):
+    if key is None:host.meter.interests.pop(consumer,None)
+    else:host.meter.interests[consumer]=key
+host.meter.request_rhythm=request
 with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected network')),patch.object(fullscreen,'LyricsClient',f.FixtureLyrics),patch.object(fullscreen.Artwork,'load',f.image_load):
     stage=fullscreen.FullscreenPlayer(host);host.fullscreen=stage
     try:
@@ -48,6 +57,11 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         # Cold tube/heart sprites have their own workers. Do not count their
         # initial bake as continuous optical-animation cost.
         wait(lambda:stage.equalizer.frames_ready,limit=15);settle(.8)
+        assert surface.rhythm.timing.bpm==120 and surface.rhythm.consumer in host.meter.interests
+        previous_speed=surface.rhythm.timing.speed
+        host.meter.beat_grid=dict(bpm=160.,period=.375,phase=.137,confidence=.95);settle(.6)
+        assert surface.rhythm.timing.bpm==160 and surface.rhythm.timing.speed>previous_speed
+        host.meter.beat_grid=dict(bpm=120.,period=.5,phase=.137,confidence=.95)
         phase=surface.phase;shape=surface.facets.cells;wall=time.monotonic();cpu=time.process_time();draws=surface.draws
         print('Optical region:',surface.area.get_allocated_width(),surface.area.get_allocated_height(),flush=True)
         settle(1.)
@@ -70,6 +84,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
             host.settings.popover.popdown()
         prefs=stage.window.get_settings();animations=prefs.get_property('gtk-enable-animations')
         prefs.set_property('gtk-enable-animations',False);settle(.2)
+        assert surface.rhythm.consumer not in host.meter.interests
         assert not surface.tick;phase=surface.phase;settle(.15);assert surface.phase==phase and surface.area.get_visible()
         still=list(surface.glints.dots);settle(.15);assert surface.glints.dots==still
         still_scales=list(surface.facets.cells);settle(.15);assert surface.facets.cells==still_scales
@@ -84,6 +99,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         surface.set_suspended(True);assert not surface.tick
         surface.set_suspended(False);settle(.1);assert surface.tick
         stage.window.hide();settle(.1);assert not surface.tick
+        assert surface.rhythm.consumer not in host.meter.interests
         stage.window.show();settle(.15);assert surface.tick
         for width,height in ((1920,1080),(1280,720),(1024,600)):
             stage.window.unfullscreen();stage.window.resize(width,height);settle(.25)

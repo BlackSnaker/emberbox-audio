@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.3 — 2026-11-13
+
+- Drive Mirrorball from the current song's measured beat grid: smoothly adjust wave speed and softly accent reflected light. Track changes and seeks discard old rhythm estimates without resetting wave position.
+- Reuse the output meter's existing reader, bounded energy observations and once-per-second beat estimator. Visual and EmberFlow consumers hold independent interests; releasing one does not disable the other. No new capture process, microphone, network request or audio-file recording.
+- Ignore stale/quiet/muted audio and uncertain grids. Clear rhythms are measured in the estimator's 80–180 BPM range (half/double-time is possible); free rhythm keeps gentle motion, while pause settles it. Stop analysis for hidden/reduced-motion theme views.
+- Check generated stereo pulses, consumer ownership, tempo changes, stale/source/seek handling, brightness bounds and real desktop/fullscreen routing.
+
 ## 0.31.2 — 2026-11-13
 
 - Animate the mirror scales themselves: coherent waves of projected tilt, gentle drift and reflected bevels across both side walls. Leave the central listening area quiet.

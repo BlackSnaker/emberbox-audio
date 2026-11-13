@@ -533,6 +533,7 @@ class Widget:
         self.favorite.set_margin_start(4)
         self.cover_column.pack_start(self.favorite,False,False,0)
         self.appearance=Appearance()
+        self.appearance.bind_audio(self)
         self.winter_surface=self.appearance.attach(self.window,self.card_overlay)
         self.winter_surface.snow.set_targets(lambda:[self.cover_layers,self.previous,self.play,self.next,self.equalizer,self.discovery_button])
         self.settings.appearance=self.appearance

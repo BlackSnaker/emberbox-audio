@@ -362,6 +362,7 @@ class FullscreenPlayer:
         self.appearance=getattr(host,'appearance',None)
         self.theme_unsubscribe=None;self.winter_surface=None
         if self.appearance:
+            self.appearance.bind_audio(host)
             self.winter_surface=self.appearance.attach(self.window,overlay,stage=True)
             self.winter_surface.snow.set_targets(lambda:[self.art_shell,self.console,self.source_button,self.settings_button,self.exit_button])
             self.theme_unsubscribe=self.appearance.subscribe(self.theme_changed)

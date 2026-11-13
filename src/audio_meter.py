@@ -37,10 +37,31 @@ class SpotifyAudioMeter:
         self.last_sample = 0.0
         self.generation = 0
         self.rhythm_key=None;self.rhythm=None;self.beat_grid=None;self.rhythm_check=0.
+        self.beat_grid_at=0.
+        self._rhythm_requests={}
+        self._rhythm_lock=threading.Lock()
 
     def set_rhythm(self,key):
+        """Set Flow's rhythm interest without changing other consumers' requests."""
+        self.request_rhythm('flow',key)
+
+    def request_rhythm(self,consumer,key):
+        """Keep analysis for this consumer's track, or release it with None.
+
+        Requests replace that consumer's previous request. Flow's track takes
+        priority; otherwise the first active consumer selects the track.
+        """
+        with self._rhythm_lock:
+            if key is None:self._rhythm_requests.pop(consumer,None)
+            else:self._rhythm_requests[consumer]=key
+            effective=self._rhythm_requests.get('flow')
+            if effective is None:effective=next(iter(self._rhythm_requests.values()),None)
+            self._set_rhythm_key(effective)
+
+    def _set_rhythm_key(self,key):
+        # The caller holds _rhythm_lock, including while replacing the tap.
         if key==self.rhythm_key:return
-        self.rhythm_key=key;self.beat_grid=None;self.rhythm_check=0.
+        self.rhythm_key=key;self.beat_grid=None;self.rhythm_check=0.;self.beat_grid_at=0.
         if key:
             from flow_beats import EnergyTap
             self.rhythm=EnergyTap()
@@ -71,7 +92,9 @@ class SpotifyAudioMeter:
         self.levels = (0.0,) * 9
         self.rms_level = 0.0
         self.last_sample = 0.0
-        self.set_rhythm(None)
+        with self._rhythm_lock:
+            self._rhythm_requests.clear()
+            self._set_rhythm_key(None)
         if process:
             # A track transition may replace the output stream. Reaping the
             # old recorder must never wait inside GTK's event/paint callbacks.
@@ -154,12 +177,14 @@ class SpotifyAudioMeter:
 
     def _measure(self, raw, sample_end=None):
         samples = np.frombuffer(raw, dtype='<f4').reshape(FRAMES, CHANNELS)
-        tap=self.rhythm
+        with self._rhythm_lock:
+            tap=self.rhythm;rhythm_check=self.rhythm_check
         if tap:
             now=time.monotonic();tap.feed(samples[-FRAMES//2:],sample_end if sample_end is not None else now-.05)
-            if now-self.rhythm_check>=1:
+            if now-rhythm_check>=1:
                 grid=tap.result()
-                if self.rhythm is tap:self.beat_grid=grid;self.rhythm_check=now
+                with self._rhythm_lock:
+                    if self.rhythm is tap:self.beat_grid=grid;self.rhythm_check=now;self.beat_grid_at=now
         # Measure stereo energy before summing channels: opposite-phase audio
         # is audible too. The VU scale covers -60 to 0 dBFS.
         rms = math.sqrt(float(np.mean(samples ** 2)))

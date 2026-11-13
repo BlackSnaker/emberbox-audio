@@ -67,7 +67,8 @@ class FacetLayer:
         for side,left in ((0,0),(1,w-band)):
             c.cairo_save(cr);c.cairo_rectangle(cr,left,0,band,h);c.cairo_clip(cr)
             c.cairo_translate(cr,left,0);c.cairo_scale(cr,band/self.width,h/self.height)
-            c.cairo_set_source_surface(cr,self.blends[side][0],0,0);c.cairo_paint(cr);c.cairo_restore(cr)
+            c.cairo_set_source_surface(cr,self.blends[side][0],0,0)
+            c.cairo_paint_with_alpha(cr,min(1.,owner.rhythm.timing.gain));c.cairo_restore(cr)
         self.draws+=1;return False
 
     def close(self):

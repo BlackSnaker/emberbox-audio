@@ -72,6 +72,7 @@ widget.AppleWeb=DummyAppleWeb
 widget.YandexWeb=DummyAppleWeb
 widget.SpotifyWeb=DummyAppleWeb
 started=time.monotonic();app=widget.Widget()
+assert app.appearance.audio_host is app,'Desktop rhythm must bind before fullscreen/settings are opened'
 print('Desktop construction before background lamps:',round(time.monotonic()-started,3),'s')
 try:
     settle()

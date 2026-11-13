@@ -11,7 +11,8 @@
 Mirrored facets become part of Ember's architecture: graphite, silver glass,
 champagne light and quiet indigo reflections. There is no literal disco ball.
 Mirror scales gently tilt in a coherent wave, catching light at changing angles.
-Artwork and warm tubes keep centre stage.
+The measured song rhythm guides wave speed and softly accents the light; uncertain
+rhythm retains gentle motion. Artwork and warm tubes keep centre stage.
 
 **Settings → Mirrorball.** Available in desktop, Mini and fullscreen; your choice
 persists across restarts. Reduced motion keeps the glass still, and hidden

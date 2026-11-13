@@ -72,6 +72,8 @@ class SettingsMenu:
         box.pack_start(heading, False, False, 0)
         appearance=getattr(self,'appearance',None)
         if appearance:
+            owner=getattr(self.fullscreen,'__self__',None)
+            if owner:appearance.bind_audio(owner)
             from seasonal_theme import theme_choice,night_choice
             appearance.decorate_popup(popup)
             night,self.night_switch=night_choice(appearance)

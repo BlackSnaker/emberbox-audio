@@ -2,6 +2,7 @@
 import ctypes as C
 import weakref
 import math
+import time
 from gi.repository import Gtk,Gdk,GLib
 from source_picker import text
 from mirror_art import materials,preview,PHASES,PERIOD
@@ -90,6 +91,7 @@ class MirrorSurface:
         self.closed=self.enabled=self.suspended=self.obscured=self.failed=False
         self.materials=[];self.job=None
         self.tick=0;self.phase=4.;self.age=0.;self.last=None;self.painted_at=None;self.painter=None;self.generation=0;self.draws=0
+        self.drawn_age=None;self.drawn_gain=None
         self.area=Gtk.DrawingArea();self.area.set_has_window(False);self.area.set_can_focus(False);self.area.set_no_show_all(True)
         self.area.set_halign(Gtk.Align.END if stage else Gtk.Align.FILL);self.area.set_valign(Gtk.Align.START)
         self.area.set_margin_end(70 if stage else 18);self.area.set_margin_start(0 if stage else 18)
@@ -98,6 +100,8 @@ class MirrorSurface:
         overlay.add_overlay(self.area);overlay.set_overlay_pass_through(self.area,True)
         if stage:overlay.reorder_overlay(self.area,1)
         self.glints=None;self.facets=None
+        from mirror_rhythm import SongRhythm
+        self.rhythm=SongRhythm('mirrorball-'+str(id(self)))
         settings=window.get_settings()
         window.add_events(Gdk.EventMask.VISIBILITY_NOTIFY_MASK)
         self.signals=[(window,window.connect('map',lambda *_:self.resume())),
@@ -153,28 +157,37 @@ class MirrorSurface:
         return self.enabled and not self.closed and not self.suspended and not self.obscured and self.window.get_mapped() and self.area.get_mapped() and self.painter
 
     def resume(self):
-        self.pause()
-        if not self.eligible():return
+        self.pause(release=False)
+        if not self.eligible():self.rhythm.release();return
         self.area.queue_draw()
         if self.window.get_settings().get_property('gtk-enable-animations'):
             self.tick=self.area.add_tick_callback(self.advance)
+        else:self.rhythm.release()
 
     def advance(self,_area,clock):
         if not self.eligible():self.tick=0;return False
         now=clock.get_frame_time()/1e6
         if self.last is not None:
-            dt=min(.1,max(0,now-self.last));self.age+=dt
-            self.phase=(self.phase+dt*PHASES/PERIOD)%PHASES
+            dt=min(.1,max(0,now-self.last))
+            # Capture timestamps use monotonic time; GDK's paint timestamp can
+            # lag behind the latest audio callback on a busy first frame.
+            speed=self.rhythm.advance(self.appearance.audio_host,time.monotonic(),dt)
+            self.age+=dt*speed
+            self.phase=(self.phase+dt*speed*PHASES/PERIOD)%PHASES
         self.last=now
         if self.painted_at is None or now-self.painted_at>=1/30-.002:
-            self.painted_at=now;self.area.queue_draw()
-            if self.glints:self.glints.advance(self.age)
-            if self.facets:self.facets.advance(self.age)
+            self.painted_at=now;gain=self.rhythm.timing.gain
+            changed=self.drawn_age is None or abs(self.age-self.drawn_age)>.0001 or abs(gain-self.drawn_gain)>.0005
+            if changed:
+                self.drawn_age,self.drawn_gain=self.age,gain;self.area.queue_draw()
+                if self.glints:self.glints.advance(self.age)
+                if self.facets:self.facets.advance(self.age)
         return True
 
-    def pause(self):
+    def pause(self,release=True):
         if self.tick:self.area.remove_tick_callback(self.tick);self.tick=0
         self.last=self.painted_at=None
+        if release:self.rhythm.release()
 
     def set_suspended(self,value):
         self.suspended=bool(value);self.resume()
@@ -203,7 +216,7 @@ def mirror_choice(appearance):
     label=Gtk.Label(label=text('Mirrorball','Зеркальный зал'));label.set_xalign(0);label.get_style_context().add_class('theme-choice-title');row.pack_start(label,True,True,0)
     switch=Gtk.Switch();switch.set_active(appearance.mirrorball);switch.set_has_tooltip(False);switch.set_valign(Gtk.Align.CENTER)
     switch.get_accessible().set_name(label.get_text());row.pack_end(switch,False,False,0)
-    note=Gtk.Label(label=text('Mirror glass · champagne light','Зеркальные грани · свет шампанского'));note.set_xalign(0);note.set_line_wrap(True);note.set_max_width_chars(32);note.get_style_context().add_class('theme-choice-note');tile.pack_start(note,False,False,0)
+    note=Gtk.Label(label=text('Mirror glass · in rhythm with your music','Зеркальные грани · в ритме музыки'));note.set_xalign(0);note.set_line_wrap(True);note.set_max_width_chars(32);note.get_style_context().add_class('theme-choice-note');tile.pack_start(note,False,False,0)
     def changed(*_):
         if switch.get_active()==appearance.mirrorball:return
         if not appearance.set_theme('mirrorball' if switch.get_active() else 'classic'):

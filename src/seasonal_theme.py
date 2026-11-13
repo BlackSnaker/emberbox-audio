@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 import json
 import os
+import weakref
 from pathlib import Path
 import gi
 gi.require_version('Gtk','3.0')
@@ -97,7 +98,7 @@ class Appearance:
                 if data.get('theme') in ('classic','christmas','nocturne','mirrorball'):self.theme=data['theme']
                 self.snow_enabled=data.get('snow') is True
         except (OSError,ValueError,TypeError,AttributeError):pass
-        self.listeners=[];self.surfaces=[];self.closed=False
+        self.listeners=[];self.surfaces=[];self.closed=False;self._audio_host=None
         self.pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-winter-art')
         self.provider=Gtk.CssProvider();self.provider.load_from_data(CSS+NIGHT_CSS+MIRROR_CSS)
         self.screen=Gdk.Screen.get_default()
@@ -114,6 +115,11 @@ class Appearance:
 
     @property
     def dark(self):return self.theme in ('nocturne','mirrorball')
+
+    @property
+    def audio_host(self):return self._audio_host() if self._audio_host else None
+
+    def bind_audio(self,host):self._audio_host=weakref.ref(host) if host else None
 
     def subscribe(self,callback):
         self.listeners.append(callback)
@@ -172,6 +178,7 @@ class Appearance:
         self.closed=True
         for surface in tuple(self.surfaces):surface.close()
         self.listeners.clear();self.pool.shutdown(wait=False,cancel_futures=True)
+        self._audio_host=None
         Gtk.StyleContext.remove_provider_for_screen(self.screen,self.provider)
 
 
