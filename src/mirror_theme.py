@@ -35,6 +35,13 @@ window.ember-stage.mirrorball-theme.stage-opening { background-color: transparen
 '''
 
 
+def prepare(stage):
+    light=materials(320,not stage,field=stage)
+    if not stage:return light,None
+    from mirror_facet_atlas import bake
+    return light,bake()
+
+
 class MirrorPainter:
     def __init__(self,area,owner,atlas):
         from cover_pause_paint import bindings
@@ -90,7 +97,7 @@ class MirrorSurface:
         self.area.set_size_request(480 if stage else -1,170 if stage else 17)
         overlay.add_overlay(self.area);overlay.set_overlay_pass_through(self.area,True)
         if stage:overlay.reorder_overlay(self.area,1)
-        self.glints=None
+        self.glints=None;self.facets=None
         settings=window.get_settings()
         window.add_events(Gdk.EventMask.VISIBILITY_NOTIFY_MASK)
         self.signals=[(window,window.connect('map',lambda *_:self.resume())),
@@ -104,10 +111,14 @@ class MirrorSurface:
         if not enabled:
             self.area.hide()
             if self.glints:self.glints.close();self.glints=None
+            if self.facets:self.facets.close();self.facets=None
             if self.painter:self.painter.close();self.painter=None
             for cache in self.materials:cache.close()
             self.materials=[]
             return
+        if self.stage and self.facets is None:
+            from mirror_facets import FacetLayer
+            self.facets=FacetLayer(self);self.facets.area.show();self.facets.advance(self.age)
         if self.stage and self.glints is None:
             from mirror_glints import Glints
             self.glints=Glints(self);self.glints.area.show();self.glints.advance(self.age)
@@ -123,14 +134,16 @@ class MirrorSurface:
         self.area.show()
         if self.painter:self.resume();return
         generation=self.generation
-        future=self.job=self.appearance.pool.submit(materials,320,not self.stage)
+        future=self.job=self.appearance.pool.submit(prepare,self.stage)
         def done(result):
-            try:atlas=result.result()
+            try:atlas,scales=result.result()
             except Exception:return
             def apply():
                 if self.closed or generation!=self.generation or not self.enabled:return False
                 self.job=None
-                try:self.painter=MirrorPainter(self.area,self,atlas)
+                try:
+                    self.painter=MirrorPainter(self.area,self,atlas)
+                    if scales is not None:self.facets.set_atlas(scales)
                 except (OSError,RuntimeError,AttributeError):return False
                 self.area.queue_draw();self.resume();return False
             GLib.idle_add(apply)
@@ -156,6 +169,7 @@ class MirrorSurface:
         if self.painted_at is None or now-self.painted_at>=1/30-.002:
             self.painted_at=now;self.area.queue_draw()
             if self.glints:self.glints.advance(self.age)
+            if self.facets:self.facets.advance(self.age)
         return True
 
     def pause(self):
@@ -174,6 +188,7 @@ class MirrorSurface:
         if self.job:self.job.cancel();self.job=None
         if self.painter:self.painter.close();self.painter=None
         if self.glints:self.glints.close();self.glints=None
+        if self.facets:self.facets.close();self.facets=None
         for cache in self.materials:cache.close()
         self.materials=[]
         for widget,signal in self.signals:

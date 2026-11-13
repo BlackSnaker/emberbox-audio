@@ -26,7 +26,7 @@ class Glints:
         self.area=Gtk.DrawingArea();self.area.set_has_window(False);self.area.set_no_show_all(True);self.area.set_can_focus(False)
         self.area.set_halign(Gtk.Align.FILL);self.area.set_valign(Gtk.Align.FILL)
         owner.overlay.add_overlay(self.area);owner.overlay.set_overlay_pass_through(self.area,True)
-        owner.overlay.reorder_overlay(self.area,1)
+        owner.overlay.reorder_overlay(self.area,2 if getattr(owner,'facets',None) else 1)
         self.dots=[];self.damage=0
         self.ptr=pointer(self.area.__gpointer__,None)
         self.mask=self.c.cairo_image_surface_create(2,48,48)

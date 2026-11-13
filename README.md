@@ -10,7 +10,8 @@
 
 Mirrored facets become part of Ember's architecture: graphite, silver glass,
 champagne light and quiet indigo reflections. There is no literal disco ball.
-Light drifts across the glass while artwork and warm tubes keep centre stage.
+Mirror scales gently tilt in a coherent wave, catching light at changing angles.
+Artwork and warm tubes keep centre stage.
 
 **Settings → Mirrorball.** Available in desktop, Mini and fullscreen; your choice
 persists across restarts. Reduced motion keeps the glass still, and hidden

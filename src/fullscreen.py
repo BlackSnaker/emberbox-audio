@@ -207,6 +207,7 @@ class FullscreenPlayer:
         wordmark=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3)
         wordmark.pack_start(label('EMBER','stage-brand'),False,False,0)
         self.edition_label=label(text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'),'stage-overline')
+        self.edition_label.set_ellipsize(Pango.EllipsizeMode.END)
         wordmark.pack_start(self.edition_label,False,False,0)
         header.pack_start(wordmark,False,False,0)
         navigation=Gtk.Box(spacing=2);navigation.get_style_context().add_class('stage-nav')
@@ -627,6 +628,8 @@ class FullscreenPlayer:
         self.dj_view.resize(width,height)
         self.mashups.resize(width,height)
         small=height<850 or width<1200
+        # Long translated theme names must yield space to transport/navigation.
+        self.edition_label.set_max_width_chars(18 if width<1200 else 72)
         self.karaoke.resize(height<800)
         self.equalizer.set_compact(small)
         context=self.layout.get_style_context()

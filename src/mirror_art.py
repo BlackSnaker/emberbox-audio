@@ -7,7 +7,7 @@ PHASES=24
 PERIOD=28.
 
 
-def materials(size=320,trim=False,single=False):
+def materials(size=320,trim=False,single=False,field=False):
     """Premultiplied BGRA atlas. One bounded worker job, two Cairo blits per optical frame."""
     size=max(64,min(384,int(size)));height=22 if trim else round(size*.45)
     yy,xx=np.mgrid[:height,:size].astype(np.float32)
@@ -25,6 +25,11 @@ def materials(size=320,trim=False,single=False):
     edge=np.minimum.reduce((rows%1,1-rows%1,cols%1,1-cols%1))
     joint=np.clip(edge/.055,0,1)
     variation=.86+.14*np.sin(np.floor(rows)*17+np.floor(cols)*31)**2
+    if field:
+        # Moving stage scales own their edges/normals; this layer contributes
+        # only a diffuse softbox, never a second stationary tile grid.
+        nx=np.cos(latitude)*np.sin(longitude);ny=np.sin(latitude);nz=np.cos(latitude)*np.cos(longitude)
+        joint=np.ones_like(joint);variation=1.;alpha*=.4
     frames=[]
     for phase in ([4] if single else range(PHASES)):
         t=phase/PHASES*math.tau
@@ -44,7 +49,7 @@ def materials(size=320,trim=False,single=False):
         sheen=np.exp(-((u-centre+.18*(v-.5))/.14)**2)
         base+=sheen[...,None]*np.array((94,76,49))
         base=base*joint[...,None]+np.array((4,7,10))*(1-joint[...,None])
-        bevel=np.exp(-((edge-.07)/.025)**2)*np.maximum(0,nz)*.12
+        bevel=np.zeros_like(edge) if field else np.exp(-((edge-.07)/.025)**2)*np.maximum(0,nz)*.12
         base+=bevel[...,None]*np.array((187,184,165))
         out=np.empty((height,size,4),np.uint8)
         out[...,:3]=np.clip(base[...,::-1],0,255)*alpha[...,None];out[...,3]=(alpha*255).astype(np.uint8)
@@ -79,11 +84,8 @@ def room(width,height):
     for cx,cy,sx,sy,tone in ((.83,.19,.45,.7,(19,18,22)),(.12,.68,.5,.7,(9,17,20)),(.6,.1,.6,.4,(14,10,12))):
         wash=np.exp(-3*(((x-cx)/sx)**2+((y-cy)/sy)**2))
         field+=wash[...,None]*np.array(tone)
-    cols=x*46+y*3;rows=y*29
-    edge=np.minimum.reduce((cols%1,1-cols%1,rows%1,1-rows%1))
-    facets=.5+.5*np.sin(np.floor(cols)*7.1+np.floor(rows)*4.9)
-    wall=np.exp(-((x-.96)/.30)**2-((y-.3)/.55)**2)+.65*np.exp(-((x-.05)/.18)**2-((y-.67)/.45)**2)
-    field+=(facets*np.clip(edge/.09,0,1)*wall)[...,None]*np.array((10,12,15))
+    # The actual scales are a separate moving layer. Keep this distant light
+    # field quiet so no stationary duplicate grid shows between tilted facets.
     # Soft, distant rectangular caustics, never a flashing star field.
     for k in range(28):
         angle=k*2.39996;distance=.25+.50*((k*13%37)/37)

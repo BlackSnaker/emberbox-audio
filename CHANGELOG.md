@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.2 — 2026-11-13
+
+- Animate the mirror scales themselves: coherent waves of projected tilt, gentle drift and reflected bevels across both side walls. Leave the central listening area quiet.
+- Bake a fixed 24-second contour loop off GTK and retain two small edge-strip atlases (~14.6 MB including blend buffers). Blend cached geometry without live polygon generation or new timers; preserve reduced-motion and lifecycle handling.
+- Fix the Mirrorball Russian header overflowing the exit control at 1024×600. Long translated theme names now ellipsize before pushing navigation outside the window.
+- Verify convex geometry, actual moving contours under constant lighting, loop continuity, premultiplication, buffer trail cleanup, responsive layout and source isolation.
+
 ## 0.31.1 — 2026-11-13
 
 - Add drifting champagne/silver light reflections across the edges of Mirrorball's room, with soft glow, gradual appearance and a seamless cycle.

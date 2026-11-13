@@ -42,16 +42,19 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         finally:restored.close()
         assert surface.area.get_can_focus() is False
         assert surface.glints and not surface.glints.area.get_can_focus()
+        assert surface.facets and not surface.facets.area.get_can_focus()
         assert not stage.winter_surface.snow.active and not stage.winter_surface.top.get_visible()
         settings.popover.popdown();settle(.4)
         # Cold tube/heart sprites have their own workers. Do not count their
         # initial bake as continuous optical-animation cost.
         wait(lambda:stage.equalizer.frames_ready,limit=15);settle(.8)
-        phase=surface.phase;wall=time.monotonic();cpu=time.process_time();draws=surface.draws
+        phase=surface.phase;shape=surface.facets.cells;wall=time.monotonic();cpu=time.process_time();draws=surface.draws
         print('Optical region:',surface.area.get_allocated_width(),surface.area.get_allocated_height(),flush=True)
         settle(1.)
         print('Optics fixture: %.1f draws/s, process CPU %.1f ms/s'%((surface.draws-draws)/(time.monotonic()-wall),(time.process_time()-cpu)*1000/(time.monotonic()-wall)))
         assert surface.phase!=phase and surface.tick
+        assert surface.facets.cells!=shape and surface.facets.draws>0
+        assert len(surface.facets.cells)<=300
         assert surface.glints.dots and 0<surface.glints.damage<1920*1080*.07
         surface.set_suspended(True);settle(.2)
         wall=time.monotonic();cpu=time.process_time();settle(1.)
@@ -69,6 +72,12 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         prefs.set_property('gtk-enable-animations',False);settle(.2)
         assert not surface.tick;phase=surface.phase;settle(.15);assert surface.phase==phase and surface.area.get_visible()
         still=list(surface.glints.dots);settle(.15);assert surface.glints.dots==still
+        still_scales=list(surface.facets.cells);settle(.15);assert surface.facets.cells==still_scales
+        # Reusing the blend buffers must not retain transparent frame trails.
+        def paused_edge(index):
+            surface.facets.index=index;surface.facets.area.queue_draw();settle(.08)
+            return Gdk.pixbuf_get_from_window(stage.window.get_window(),0,150,180,240).get_pixels()
+        first=paused_edge(.25);paused_edge(.8);assert paused_edge(.25)==first
         wall=time.monotonic();cpu=time.process_time();settle(1.)
         print('Static fixture CPU %.1f ms/s'%((time.process_time()-cpu)*1000/(time.monotonic()-wall)))
         prefs.set_property('gtk-enable-animations',animations);settle(.15)
@@ -83,6 +92,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         host.appearance.set_theme('nocturne');settle(.1)
         assert not surface.tick and not surface.painter and not surface.area.get_visible()
         assert surface.glints is None
+        assert surface.facets is None
         assert not stage.window.get_style_context().has_class('mirrorball-theme')
         assert not settings.mirror_switch.get_active()
         host.appearance.set_theme('mirrorball');host.appearance.set_theme('classic');settle(.3)
