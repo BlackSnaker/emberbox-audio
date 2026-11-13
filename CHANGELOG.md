@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.1 — 2026-11-13
+
+- Add drifting champagne/silver light reflections across the edges of Mirrorball's room, with soft glow, gradual appearance and a seamless cycle.
+- Make the glass-panel light sweep more visible, including the widget/Mini inlay. Reuse baked textures and one shared animation clock; invalidate only the glints' old/new footprints.
+- Check continuous motion, loop boundaries, damage bounds, reduced motion, source isolation and theme cleanup.
+
 ## 0.31.0 — 2026-11-13
 
 - Add Mirrorball: mirrored architectural facets, quiet reflected light, silver/graphite chrome and champagne controls. No literal disco ball; artwork and lyrics stay readable.

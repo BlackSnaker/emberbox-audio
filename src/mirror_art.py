@@ -4,7 +4,7 @@ import math
 import numpy as np
 
 PHASES=24
-PERIOD=64.
+PERIOD=28.
 
 
 def materials(size=320,trim=False,single=False):
@@ -39,6 +39,10 @@ def materials(size=320,trim=False,single=False):
             spec=np.maximum(0,nx*half[0]+ny*half[1]+nz*half[2])**42
             reflected=np.maximum(0,nx*light[0]+ny*light[1]+nz*light[2])**9
             base+=(spec*power+reflected*.13)[...,None]*np.array(tone)
+        # A broad travelling reflection catches consecutive glass facets.
+        centre=.5+.48*math.sin(t)
+        sheen=np.exp(-((u-centre+.18*(v-.5))/.14)**2)
+        base+=sheen[...,None]*np.array((94,76,49))
         base=base*joint[...,None]+np.array((4,7,10))*(1-joint[...,None])
         bevel=np.exp(-((edge-.07)/.025)**2)*np.maximum(0,nz)*.12
         base+=bevel[...,None]*np.array((187,184,165))

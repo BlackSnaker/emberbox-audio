@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 from mirror_art import materials,PHASES
+from mirror_glints import glints
 
 
 class Mirrors(unittest.TestCase):
@@ -24,6 +25,17 @@ class Mirrors(unittest.TestCase):
         w,h,frames=materials(320,trim=True)
         self.assertEqual(h,22);self.assertLess(sum(map(len,frames)),1_000_000)
         self.assertTrue(any(np.frombuffer(raw,np.uint8).max()>50 for raw in frames))
+    def test_reflections_drift_continuously_at_the_edges_and_loop_cleanly(self):
+        for t in np.linspace(0,22,120):
+            before=glints(t,1920,1080);after=glints(t+1/60,1920,1080)
+            self.assertEqual(len(before),10)
+            for a,b in zip(before,after):
+                x,y,w,h,alpha,_=a
+                self.assertTrue(x<1920*.25 or x>1920*.78)
+                self.assertTrue(0<=alpha<=.38)
+                self.assertLess(abs(a[0]-b[0]),.25);self.assertLess(abs(a[4]-b[4]),.003)
+        np.testing.assert_allclose(np.array([v[:5] for v in glints(0,1920,1080)]),
+                                   np.array([v[:5] for v in glints(22,1920,1080)]),atol=1e-10)
 
 
 if __name__=='__main__':unittest.main()

@@ -82,7 +82,7 @@ class MirrorSurface:
         self.appearance,self.window,self.overlay,self.stage=appearance,window,overlay,stage
         self.closed=self.enabled=self.suspended=self.obscured=self.failed=False
         self.materials=[];self.job=None
-        self.tick=0;self.phase=4.;self.last=None;self.painted_at=None;self.painter=None;self.generation=0;self.draws=0
+        self.tick=0;self.phase=4.;self.age=0.;self.last=None;self.painted_at=None;self.painter=None;self.generation=0;self.draws=0
         self.area=Gtk.DrawingArea();self.area.set_has_window(False);self.area.set_can_focus(False);self.area.set_no_show_all(True)
         self.area.set_halign(Gtk.Align.END if stage else Gtk.Align.FILL);self.area.set_valign(Gtk.Align.START)
         self.area.set_margin_end(70 if stage else 18);self.area.set_margin_start(0 if stage else 18)
@@ -90,6 +90,7 @@ class MirrorSurface:
         self.area.set_size_request(480 if stage else -1,170 if stage else 17)
         overlay.add_overlay(self.area);overlay.set_overlay_pass_through(self.area,True)
         if stage:overlay.reorder_overlay(self.area,1)
+        self.glints=None
         settings=window.get_settings()
         window.add_events(Gdk.EventMask.VISIBILITY_NOTIFY_MASK)
         self.signals=[(window,window.connect('map',lambda *_:self.resume())),
@@ -102,10 +103,14 @@ class MirrorSurface:
         if self.job:self.job.cancel();self.job=None
         if not enabled:
             self.area.hide()
+            if self.glints:self.glints.close();self.glints=None
             if self.painter:self.painter.close();self.painter=None
             for cache in self.materials:cache.close()
             self.materials=[]
             return
+        if self.stage and self.glints is None:
+            from mirror_glints import Glints
+            self.glints=Glints(self);self.glints.area.show();self.glints.advance(self.age)
         if not self.materials:
             from winter_surface_cache import MaterialCache
             def visit(widget):
@@ -144,10 +149,13 @@ class MirrorSurface:
     def advance(self,_area,clock):
         if not self.eligible():self.tick=0;return False
         now=clock.get_frame_time()/1e6
-        if self.last is not None:self.phase=(self.phase+min(.1,max(0,now-self.last))*PHASES/PERIOD)%PHASES
+        if self.last is not None:
+            dt=min(.1,max(0,now-self.last));self.age+=dt
+            self.phase=(self.phase+dt*PHASES/PERIOD)%PHASES
         self.last=now
         if self.painted_at is None or now-self.painted_at>=1/30-.002:
             self.painted_at=now;self.area.queue_draw()
+            if self.glints:self.glints.advance(self.age)
         return True
 
     def pause(self):
@@ -165,6 +173,7 @@ class MirrorSurface:
         self.pause();self.closed=True;self.generation+=1
         if self.job:self.job.cancel();self.job=None
         if self.painter:self.painter.close();self.painter=None
+        if self.glints:self.glints.close();self.glints=None
         for cache in self.materials:cache.close()
         self.materials=[]
         for widget,signal in self.signals:

@@ -41,6 +41,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         try:assert restored.mirrorball
         finally:restored.close()
         assert surface.area.get_can_focus() is False
+        assert surface.glints and not surface.glints.area.get_can_focus()
         assert not stage.winter_surface.snow.active and not stage.winter_surface.top.get_visible()
         settings.popover.popdown();settle(.4)
         # Cold tube/heart sprites have their own workers. Do not count their
@@ -51,6 +52,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         settle(1.)
         print('Optics fixture: %.1f draws/s, process CPU %.1f ms/s'%((surface.draws-draws)/(time.monotonic()-wall),(time.process_time()-cpu)*1000/(time.monotonic()-wall)))
         assert surface.phase!=phase and surface.tick
+        assert surface.glints.dots and 0<surface.glints.damage<1920*1080*.07
         surface.set_suspended(True);settle(.2)
         wall=time.monotonic();cpu=time.process_time();settle(1.)
         print('Same live player without optical motion CPU %.1f ms/s'%((time.process_time()-cpu)*1000/(time.monotonic()-wall)))
@@ -66,6 +68,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         prefs=stage.window.get_settings();animations=prefs.get_property('gtk-enable-animations')
         prefs.set_property('gtk-enable-animations',False);settle(.2)
         assert not surface.tick;phase=surface.phase;settle(.15);assert surface.phase==phase and surface.area.get_visible()
+        still=list(surface.glints.dots);settle(.15);assert surface.glints.dots==still
         wall=time.monotonic();cpu=time.process_time();settle(1.)
         print('Static fixture CPU %.1f ms/s'%((time.process_time()-cpu)*1000/(time.monotonic()-wall)))
         prefs.set_property('gtk-enable-animations',animations);settle(.15)
@@ -79,6 +82,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
             f.assert_controls_fit(stage)
         host.appearance.set_theme('nocturne');settle(.1)
         assert not surface.tick and not surface.painter and not surface.area.get_visible()
+        assert surface.glints is None
         assert not stage.window.get_style_context().has_class('mirrorball-theme')
         assert not settings.mirror_switch.get_active()
         host.appearance.set_theme('mirrorball');host.appearance.set_theme('classic');settle(.3)
