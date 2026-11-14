@@ -2,6 +2,10 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.8 — 2026-11-14
+
+- Make the cover palette authoritative: preserve actual sampled RGB and saturation, include neutral image colours, and tint the glass material itself as well as its moving highlights. Remove the preset-colour dilution.
+
 ## 0.31.7 — 2026-11-14
 
 - Extend cover-colour reflections across more of the glass room and strengthen the broad reflected light, retaining a quiet central reading area.

@@ -284,6 +284,9 @@ with patch('urllib.request.urlopen', side_effect=AssertionError('Unexpected fixt
         assert blue[...,2].mean()>red[...,2].mean()+.3
         assert np.all(red[...,:3]<=red[...,3,None]+1) and np.all(blue[...,:3]<=blue[...,3,None]+1)
         assert np.max(red[HEIGHT//3:HEIGHT*2//3,WIDTH*3//8:WIDTH*5//8])==0
+        faithful=frames.capture(actual,.137,optics,(.96,.03,.03,.96,.03,.03,1.))
+        assert faithful[...,0].sum()>8*(faithful[...,1].sum()+faithful[...,2].sum())/2, \
+            'A fully red cover must dominate the glass without a preset blue/amber cast'
         restored=frames.capture(actual,.137,optics)
         assert np.abs(restored.astype(int)-quiet.astype(int)).max()<=1,'Missing artwork must clear previous palette uniforms'
         assert frames.uploads==uploads+1,'Artwork reflections must not upload another texture'

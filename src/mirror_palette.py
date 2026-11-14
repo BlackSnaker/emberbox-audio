@@ -1,5 +1,4 @@
 """Small cached cover swatches and a continuous reflection-colour transition."""
-import colorsys
 import math
 
 NEUTRAL=(1.,.81,.51,.69,.80,.96,0.)
@@ -10,24 +9,25 @@ def swatches(picture):
     from gi.repository import GdkPixbuf
     image=picture.scale_simple(24,24,GdkPixbuf.InterpType.BILINEAR)
     data=image.get_pixels();stride=image.get_rowstride();channels=image.get_n_channels()
-    bins=[[0.,0.,0.,0.] for _ in range(12)];total=colourful=0
+    bins={}
     for y in range(24):
         for x in range(24):
             i=y*stride+x*channels
             if channels==4 and data[i+3]<192:continue
-            total+=1
-            rgb=tuple(c/255 for c in data[i:i+3]);h,s,v=colorsys.rgb_to_hsv(*rgb)
-            if s<.15 or v<.10:continue
-            colourful+=1;weight=s*(.4+.6*v);bucket=bins[int(h*12)%12]
-            bucket[0]+=weight
-            for j in range(3):bucket[j+1]+=rgb[j]*weight
-    order=sorted(range(12),key=lambda i:bins[i][0],reverse=True)
-    if not total or not bins[order[0]][0]:return NEUTRAL
-    first=order[0];second=next((i for i in order if min((i-first)%12,(first-i)%12)>=2 and bins[i][0]>0),first)
-    def pigment(index):
-        bucket=bins[index];rgb=tuple(c/bucket[0] for c in bucket[1:]);h,s,v=colorsys.rgb_to_hsv(*rgb)
-        return colorsys.hsv_to_rgb(h,min(.80,s),.92)
-    return pigment(first)+pigment(second)+(min(.85,colourful/total),)
+            rgb=tuple(c/255 for c in data[i:i+3])
+            key=tuple(min(3,int(c*4)) for c in rgb)
+            bucket=bins.setdefault(key,[0.,0.,0.,0.]);bucket[0]+=1
+            for j in range(3):bucket[j+1]+=rgb[j]
+    if not bins:return NEUTRAL
+    ranked=sorted(bins.values(),key=lambda b:b[0],reverse=True)
+    colours=[tuple(c/b[0] for c in b[1:]) for b in ranked]
+    primary=colours[0]
+    secondary=next((c for c in colours[1:] if math.dist(c,primary)>=.22),primary)
+    if max(primary+secondary)<.06:return NEUTRAL
+    # Preserve the actual pixel colours, including neutral shades. Do not
+    # force saturation/value or dilute a colourful detail by its image area.
+    return primary+secondary+(1.,)
+
 
 
 class Palette:

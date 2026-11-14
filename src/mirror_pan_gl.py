@@ -79,16 +79,17 @@ void main(){
   float caustic=fourth(c)*fourth(c);
   vec3 warmTone=mix(vec3(.69,.80,.96),vec3(1.0,.81,.51),character.x);
   vec3 silverTone=mix(vec3(.61,.77,.98),vec3(.91,.91,.85),character.z);
-  warmTone=mix(warmTone,artPrimary,.95*artMix);
-  silverTone=mix(silverTone,artSecondary,.95*artMix);
+  warmTone=mix(warmTone,artPrimary,artMix);
+  silverTone=mix(silverTone,artSecondary,artMix);
   float luma=dot(glass.rgb,vec3(.2126,.7152,.0722))/max(.001,glass.a);
   float polish=.38+.62*clamp(luma*1.6,0.0,1.0);
   vec3 light=warmTone*warm*(.22+.14*pulse+.10*bass);
   light+=silverTone*silver*(.15+.08*air);
-  light+=mix(vec3(.80,.73,.59),artPrimary,.65*artMix)*caustic*(.045+.06*energy);
+  light+=mix(vec3(.80,.73,.59),artPrimary,artMix)*caustic*(.045+.06*energy);
   vec3 reflectedCover=mix(artPrimary,artSecondary,.5+.5*sin(fold*7.0+phases.y));
-  light+=reflectedCover*artMix*(.08+.10*energy);
-  vec3 radiance=glass.rgb*(.93+.09*energy+.035*pulse)+light*glass.a*polish;
+  light+=reflectedCover*artMix*(.15+.10*energy);
+  vec3 material=mix(glass.rgb,reflectedCover*luma*glass.a,artMix);
+  vec3 radiance=material*(.93+.09*energy+.035*pulse)+light*glass.a*polish;
   color=vec4(clamp(radiance,vec3(0),vec3(glass.a)),glass.a)*mask;
 }'''
 

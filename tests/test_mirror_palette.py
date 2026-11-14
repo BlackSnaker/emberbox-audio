@@ -20,9 +20,14 @@ class Colours(unittest.TestCase):
         self.assertTrue(any(c[2]>c[0]*2 for c in hues))
         self.assertGreater(result[6],.7)
     def test_monochrome_and_transparency_remain_neutral(self):
-        for colour in [(0,0,0,255),(240,240,240,255),(100,100,100,255),(255,0,0,0)]:
+        for colour in [(0,0,0,255),(255,0,0,0)]:
             self.assertEqual(swatches(image([colour])),NEUTRAL)
         self.assertEqual(swatches(None),NEUTRAL)
+    def test_pixel_colours_are_preserved_at_full_strength(self):
+        for colour in [(240,240,240,255),(100,100,100,255),(245,12,25,255),(30,55,110,255)]:
+            result=swatches(image([colour]))
+            for a,b in zip(result[:3],colour[:3]):self.assertAlmostEqual(a,b/255,places=6)
+            self.assertEqual(result[6],1.)
     def test_cached_displayed_art_holds_until_new_cover_arrives(self):
         red=image([(240,0,0,255)]);blue=image([(0,0,240,255)])
         h=SimpleNamespace(art_url='first',cover=SimpleNamespace(get_pixbuf=lambda:red));p=Palette()
