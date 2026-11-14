@@ -67,6 +67,9 @@ class Glints:
             rx*=swell;ry*=1+.12*air
             tone=tuple(min(1.,value*(.96+.08*warmth if channel!=2 else 1.04-.08*warmth))
                        for channel,value in enumerate(tone))
+            palette=owner.cover_palette.values
+            reflected=palette[:3] if index%3 else palette[3:6]
+            tone=tuple(a+(b-a)*palette[6]*.75 for a,b in zip(tone,reflected))
             if alpha<.003:continue
             for scale,strength in ((2.4,.12),(1.,.9)):
                 c.cairo_save(cr);c.cairo_translate(cr,x,y);c.cairo_scale(cr,rx*scale/24,ry*scale/24)

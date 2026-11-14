@@ -54,6 +54,9 @@ uniform int opticalEnabled;
 uniform vec4 response;
 uniform vec3 character;
 uniform vec3 phases;
+uniform vec3 artPrimary;
+uniform vec3 artSecondary;
+uniform float artMix;
 float fourth(float x){float a=x*x;return a*a;}
 void main(){
   vec2 p=uv*2.0-1.0;
@@ -76,11 +79,13 @@ void main(){
   float caustic=fourth(c)*fourth(c);
   vec3 warmTone=mix(vec3(.69,.80,.96),vec3(1.0,.81,.51),character.x);
   vec3 silverTone=mix(vec3(.61,.77,.98),vec3(.91,.91,.85),character.z);
+  warmTone=mix(warmTone,artPrimary,.75*artMix);
+  silverTone=mix(silverTone,artSecondary,.75*artMix);
   float luma=dot(glass.rgb,vec3(.2126,.7152,.0722))/max(.001,glass.a);
   float polish=.38+.62*clamp(luma*1.6,0.0,1.0);
   vec3 light=warmTone*warm*(.22+.14*pulse+.10*bass);
   light+=silverTone*silver*(.15+.08*air);
-  light+=vec3(.80,.73,.59)*caustic*(.045+.06*energy);
+  light+=mix(vec3(.80,.73,.59),artPrimary,.65*artMix)*caustic*(.045+.06*energy);
   vec3 radiance=glass.rgb*(.93+.09*energy+.035*pulse)+light*glass.a*polish;
   color=vec4(clamp(radiance,vec3(0),vec3(glass.a)),glass.a)*mask;
 }'''
@@ -89,7 +94,7 @@ void main(){
 class MirrorPanGL(RevealGL):
     def __init__(self,allow_software=False):
         super().__init__(allow_software,fragment=FRAGMENT,
-                         uniforms=('drift','opticalEnabled','response','character','phases'))
+                         uniforms=('drift','opticalEnabled','response','character','phases','artPrimary','artSecondary','artMix'))
         self.atlas=None
         for name,result,args in (
                 ('GetIntegerv',None,(C.c_uint,C.POINTER(C.c_int))),
@@ -100,7 +105,7 @@ class MirrorPanGL(RevealGL):
     def integer(self,name):
         value=C.c_int();self.call('GetIntegerv',name,C.byref(value));return value.value
 
-    def draw(self,width,height,atlas,drift,optics=None):
+    def draw(self,width,height,atlas,drift,optics=None,palette=None):
         program=self.integer(0x8B8D);vao=self.integer(0x85B5);active=self.integer(0x84E0)
         blend=bool(self.call('IsEnabled',0x0BE2))
         viewport=(C.c_int*4)();self.call('GetIntegerv',0x0BA2,viewport)
@@ -124,6 +129,10 @@ class MirrorPanGL(RevealGL):
                 self.call('Uniform4f',self.uniforms['response'],*response)
                 self.call('Uniform3f',self.uniforms['character'],*character)
                 self.call('Uniform3f',self.uniforms['phases'],*phases)
+            self.call('Uniform1f',self.uniforms['artMix'],palette[6] if palette else 0.)
+            if palette:
+                self.call('Uniform3f',self.uniforms['artPrimary'],*palette[:3])
+                self.call('Uniform3f',self.uniforms['artSecondary'],*palette[3:6])
             self.call('DrawArrays',0x0004,0,3)
         finally:
             self.call('BindVertexArray',vao);self.call('UseProgram',program)

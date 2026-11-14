@@ -66,6 +66,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         wait(lambda:stage.equalizer.frames_ready,limit=60);settle(.8)
         assert surface.rhythm.timing.bpm==120 and surface.rhythm.consumer in host.meter.interests
         assert surface.rhythm.fresh and surface.optics.values[1]>.2
+        assert surface.cover_palette.values[6]>.1,'Displayed cover must reach the mirror reflections'
         assert surface.optics.values[2]>.15 and surface.optics.values[3]>.10
         previous_speed=surface.rhythm.timing.speed
         host.meter.beat_grid=dict(bpm=160.,period=.375,phase=.137,confidence=.95);settle(.6)

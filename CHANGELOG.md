@@ -2,6 +2,10 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.6 — 2026-11-14
+
+- Cover colours now reflect from Mirrorball glass: two dominant image swatches tint separate moving highlights. Colours are sampled once per decoded cover and ease between songs; monochrome or missing artwork returns to neutral silver/champagne. No extra textures or render passes.
+
 ## 0.31.5 — 2026-11-14
 
 - Give Mirrorball an evolving optical weave: layered champagne/silver reflections, shallow horizontal glass refraction and distinct, slowly morphing song profiles. The room keeps moving left to right and the listening area stays still.

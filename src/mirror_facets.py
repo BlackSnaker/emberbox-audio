@@ -98,7 +98,7 @@ class FacetLayer:
             visual=owner.optics.values
             phases=tuple((self.age*rate)%math.tau for rate in (.19,.113,.071))
             self.driver.draw(self.gl.get_allocated_width()*scale,self.gl.get_allocated_height()*scale,
-                             self.atlas,offset(self.age),(visual[:4],visual[4:],phases))
+                             self.atlas,offset(self.age),(visual[:4],visual[4:],phases),owner.cover_palette.values)
             self.draws+=1
         except (OSError,RuntimeError,AttributeError):
             self.release();self.failed=True;self.gl.hide();self.fallback.show();self.fallback.queue_draw()

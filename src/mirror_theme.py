@@ -95,7 +95,7 @@ class MirrorSurface:
         self.closed=self.enabled=self.suspended=self.obscured=self.failed=False
         self.materials=[];self.job=None
         self.tick=0;self.phase=4.;self.age=0.;self.last=None;self.painted_at=None;self.painter=None;self.generation=0;self.draws=0
-        self.drawn_age=None;self.drawn_gain=None;self.drawn_optics=None
+        self.drawn_age=None;self.drawn_gain=None;self.drawn_optics=None;self.drawn_palette=None
         self.area=Gtk.DrawingArea();self.area.set_has_window(False);self.area.set_can_focus(False);self.area.set_no_show_all(True)
         self.area.set_halign(Gtk.Align.END if stage else Gtk.Align.FILL);self.area.set_valign(Gtk.Align.START)
         self.area.set_margin_end(70 if stage else 18);self.area.set_margin_start(0 if stage else 18)
@@ -108,6 +108,8 @@ class MirrorSurface:
         self.rhythm=SongRhythm('mirrorball-'+str(id(self)))
         from mirror_optics import Optics
         self.optics=Optics()
+        from mirror_palette import Palette
+        self.cover_palette=Palette()
         settings=window.get_settings()
         window.add_events(Gdk.EventMask.VISIBILITY_NOTIFY_MASK)
         self.signals=[(window,window.connect('map',lambda *_:self.resume())),
@@ -179,17 +181,19 @@ class MirrorSurface:
             # lag behind the latest audio callback on a busy first frame.
             speed=self.rhythm.advance(self.appearance.audio_host,time.monotonic(),dt)
             self.optics.advance(dt,self.rhythm)
+            self.cover_palette.advance(dt,self.appearance.audio_host)
             self.age+=dt*speed
             self.phase=(self.phase+dt*speed*PHASES/PERIOD)%PHASES
         self.last=now
         cadence=1/60 if self.facets and self.facets.driver else 1/24 if self.facets else 1/30
         if self.painted_at is None or now-self.painted_at>=cadence-.001:
             self.painted_at=now;gain=self.rhythm.timing.gain
-            visual=self.optics.values
+            visual=self.optics.values;palette=self.cover_palette.values
             changed=(self.drawn_age is None or abs(self.age-self.drawn_age)>.0001 or abs(gain-self.drawn_gain)>.0005
-                     or self.drawn_optics is None or any(abs(a-b)>.0005 for a,b in zip(visual,self.drawn_optics)))
+                     or self.drawn_optics is None or any(abs(a-b)>.0005 for a,b in zip(visual,self.drawn_optics))
+                     or self.drawn_palette is None or any(abs(a-b)>.0005 for a,b in zip(palette,self.drawn_palette)))
             if changed:
-                self.drawn_age,self.drawn_gain,self.drawn_optics=self.age,gain,visual;self.area.queue_draw()
+                self.drawn_age,self.drawn_gain,self.drawn_optics,self.drawn_palette=self.age,gain,visual,palette;self.area.queue_draw()
                 if self.glints:self.glints.advance(self.age)
                 if self.facets:self.facets.advance(self.age)
         return True

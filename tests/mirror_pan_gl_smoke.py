@@ -136,8 +136,8 @@ class Frames:
             assert (width, height) == (WIDTH, HEIGHT), 'Run with GDK_SCALE=1'
             self.set_sentinel_state()
             before = self.state()
-            atlas, drift, optics = self.request
-            self.driver.draw(width, height, atlas, drift, optics)
+            atlas, drift, optics, palette = self.request
+            self.driver.draw(width, height, atlas, drift, optics, palette)
             assert self.state() == before, 'Mirror draw leaked state into the GTK GL context'
             self.state_checks += 1
             self.driver.call('Finish')
@@ -157,9 +157,9 @@ class Frames:
             self.serial += 1
         return True
 
-    def capture(self, atlas, drift=0., optics=None):
+    def capture(self, atlas, drift=0., optics=None, palette=None):
         serial = self.serial
-        self.request = atlas, drift, optics
+        self.request = atlas, drift, optics, palette
         self.area.queue_render()
         settle(lambda: self.serial > serial)
         if self.error:
@@ -277,6 +277,16 @@ with patch('urllib.request.urlopen', side_effect=AssertionError('Unexpected fixt
         loop=frames.capture(actual,.137,(response,character,tuple(a+np.pi*2 for a in phases)))
         assert np.abs(loop.astype(int)-quiet.astype(int)).max()<=1, 'Wrapped light phases must be seamless'
         assert frames.uploads==uploads+1, 'Light, beat and profile changes must update uniforms only'
+
+        red=frames.capture(actual,.137,optics,(.95,.2,.2,.95,.3,.2,.85))
+        blue=frames.capture(actual,.137,optics,(.2,.3,.95,.2,.3,.95,.85))
+        assert red[...,0].mean()>blue[...,0].mean()+.3
+        assert blue[...,2].mean()>red[...,2].mean()+.3
+        assert np.all(red[...,:3]<=red[...,3,None]+1) and np.all(blue[...,:3]<=blue[...,3,None]+1)
+        assert np.max(red[HEIGHT//3:HEIGHT*2//3,WIDTH//3:WIDTH*2//3])==0
+        restored=frames.capture(actual,.137,optics)
+        assert np.abs(restored.astype(int)-quiet.astype(int)).max()<=1,'Missing artwork must clear previous palette uniforms'
+        assert frames.uploads==uploads+1,'Artwork reflections must not upload another texture'
 
         driver = frames.driver
         textures = (driver.texture, driver.room_texture, driver.previous_texture)

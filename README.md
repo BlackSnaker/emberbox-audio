@@ -18,6 +18,8 @@ and treble adds shimmer. Each song has a softly changing visual profile. The cen
 stays quiet around the artwork and warm tubes. Hardware rendering follows the display frame clock;
 a lower-rate compatibility path is available without GPU acceleration.
 
+The cover’s two dominant colours reflect in separate moving glass highlights, easing between tracks while monochrome art keeps neutral silver.
+
 **Settings → Mirrorball.** Available in desktop, Mini and fullscreen; your choice
 persists across restarts. Reduced motion keeps the glass still, and hidden
 windows suspend the optical effect.
