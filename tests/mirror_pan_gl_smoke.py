@@ -192,7 +192,7 @@ with patch('urllib.request.urlopen', side_effect=AssertionError('Unexpected fixt
         print('Mirror GL renderer:',frames.driver.renderer,flush=True)
         assert frames.uploads == 1, 'A mirror panorama uploads once when first selected'
         assert np.all(still[..., :3] <= still[..., 3, None] + 1), 'Shader output must remain premultiplied'
-        centre = still[HEIGHT // 3:HEIGHT * 2 // 3, WIDTH // 3:WIDTH * 2 // 3]
+        centre = still[HEIGHT // 3:HEIGHT * 2 // 3, WIDTH * 3 // 8:WIDTH * 5 // 8]
         assert np.max(centre) == 0, 'The fixed listening area must remain transparent and quiet'
         assert still[0, 0, 3] >= 190, 'The edge must show the actual glass material'
         assert np.count_nonzero((still[..., 3] > 0) & (still[..., 3] < 190)) > WIDTH * HEIGHT * .2, \
@@ -239,7 +239,7 @@ with patch('urllib.request.urlopen', side_effect=AssertionError('Unexpected fixt
         detail = straight(glass)[visible].mean(axis=1)
         assert np.percentile(detail, 95) - np.percentile(detail, 5) > 20, \
             'The actual generated material must retain visible bright and dark glass faces'
-        assert np.max(glass[HEIGHT // 3:HEIGHT * 2 // 3, WIDTH // 3:WIDTH * 2 // 3]) == 0
+        assert np.max(glass[HEIGHT // 3:HEIGHT * 2 // 3, WIDTH * 3 // 8:WIDTH * 5 // 8]) == 0
         assert np.all(glass[..., :3] <= glass[..., 3, None] + 1)
         frames.capture(actual, .14)
         assert frames.uploads == uploads + 1
@@ -255,7 +255,7 @@ with patch('urllib.request.urlopen', side_effect=AssertionError('Unexpected fixt
         evolved=frames.capture(actual,.137,(response,character,(1.2,1.6,2.55)))
         other=frames.capture(actual,.137,(response,(.25,.75,.25),phases))
         for candidate in (quiet,evolved,other):
-            assert np.max(candidate[HEIGHT//3:HEIGHT*2//3,WIDTH//3:WIDTH*2//3])==0
+            assert np.max(candidate[HEIGHT//3:HEIGHT*2//3,WIDTH*3//8:WIDTH*5//8])==0
             assert np.all(candidate[...,:3]<=candidate[...,3,None]+1)
         assert np.abs(evolved[...,:3].astype(int)-quiet[...,:3].astype(int)).mean()>.2, \
             'The reflected pattern must evolve beyond a plain sliding wallpaper'
@@ -283,7 +283,7 @@ with patch('urllib.request.urlopen', side_effect=AssertionError('Unexpected fixt
         assert red[...,0].mean()>blue[...,0].mean()+.3
         assert blue[...,2].mean()>red[...,2].mean()+.3
         assert np.all(red[...,:3]<=red[...,3,None]+1) and np.all(blue[...,:3]<=blue[...,3,None]+1)
-        assert np.max(red[HEIGHT//3:HEIGHT*2//3,WIDTH//3:WIDTH*2//3])==0
+        assert np.max(red[HEIGHT//3:HEIGHT*2//3,WIDTH*3//8:WIDTH*5//8])==0
         restored=frames.capture(actual,.137,optics)
         assert np.abs(restored.astype(int)-quiet.astype(int)).max()<=1,'Missing artwork must clear previous palette uniforms'
         assert frames.uploads==uploads+1,'Artwork reflections must not upload another texture'

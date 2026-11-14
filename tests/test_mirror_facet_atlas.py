@@ -55,7 +55,7 @@ class MirrorFacetAtlas(unittest.TestCase):
     def test_fixed_vignette_keeps_the_centre_quiet_without_a_hard_rim(self):
         width, height, raw = atlas.vignette()
         mask = np.frombuffer(raw, np.uint8).reshape(height, width)
-        centre = mask[height // 3:height * 2 // 3, width // 3:width * 2 // 3]
+        centre = mask[height // 3:height * 2 // 3, width * 3 // 8:width * 5 // 8]
         self.assertFalse(np.any(centre))
         self.assertGreater(mask[0, 0], 240)
         shoulder = mask[height // 2, width // 2:]

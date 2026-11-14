@@ -78,7 +78,7 @@ class FacetLayer:
         if not owner or not owner.enabled:return
         self.age=age
         width,height=self.area.get_allocated_width(),self.area.get_allocated_height()
-        band=(width+3)//4;self.damage=band*height*2
+        band=math.ceil(width*.37);self.damage=band*height*2
         if self.driver:self.gl.queue_render()
         else:
             self.fallback.queue_draw_area(0,0,band,height)
@@ -124,7 +124,7 @@ class FacetLayer:
             c.cairo_mask_surface(context,self.mask,0,0);c.cairo_restore(context)
             self.composed_age=self.age
         c.cairo_save(cr)
-        c.cairo_rectangle(cr,0,0,w*.25,h);c.cairo_rectangle(cr,w*.75,0,w*.25,h);c.cairo_clip(cr)
+        c.cairo_rectangle(cr,0,0,w*.37,h);c.cairo_rectangle(cr,w*.63,0,w*.37,h);c.cairo_clip(cr)
         c.cairo_scale(cr,w/self.mask_width,h/self.mask_height)
         c.cairo_set_source_surface(cr,self.canvas,0,0)
         pulse,energy,*_=owner.optics.values

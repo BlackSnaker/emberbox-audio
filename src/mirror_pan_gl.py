@@ -60,7 +60,7 @@ uniform float artMix;
 float fourth(float x){float a=x*x;return a*a;}
 void main(){
   vec2 p=uv*2.0-1.0;
-  float mask=smoothstep(.50,.98,abs(p.x));
+  float mask=smoothstep(.26,.94,abs(p.x));
   if(mask<.00001){color=vec4(0);return;}
   if(opticalEnabled==0){color=texture(cover,vec2(uv.x-drift,uv.y))*mask;return;}
   float pulse=response.x,energy=response.y,bass=response.z,air=response.w;
@@ -79,13 +79,15 @@ void main(){
   float caustic=fourth(c)*fourth(c);
   vec3 warmTone=mix(vec3(.69,.80,.96),vec3(1.0,.81,.51),character.x);
   vec3 silverTone=mix(vec3(.61,.77,.98),vec3(.91,.91,.85),character.z);
-  warmTone=mix(warmTone,artPrimary,.75*artMix);
-  silverTone=mix(silverTone,artSecondary,.75*artMix);
+  warmTone=mix(warmTone,artPrimary,.95*artMix);
+  silverTone=mix(silverTone,artSecondary,.95*artMix);
   float luma=dot(glass.rgb,vec3(.2126,.7152,.0722))/max(.001,glass.a);
   float polish=.38+.62*clamp(luma*1.6,0.0,1.0);
   vec3 light=warmTone*warm*(.22+.14*pulse+.10*bass);
   light+=silverTone*silver*(.15+.08*air);
   light+=mix(vec3(.80,.73,.59),artPrimary,.65*artMix)*caustic*(.045+.06*energy);
+  vec3 reflectedCover=mix(artPrimary,artSecondary,.5+.5*sin(fold*7.0+phases.y));
+  light+=reflectedCover*artMix*(.08+.10*energy);
   vec3 radiance=glass.rgb*(.93+.09*energy+.035*pulse)+light*glass.a*polish;
   color=vec4(clamp(radiance,vec3(0),vec3(glass.a)),glass.a)*mask;
 }'''

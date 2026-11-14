@@ -2,6 +2,10 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.7 — 2026-11-14
+
+- Extend cover-colour reflections across more of the glass room and strengthen the broad reflected light, retaining a quiet central reading area.
+
 ## 0.31.6 — 2026-11-14
 
 - Cover colours now reflect from Mirrorball glass: two dominant image swatches tint separate moving highlights. Colours are sampled once per decoded cover and ease between songs; monochrome or missing artwork returns to neutral silver/champagne. No extra textures or render passes.

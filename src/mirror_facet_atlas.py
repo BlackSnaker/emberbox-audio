@@ -60,5 +60,5 @@ def vignette(width=384,height=216):
     """Fixed A8 mask; the centre stays quiet while glass passes behind it."""
     yy,xx = np.mgrid[:height,:width].astype(np.float32)
     x,y = (2*xx+1)/width-1,(2*yy+1)/height-1
-    t = np.clip((np.abs(x)-.50)/.48,0,1)
+    t = np.clip((np.abs(x)-.26)/.68,0,1)
     return width,height,(255*t*t*(3-2*t)).astype(np.uint8).tobytes()
