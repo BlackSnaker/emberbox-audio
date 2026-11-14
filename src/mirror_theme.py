@@ -40,6 +40,8 @@ def prepare(stage):
     light=materials(320,not stage,field=stage)
     if not stage:return light,None
     from mirror_facet_atlas import bake
+    from mirror_pan_gl import hardware_available
+    hardware_available()
     return light,bake()
 
 
@@ -175,7 +177,8 @@ class MirrorSurface:
             self.age+=dt*speed
             self.phase=(self.phase+dt*speed*PHASES/PERIOD)%PHASES
         self.last=now
-        if self.painted_at is None or now-self.painted_at>=1/30-.002:
+        cadence=1/60 if self.facets and self.facets.driver else 1/24 if self.facets else 1/30
+        if self.painted_at is None or now-self.painted_at>=cadence-.001:
             self.painted_at=now;gain=self.rhythm.timing.gain
             changed=self.drawn_age is None or abs(self.age-self.drawn_age)>.0001 or abs(gain-self.drawn_gain)>.0005
             if changed:
@@ -216,7 +219,7 @@ def mirror_choice(appearance):
     label=Gtk.Label(label=text('Mirrorball','Зеркальный зал'));label.set_xalign(0);label.get_style_context().add_class('theme-choice-title');row.pack_start(label,True,True,0)
     switch=Gtk.Switch();switch.set_active(appearance.mirrorball);switch.set_has_tooltip(False);switch.set_valign(Gtk.Align.CENTER)
     switch.get_accessible().set_name(label.get_text());row.pack_end(switch,False,False,0)
-    note=Gtk.Label(label=text('Mirror glass · in rhythm with your music','Зеркальные грани · в ритме музыки'));note.set_xalign(0);note.set_line_wrap(True);note.set_max_width_chars(32);note.get_style_context().add_class('theme-choice-note');tile.pack_start(note,False,False,0)
+    note=Gtk.Label(label=text('Panoramic mirror glass · in your rhythm','Зеркальный калейдоскоп · в ритме музыки'));note.set_xalign(0);note.set_line_wrap(True);note.set_max_width_chars(32);note.get_style_context().add_class('theme-choice-note');tile.pack_start(note,False,False,0)
     def changed(*_):
         if switch.get_active()==appearance.mirrorball:return
         if not appearance.set_theme('mirrorball' if switch.get_active() else 'classic'):

@@ -1,67 +1,64 @@
-"""Bake the moving wall's projected mirror scales into two small edge strips.
-
-The caller owns worker scheduling and the retained Cairo surfaces. Baking is
-bounded and GTK-free; a live optical frame needs only four blended blits.
-"""
+"""One seamless glass panorama, baked once off GTK and translated continuously."""
+import math
 import numpy as np
-from PIL import Image, ImageDraw
-from mirror_facet_model import PERIOD, facets
+from PIL import Image
+
+WIDTH, HEIGHT = 768, 432
 
 
-PHASES = 32
-STRIP_WIDTH, STRIP_HEIGHT = 154, 360
-_REFERENCE_WIDTH = 640
-_ANTIALIAS = 2
-
-
-def _rgba(red, green, blue, alpha):
-    return tuple(round(255 * value) for value in (red, green, blue, alpha))
-
-
-def _premultiplied_bgra(image):
-    rgba = np.asarray(image, dtype=np.uint8)
-    alpha = rgba[..., 3].astype(np.uint16)
-    bgra = np.empty_like(rgba)
-    for target, source in enumerate((2, 1, 0)):
-        bgra[..., target] = (rgba[..., source].astype(np.uint16) * alpha + 127) // 255
-    bgra[..., 3] = rgba[..., 3]
+def _frame():
+    # Oversampling keeps hairline silver bevels soft when the small cached
+    # material is enlarged. All periodic functions close exactly along x.
+    aa = 2
+    yy, xx = np.mgrid[:HEIGHT*aa, :WIDTH*aa].astype(np.float32)
+    u, v = (xx + .5) / (WIDTH*aa), (yy + .5) / (HEIGHT*aa)
+    gy = v * 18
+    row = np.floor(gy)
+    gx = u * 32 + (row % 2) * .5 + .21 * np.sin(v * math.tau)
+    column = np.floor(gx) % 32
+    x, y = gx % 1, gy % 1
+    edge = np.minimum.reduce((x, 1-x, y, 1-y))
+    face = np.clip(edge / .023, 0, 1)
+    reflected = (.5 + .5 * np.cos(column * math.tau / 8 + row * .72)) ** 3
+    # A reflected softbox traverses a gently tilted silver face. It has a
+    # narrow champagne edge and a broad cool shoulder, not flat stone fills.
+    stripe = .18 + .57 * (.5 + .5 * np.sin(column * math.tau / 8 - row * .41))
+    slope = x * .72 + y * .28
+    silver = np.exp(-((slope-stripe) / .19)**2) * (.25 + .75*reflected)
+    gold = np.exp(-((slope-stripe-.12) / .042)**2) * reflected
+    cool = (.5 + .5*np.cos(u*math.tau*4 + v*4.1))**4
+    base = np.empty((*u.shape, 3), np.float32)
+    base[:] = (29, 39, 53)
+    base += silver[...,None] * np.array((130, 137, 144))
+    base += gold[...,None] * np.array((95, 70, 30))
+    base += cool[...,None] * np.array((17, 26, 40))
+    base *= (.83 + .17*y)[...,None]
+    bevel = np.exp(-((edge-.028)/.013)**2)
+    base += bevel[...,None] * np.array((69, 68, 59))
+    alpha = (.40 + .12*reflected) * face
+    rgba = np.empty((*u.shape, 4), np.uint8)
+    rgba[...,:3] = np.clip(base, 0, 255)
+    rgba[...,3] = np.clip(alpha*255, 0, 255)
+    # Resize straight RGBA with Pillow's premultiplied-aware filter, then keep
+    # native premultiplied BGRA for Cairo. No decoded image survives the job.
+    image = Image.fromarray(rgba).resize((WIDTH,HEIGHT),Image.Resampling.LANCZOS)
+    pixels = np.asarray(image,dtype=np.uint8)
+    a = pixels[...,3].astype(np.uint16)
+    bgra = np.empty_like(pixels)
+    for target,source in enumerate((2,1,0)):
+        bgra[...,target] = (pixels[...,source].astype(np.uint16)*a+127)//255
+    bgra[...,3] = pixels[...,3]
     return bgra.tobytes()
 
 
-def _frame(age):
-    size = (_REFERENCE_WIDTH * _ANTIALIAS, STRIP_HEIGHT * _ANTIALIAS)
-    fill = Image.new('RGBA', size)
-    upper = Image.new('RGBA', size)
-    lower = Image.new('RGBA', size)
-    face_draw, upper_draw, lower_draw = (ImageDraw.Draw(image) for image in (fill, upper, lower))
-    line_width = max(1, round(.7 * _ANTIALIAS))
-    for points, shade, alpha in facets(age, _REFERENCE_WIDTH, STRIP_HEIGHT):
-        if alpha < .012:
-            continue
-        a, b, c, d = tuple((x * _ANTIALIAS, y * _ANTIALIAS) for x, y in points)
-        face_draw.polygon((a, b, c, d), fill=_rgba(.115 + shade * .28,
-                                                .14 + shade * .245,
-                                                .18 + shade * .205, alpha))
-        upper_draw.line((d, a, b), fill=_rgba(.92, .84, .68, alpha * (.06 + .16 * shade)),
-                        width=line_width)
-        lower_draw.line((b, c, d), fill=_rgba(.015, .025, .04, alpha * .6), width=line_width)
-    # Separate planes reproduce source-over bevels instead of overwriting a
-    # facet's alpha when ImageDraw strokes its translucent glass.
-    fill.alpha_composite(upper)
-    fill.alpha_composite(lower)
-    strip = STRIP_WIDTH * _ANTIALIAS
-    boxes = ((0, 0, strip, size[1]), (size[0] - strip, 0, size[0], size[1]))
-    return tuple(_premultiplied_bgra(fill.crop(box).resize((STRIP_WIDTH, STRIP_HEIGHT),
-                                                         Image.Resampling.LANCZOS))
-                 for box in boxes)
-
-
 def bake():
-    """Return ``(154, 360, 32 (left_bytes, right_bytes) pairs)``.
+    """768 x 432 immutable BGRA, 1.27 MiB independent of window size."""
+    return WIDTH, HEIGHT, (_frame(),)
 
-    Each strip is premultiplied BGRA. Phase zero follows phase 31 smoothly;
-    the duplicated endpoint at ``PERIOD`` is deliberately omitted. The atlas
-    stores 14,192,640 bytes, independent of the eventual window dimensions.
-    """
-    return STRIP_WIDTH, STRIP_HEIGHT, tuple(_frame(phase * PERIOD / PHASES)
-                                          for phase in range(PHASES))
+
+def vignette(width=384,height=216):
+    """Fixed A8 mask; the centre stays quiet while glass passes behind it."""
+    yy,xx = np.mgrid[:height,:width].astype(np.float32)
+    x,y = (2*xx+1)/width-1,(2*yy+1)/height-1
+    t = np.clip((np.abs(x)-.50)/.48,0,1)
+    return width,height,(255*t*t*(3-2*t)).astype(np.uint8).tobytes()

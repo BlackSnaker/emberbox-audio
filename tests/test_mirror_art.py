@@ -8,6 +8,15 @@ from mirror_glints import glints
 
 
 class Mirrors(unittest.TestCase):
+    def test_unconfirmed_acceleration_keeps_the_cairo_path(self):
+        from unittest.mock import patch
+        import mirror_facets
+        for result,expected in ((True,True),(False,False),(None,False)):
+            with patch('mirror_pan_gl.hardware_available',return_value=result) as probe,patch.object(mirror_facets,'_ACCELERATED',None):
+                self.assertEqual(mirror_facets.accelerated(),expected)
+                self.assertEqual(mirror_facets.accelerated(),expected)
+                probe.assert_called_once()
+
     def test_cached_facets_have_premultiplied_alpha_and_no_ball_silhouette(self):
         width,height,frames=materials(128)
         self.assertEqual(len(frames),PHASES);self.assertLess(height,width*.5)
@@ -25,17 +34,20 @@ class Mirrors(unittest.TestCase):
         w,h,frames=materials(320,trim=True)
         self.assertEqual(h,22);self.assertLess(sum(map(len,frames)),1_000_000)
         self.assertTrue(any(np.frombuffer(raw,np.uint8).max()>50 for raw in frames))
-    def test_reflections_drift_continuously_at_the_edges_and_loop_cleanly(self):
-        for t in np.linspace(0,22,120):
+    def test_reflections_move_only_right_and_fade_smoothly_before_wrapping(self):
+        for t in np.linspace(0,150,180):
             before=glints(t,1920,1080);after=glints(t+1/60,1920,1080)
-            self.assertEqual(len(before),10)
+            self.assertEqual(len(before),12)
             for a,b in zip(before,after):
                 x,y,w,h,alpha,_=a
-                self.assertTrue(x<1920*.25 or x>1920*.78)
-                self.assertTrue(0<=alpha<=.38)
-                self.assertLess(abs(a[0]-b[0]),.25);self.assertLess(abs(a[4]-b[4]),.003)
+                self.assertTrue(0<=alpha<=.32+1e-12)
+                self.assertEqual(a[1],b[1])
+                if b[0]>=a[0]:self.assertLess(b[0]-a[0],.3)
+                else:self.assertLess(max(a[4],b[4]),.00001)
+                self.assertLess(abs(a[4]-b[4]),.0002)
         np.testing.assert_allclose(np.array([v[:5] for v in glints(0,1920,1080)]),
-                                   np.array([v[:5] for v in glints(22,1920,1080)]),atol=1e-10)
+                                   np.array([v[:5] for v in glints(72/.55,1920,1080)]),atol=1e-10)
+
 
 
 if __name__=='__main__':unittest.main()

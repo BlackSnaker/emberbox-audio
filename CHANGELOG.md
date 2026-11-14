@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.4 — 2026-11-14
+
+- Make Mirrorball motion visible: the surrounding glass panorama glides left to right, with kaleidoscopic silver/champagne reflections and slower light glints. The central vignette stays still; controls and artwork do not move.
+- Translate one seamless cached texture instead of cross-fading geometry frames. GPU rendering uploads the material once and follows the display clock up to 60 Hz; a 24 Hz Cairo compatibility path supports systems without hardware acceleration. Hidden windows, pause and reduced motion keep their existing behaviour.
+- Retain measured song-tempo guidance and the shared output meter. This visual update does not change playback, audio buffers or source quality.
+
 ## 0.31.3 — 2026-11-13
 
 - Drive Mirrorball from the current song's measured beat grid: smoothly adjust wave speed and softly accent reflected light. Track changes and seeks discard old rhythm estimates without resetting wave position.

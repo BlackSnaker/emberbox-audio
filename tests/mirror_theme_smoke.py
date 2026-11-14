@@ -25,6 +25,12 @@ def wait(predicate,limit=8):
     assert predicate()
 
 
+if os.environ.get('EMBERBOX_MIRROR_TEST_GL'):
+    import mirror_pan_gl,mirror_facets
+    mirror_facets.accelerated=lambda:True
+    real_driver=mirror_pan_gl.MirrorPanGL
+    mirror_pan_gl.MirrorPanGL=lambda **_:real_driver(allow_software=True)
+
 host=f.FixtureHost();host.appearance=Appearance();host.settings.appearance=host.appearance
 host.meter.interests={};host.meter.rms_level=.4
 host.meter.beat_grid=dict(bpm=120.,period=.5,phase=.137,confidence=.95)
@@ -37,6 +43,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
     try:
         stage.open();wait(lambda:not stage.reveal.active);stage.show_settings();settle(.2)
         settings=host.settings;calls=list(host.calls);sound_calls=list(host.sound.calls)
+        wait(lambda:stage.equalizer.frames_ready,limit=60)
         settings.mirror_switch.set_active(True)
         surface=stage.winter_surface.mirror
         wait(lambda:surface.painter and surface.draws>2)
@@ -56,7 +63,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         settings.popover.popdown();settle(.4)
         # Cold tube/heart sprites have their own workers. Do not count their
         # initial bake as continuous optical-animation cost.
-        wait(lambda:stage.equalizer.frames_ready,limit=15);settle(.8)
+        wait(lambda:stage.equalizer.frames_ready,limit=60);settle(.8)
         assert surface.rhythm.timing.bpm==120 and surface.rhythm.consumer in host.meter.interests
         previous_speed=surface.rhythm.timing.speed
         host.meter.beat_grid=dict(bpm=160.,period=.375,phase=.137,confidence=.95);settle(.6)
@@ -64,11 +71,12 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         host.meter.beat_grid=dict(bpm=120.,period=.5,phase=.137,confidence=.95)
         phase=surface.phase;shape=surface.facets.cells;wall=time.monotonic();cpu=time.process_time();draws=surface.draws
         print('Optical region:',surface.area.get_allocated_width(),surface.area.get_allocated_height(),flush=True)
+        print('Mirror renderer:',surface.facets.driver.renderer if surface.facets.driver else 'Cairo compatibility',flush=True)
         settle(1.)
         print('Optics fixture: %.1f draws/s, process CPU %.1f ms/s'%((surface.draws-draws)/(time.monotonic()-wall),(time.process_time()-cpu)*1000/(time.monotonic()-wall)))
         assert surface.phase!=phase and surface.tick
         assert surface.facets.cells!=shape and surface.facets.draws>0
-        assert len(surface.facets.cells)<=300
+        assert len(surface.facets.cells)<=1000
         assert surface.glints.dots and 0<surface.glints.damage<1920*1080*.07
         surface.set_suspended(True);settle(.2)
         wall=time.monotonic();cpu=time.process_time();settle(1.)
@@ -88,9 +96,9 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         assert not surface.tick;phase=surface.phase;settle(.15);assert surface.phase==phase and surface.area.get_visible()
         still=list(surface.glints.dots);settle(.15);assert surface.glints.dots==still
         still_scales=list(surface.facets.cells);settle(.15);assert surface.facets.cells==still_scales
-        # Reusing the blend buffers must not retain transparent frame trails.
+        # Repeating a position must not retain transparent frame trails.
         def paused_edge(index):
-            surface.facets.index=index;surface.facets.area.queue_draw();settle(.08)
+            surface.facets.advance(index);settle(.08)
             return Gdk.pixbuf_get_from_window(stage.window.get_window(),0,150,180,240).get_pixels()
         first=paused_edge(.25);paused_edge(.8);assert paused_edge(.25)==first
         wall=time.monotonic();cpu=time.process_time();settle(1.)

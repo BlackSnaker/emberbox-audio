@@ -1,13 +1,11 @@
-"""Bounded wall-strip bytes retain projected motion and a smooth loop seam."""
+"""A single periodic glass surface supports sharp, continuous horizontal pan."""
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 import mirror_facet_atlas as atlas
-from mirror_facet_model import facets
 
 
 class MirrorFacetAtlas(unittest.TestCase):
@@ -18,47 +16,57 @@ class MirrorFacetAtlas(unittest.TestCase):
     def pixels(self, raw):
         return np.frombuffer(raw, np.uint8).reshape(self.height, self.width, 4)
 
-    def test_strip_dimensions_phase_count_and_memory_are_fixed(self):
-        self.assertEqual((self.width, self.height), (154, 360))
-        self.assertEqual(len(self.frames), 32)
+    def test_one_immutable_surface_has_a_small_fixed_memory_budget(self):
+        self.assertEqual((self.width, self.height), (768, 432))
         self.assertIsInstance(self.frames, tuple)
-        self.assertTrue(all(isinstance(pair, tuple) and len(pair) == 2 for pair in self.frames))
-        self.assertTrue(all(isinstance(raw, bytes) and len(raw) == 154 * 360 * 4
-                            for pair in self.frames for raw in pair))
-        self.assertEqual(sum(len(raw) for pair in self.frames for raw in pair), 14_192_640)
+        self.assertEqual(len(self.frames), 1)
+        self.assertTrue(all(isinstance(raw, bytes) and len(raw) == self.width * self.height * 4
+                            for raw in self.frames))
+        self.assertLessEqual(sum(len(raw) for raw in self.frames), 2_000_000)
+        mask_width, mask_height, mask = atlas.vignette()
+        self.assertIsInstance(mask, bytes)
+        self.assertEqual(len(mask), mask_width * mask_height)
+        self.assertLess(sum(len(raw) for raw in self.frames) + len(mask), 1_500_000)
 
-    def test_bgra_is_premultiplied_and_the_inner_edges_stay_transparent(self):
-        for pair in self.frames:
-            for side, raw in enumerate(pair):
-                pixels = self.pixels(raw)
-                self.assertTrue(np.all(pixels[..., :3] <= pixels[..., 3, None]))
-                self.assertGreater(pixels[..., 3].max(), 50)
-                inner = pixels[:, -6:, 3] if side == 0 else pixels[:, :6, 3]
-                self.assertFalse(np.any(inner))
-                self.assertTrue(np.any(pixels[..., 3] == 0))
+    def test_bgra_is_premultiplied_and_faces_have_bright_and_dark_detail(self):
+        pixels = self.pixels(self.frames[0])
+        self.assertTrue(np.all(pixels[..., :3] <= pixels[..., 3, None]))
+        visible = pixels[..., 3] > 16
+        self.assertGreater(np.count_nonzero(visible), self.width * self.height * .5)
+        light = pixels[..., :3].mean(axis=2)[visible]
+        self.assertGreater(np.percentile(light, 95) - np.percentile(light, 5), 8.)
+        self.assertGreater(light.std(), 3.)
 
-    def test_projected_contours_move_even_with_constant_light_and_opacity(self):
-        def geometry_only(age, width, height):
-            return [(points, .5, .4) for points, _, _ in facets(age, width, height)]
-        with patch.object(atlas, 'facets', side_effect=geometry_only):
-            first, turned = atlas._frame(0), atlas._frame(atlas.PERIOD / 4)
-        for before, after in zip(first, turned):
-            old_contour = self.pixels(before)[..., 3] > 4
-            new_contour = self.pixels(after)[..., 3] > 4
-            self.assertGreater(np.count_nonzero(old_contour != new_contour), 1500)
+    def test_horizontal_repeat_seam_is_an_ordinary_neighbouring_column_step(self):
+        pixels = self.pixels(self.frames[0]).astype(np.float32)
+        adjacent = np.abs(np.diff(pixels, axis=1)).mean(axis=(0, 2))
+        seam = np.abs(pixels[:, 0] - pixels[:, -1]).mean()
+        # Opposite columns need not be identical: the next column after the
+        # rightmost must simply continue the normal texture, without a stripe.
+        self.assertLessEqual(seam, np.percentile(adjacent, 95) * 1.5 + 1.)
+        self.assertGreater(np.count_nonzero(adjacent > .1), self.width // 4)
 
-    def test_loop_has_no_duplicate_end_and_the_seam_is_an_ordinary_step(self):
-        self.assertNotEqual(self.frames[0], self.frames[-1])
-        self.assertEqual(self.frames[0], atlas._frame(atlas.PERIOD))
-        self.assertEqual(self.frames[0], atlas._frame(0))
-        for side in (0, 1):
-            changes = []
-            for before, after in zip(self.frames, self.frames[1:] + self.frames[:1]):
-                a, b = self.pixels(before[side]), self.pixels(after[side])
-                changes.append(np.abs(a.astype(np.int16) - b.astype(np.int16)).mean())
-            self.assertGreater(min(changes), .05)
-            self.assertLess(max(changes), 1.8)
-            self.assertLess(changes[-1], np.median(changes) * 1.5)
+    def test_vignette_is_not_baked_into_the_moving_texture(self):
+        alpha = self.pixels(self.frames[0])[..., 3]
+        centre = alpha[self.height * 2 // 5:self.height * 3 // 5,
+                       self.width * 2 // 5:self.width * 3 // 5]
+        self.assertGreater(np.count_nonzero(centre), centre.size * .5)
+
+    def test_fixed_vignette_keeps_the_centre_quiet_without_a_hard_rim(self):
+        width, height, raw = atlas.vignette()
+        mask = np.frombuffer(raw, np.uint8).reshape(height, width)
+        centre = mask[height // 3:height * 2 // 3, width // 3:width * 2 // 3]
+        self.assertFalse(np.any(centre))
+        self.assertGreater(mask[0, 0], 240)
+        shoulder = mask[height // 2, width // 2:]
+        self.assertTrue(np.all(np.diff(shoulder.astype(np.int16)) >= 0))
+        self.assertLess(np.abs(np.diff(shoulder.astype(np.int16))).max(), 8)
+        self.assertGreater(np.count_nonzero((shoulder > 0) & (shoulder < 255)), width // 8)
+
+    def test_cached_surface_is_deterministic_and_immutable(self):
+        before = tuple(self.frames)
+        self.assertEqual(self.frames[0], atlas._frame())
+        self.assertEqual(self.frames, before)
 
 
 if __name__ == '__main__':

@@ -114,6 +114,7 @@ jobs:
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/favorites_smoke.py
       - name: Mirrorball glass, theme selection and bounded optical motion
         run: |
+          GDK_SCALE=1 LIBGL_ALWAYS_SOFTWARE=1 GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/mirror_pan_gl_smoke.py
           EMBERBOX_LANGUAGE=en GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/mirror_theme_smoke.py
           EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/mirror_theme_smoke.py
       - name: Fullscreen listening room

@@ -8,14 +8,15 @@ from gi.repository import Gtk
 
 
 def glints(age,width,height):
+    from mirror_facet_model import offset
     result=[]
-    for i in range(10):
-        phase=math.tau*(age/22+i*.139)
-        envelope=(.5-.5*math.cos(phase))**2
-        x=(.055+.065*(i%3) if i%2==0 else .84+.055*(i%3))+.022*math.sin(phase)
-        y=.17+((i*17)%31)/52+.018*math.cos(phase)
-        tone=(1.,.83,.56) if i%3 else (.68,.83,1.)
-        result.append((x*width,y*height,7.+i%3*4,3.+i%2*2,.38*envelope,tone))
+    for i in range(12):
+        phase=(offset(age*.55)+i*.139)%1
+        # Fade completely before wrapping, so there is no right-to-left jump.
+        envelope=math.sin(math.pi*phase)**2
+        x=phase*width;y=(.10+((i*17)%37)/48)*height
+        tone=(1.,.85,.62) if i%3 else (.66,.83,1.)
+        result.append((x,y,8.+i%3*3,3.+i%2,.32*envelope,tone))
     return result
 
 
@@ -26,7 +27,7 @@ class Glints:
         self.area=Gtk.DrawingArea();self.area.set_has_window(False);self.area.set_no_show_all(True);self.area.set_can_focus(False)
         self.area.set_halign(Gtk.Align.FILL);self.area.set_valign(Gtk.Align.FILL)
         owner.overlay.add_overlay(self.area);owner.overlay.set_overlay_pass_through(self.area,True)
-        owner.overlay.reorder_overlay(self.area,2 if getattr(owner,'facets',None) else 1)
+        owner.overlay.reorder_overlay(self.area,3 if getattr(owner,'facets',None) else 1)
         self.dots=[];self.damage=0
         self.ptr=pointer(self.area.__gpointer__,None)
         self.mask=self.c.cairo_image_surface_create(2,48,48)
@@ -48,10 +49,10 @@ class Glints:
         if not owner or not owner.enabled:return
         w,h=self.area.get_allocated_width(),self.area.get_allocated_height();before=self.dots
         self.dots=glints(age,w,h);self.damage=0
-        for old,new in zip(before or self.dots,self.dots):
-            x,y,rx,ry,_,_=old;nx,ny,nrx,nry,_,_=new
-            left=max(0,math.floor(min(x-rx*3,nx-nrx*3)-2));top=max(0,math.floor(min(y-ry*3,ny-nry*3)-2))
-            right=min(w,math.ceil(max(x+rx*3,nx+nrx*3)+2));bottom=min(h,math.ceil(max(y+ry*3,ny+nry*3)+2))
+        # Old/new footprints stay separate at the horizontal wrap seam.
+        for x,y,rx,ry,_,_ in before+self.dots:
+            left=max(0,math.floor(x-rx*3-2));top=max(0,math.floor(y-ry*3-2))
+            right=min(w,math.ceil(x+rx*3+2));bottom=min(h,math.ceil(y+ry*3+2))
             if right>left and bottom>top:
                 self.area.queue_draw_area(left,top,right-left,bottom-top);self.damage+=(right-left)*(bottom-top)
 
