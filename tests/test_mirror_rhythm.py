@@ -37,7 +37,9 @@ class Rhythm(unittest.TestCase):
         h=host();r=SongRhythm('fixture');r.advance(h,100,.02)
         measured(h.meter,101);r.advance(h,101,.02);self.assertEqual(r.timing.bpm,120)
         r.advance(h,104,.02);self.assertIsNone(r.timing.bpm)
+        self.assertFalse(r.fresh)
         h.meter.last_sample=104;h.meter.rms_level=.4;r.advance(h,104,.02);self.assertIsNone(r.timing.bpm)
+        self.assertTrue(r.fresh)
     def test_seek_restarts_visual_history_without_disabling_flow_consumer(self):
         h=host();r=SongRhythm('fixture');r.advance(h,100,.02);tap=h.meter.rhythm
         h.position=80000000;r.advance(h,101,.02);self.assertIsNot(h.meter.rhythm,tap)

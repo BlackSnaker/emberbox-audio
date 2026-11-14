@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.5 — 2026-11-14
+
+- Give Mirrorball an evolving optical weave: layered champagne/silver reflections, shallow horizontal glass refraction and distinct, slowly morphing song profiles. The room keeps moving left to right and the listening area stays still.
+- Let measured beats softly broaden local reflections; the existing meter's loudness, bass and treble guide their depth and shimmer. Smooth attack/release replaces abrupt brightness changes, and pause/stale audio let the response settle. Unknown rhythm never fabricates a beat.
+- Retain one cached material and one GPU texture lookup, with no new render pass, audio reader or model. Theme clocks still stop when hidden or reduced motion is enabled; the Cairo path keeps restrained audio-reactive highlights.
+
 ## 0.31.4 — 2026-11-14
 
 - Make Mirrorball motion visible: the surrounding glass panorama glides left to right, with kaleidoscopic silver/champagne reflections and slower light glints. The central vignette stays still; controls and artwork do not move.

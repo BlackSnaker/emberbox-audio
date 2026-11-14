@@ -1,6 +1,7 @@
 """A seamless sideways mirror panorama with GPU and bounded Cairo paths."""
 import ctypes as C
 import weakref
+import math
 import gi
 gi.require_version('Gtk','3.0')
 from gi.repository import Gtk,Gdk
@@ -94,7 +95,10 @@ class FacetLayer:
         if not self.driver:return True
         try:
             scale=self.gl.get_scale_factor()
-            self.driver.draw(self.gl.get_allocated_width()*scale,self.gl.get_allocated_height()*scale,self.atlas,offset(self.age))
+            visual=owner.optics.values
+            phases=tuple((self.age*rate)%math.tau for rate in (.19,.113,.071))
+            self.driver.draw(self.gl.get_allocated_width()*scale,self.gl.get_allocated_height()*scale,
+                             self.atlas,offset(self.age),(visual[:4],visual[4:],phases))
             self.draws+=1
         except (OSError,RuntimeError,AttributeError):
             self.release();self.failed=True;self.gl.hide();self.fallback.show();self.fallback.queue_draw()
@@ -122,7 +126,9 @@ class FacetLayer:
         c.cairo_save(cr)
         c.cairo_rectangle(cr,0,0,w*.25,h);c.cairo_rectangle(cr,w*.75,0,w*.25,h);c.cairo_clip(cr)
         c.cairo_scale(cr,w/self.mask_width,h/self.mask_height)
-        c.cairo_set_source_surface(cr,self.canvas,0,0);c.cairo_paint(cr);c.cairo_restore(cr)
+        c.cairo_set_source_surface(cr,self.canvas,0,0)
+        pulse,energy,*_=owner.optics.values
+        c.cairo_paint_with_alpha(cr,min(1.,.92+.06*energy+.08*pulse));c.cairo_restore(cr)
         self.draws+=1;return False
 
     def release(self,*_):

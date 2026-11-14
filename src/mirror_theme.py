@@ -76,7 +76,9 @@ class MirrorPainter:
         c.cairo_set_source_surface(cr,self.surfaces[first],0,0);c.cairo_paint_with_alpha(cr,1-mix)
         c.cairo_set_operator(cr,12) # CAIRO_OPERATOR_ADD, complementary weights.
         c.cairo_set_source_surface(cr,self.surfaces[(first+1)%PHASES],0,0);c.cairo_paint_with_alpha(cr,mix)
-        c.cairo_pop_group_to_source(cr);c.cairo_set_operator(cr,2);c.cairo_paint(cr)
+        c.cairo_pop_group_to_source(cr);c.cairo_set_operator(cr,2)
+        pulse,energy,*_=owner.optics.values
+        c.cairo_paint_with_alpha(cr,min(1.,.90+.08*pulse+.05*energy))
         c.cairo_restore(cr);owner.draws+=1
         return False
 
@@ -93,7 +95,7 @@ class MirrorSurface:
         self.closed=self.enabled=self.suspended=self.obscured=self.failed=False
         self.materials=[];self.job=None
         self.tick=0;self.phase=4.;self.age=0.;self.last=None;self.painted_at=None;self.painter=None;self.generation=0;self.draws=0
-        self.drawn_age=None;self.drawn_gain=None
+        self.drawn_age=None;self.drawn_gain=None;self.drawn_optics=None
         self.area=Gtk.DrawingArea();self.area.set_has_window(False);self.area.set_can_focus(False);self.area.set_no_show_all(True)
         self.area.set_halign(Gtk.Align.END if stage else Gtk.Align.FILL);self.area.set_valign(Gtk.Align.START)
         self.area.set_margin_end(70 if stage else 18);self.area.set_margin_start(0 if stage else 18)
@@ -104,6 +106,8 @@ class MirrorSurface:
         self.glints=None;self.facets=None
         from mirror_rhythm import SongRhythm
         self.rhythm=SongRhythm('mirrorball-'+str(id(self)))
+        from mirror_optics import Optics
+        self.optics=Optics()
         settings=window.get_settings()
         window.add_events(Gdk.EventMask.VISIBILITY_NOTIFY_MASK)
         self.signals=[(window,window.connect('map',lambda *_:self.resume())),
@@ -174,15 +178,18 @@ class MirrorSurface:
             # Capture timestamps use monotonic time; GDK's paint timestamp can
             # lag behind the latest audio callback on a busy first frame.
             speed=self.rhythm.advance(self.appearance.audio_host,time.monotonic(),dt)
+            self.optics.advance(dt,self.rhythm)
             self.age+=dt*speed
             self.phase=(self.phase+dt*speed*PHASES/PERIOD)%PHASES
         self.last=now
         cadence=1/60 if self.facets and self.facets.driver else 1/24 if self.facets else 1/30
         if self.painted_at is None or now-self.painted_at>=cadence-.001:
             self.painted_at=now;gain=self.rhythm.timing.gain
-            changed=self.drawn_age is None or abs(self.age-self.drawn_age)>.0001 or abs(gain-self.drawn_gain)>.0005
+            visual=self.optics.values
+            changed=(self.drawn_age is None or abs(self.age-self.drawn_age)>.0001 or abs(gain-self.drawn_gain)>.0005
+                     or self.drawn_optics is None or any(abs(a-b)>.0005 for a,b in zip(visual,self.drawn_optics)))
             if changed:
-                self.drawn_age,self.drawn_gain=self.age,gain;self.area.queue_draw()
+                self.drawn_age,self.drawn_gain,self.drawn_optics=self.age,gain,visual;self.area.queue_draw()
                 if self.glints:self.glints.advance(self.age)
                 if self.facets:self.facets.advance(self.age)
         return True

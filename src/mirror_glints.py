@@ -60,8 +60,13 @@ class Glints:
         owner=self.owner()
         if self.closed or not owner or not owner.enabled:return False
         c=self.c
-        for x,y,rx,ry,alpha,tone in self.dots:
-            alpha*=owner.rhythm.timing.gain
+        pulse,energy,bass,air,warmth,weave,depth=owner.optics.values
+        for index,(x,y,rx,ry,alpha,tone) in enumerate(self.dots):
+            alpha*=owner.rhythm.timing.gain*(.86+.16*energy+.24*pulse)
+            swell=1+.10*pulse+.06*math.sin(owner.age*.113+index*.7+weave*2)
+            rx*=swell;ry*=1+.12*air
+            tone=tuple(min(1.,value*(.96+.08*warmth if channel!=2 else 1.04-.08*warmth))
+                       for channel,value in enumerate(tone))
             if alpha<.003:continue
             for scale,strength in ((2.4,.12),(1.,.9)):
                 c.cairo_save(cr);c.cairo_translate(cr,x,y);c.cairo_scale(cr,rx*scale/24,ry*scale/24)

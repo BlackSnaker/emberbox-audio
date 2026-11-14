@@ -12,8 +12,10 @@ Mirrored facets become part of Ember's architecture: graphite, silver glass,
 champagne light and quiet indigo reflections. There is no literal disco ball.
 A seamless mirror panorama glides **left to right**, with folded silver and
 champagne reflections and slower drifting glints. The measured song rhythm guides
-its pace; uncertain rhythm retains gentle motion. The centre stays quiet around
-the artwork and warm tubes. Hardware rendering follows the display frame clock;
+its pace; uncertain rhythm retains gentle motion. Layered warm/silver reflections
+weave through the glass: measured beats gently broaden the light, bass adds depth
+and treble adds shimmer. Each song has a softly changing visual profile. The centre
+stays quiet around the artwork and warm tubes. Hardware rendering follows the display frame clock;
 a lower-rate compatibility path is available without GPU acceleration.
 
 **Settings → Mirrorball.** Available in desktop, Mini and fullscreen; your choice

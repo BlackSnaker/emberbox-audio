@@ -65,6 +65,8 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         # initial bake as continuous optical-animation cost.
         wait(lambda:stage.equalizer.frames_ready,limit=60);settle(.8)
         assert surface.rhythm.timing.bpm==120 and surface.rhythm.consumer in host.meter.interests
+        assert surface.rhythm.fresh and surface.optics.values[1]>.2
+        assert surface.optics.values[2]>.15 and surface.optics.values[3]>.10
         previous_speed=surface.rhythm.timing.speed
         host.meter.beat_grid=dict(bpm=160.,period=.375,phase=.137,confidence=.95);settle(.6)
         assert surface.rhythm.timing.bpm==160 and surface.rhythm.timing.speed>previous_speed
@@ -93,7 +95,9 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         prefs=stage.window.get_settings();animations=prefs.get_property('gtk-enable-animations')
         prefs.set_property('gtk-enable-animations',False);settle(.2)
         assert surface.rhythm.consumer not in host.meter.interests
+        optics=surface.optics.values
         assert not surface.tick;phase=surface.phase;settle(.15);assert surface.phase==phase and surface.area.get_visible()
+        assert surface.optics.values==optics,'Reduced motion must freeze the optical weave as well'
         still=list(surface.glints.dots);settle(.15);assert surface.glints.dots==still
         still_scales=list(surface.facets.cells);settle(.15);assert surface.facets.cells==still_scales
         # Repeating a position must not retain transparent frame trails.

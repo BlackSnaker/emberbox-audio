@@ -136,8 +136,8 @@ class Frames:
             assert (width, height) == (WIDTH, HEIGHT), 'Run with GDK_SCALE=1'
             self.set_sentinel_state()
             before = self.state()
-            atlas, drift = self.request
-            self.driver.draw(width, height, atlas, drift)
+            atlas, drift, optics = self.request
+            self.driver.draw(width, height, atlas, drift, optics)
             assert self.state() == before, 'Mirror draw leaked state into the GTK GL context'
             self.state_checks += 1
             self.driver.call('Finish')
@@ -157,9 +157,9 @@ class Frames:
             self.serial += 1
         return True
 
-    def capture(self, atlas, drift=0.):
+    def capture(self, atlas, drift=0., optics=None):
         serial = self.serial
-        self.request = atlas, drift
+        self.request = atlas, drift, optics
         self.area.queue_render()
         settle(lambda: self.serial > serial)
         if self.error:
@@ -244,6 +244,40 @@ with patch('urllib.request.urlopen', side_effect=AssertionError('Unexpected fixt
         frames.capture(actual, .14)
         assert frames.uploads == uploads + 1
 
+        # The optical weave evolves even at a fixed panorama position. Audio
+        # changes light locally, without moving the room vertically or making
+        # a whole-window exposure flash. All sources remain the same texture.
+        response=(0.,.55,.45,.35)
+        character=(.65,.40,.55)
+        phases=(.5,1.2,2.3)
+        optics=(response,character,phases)
+        quiet=frames.capture(actual,.137,optics)
+        evolved=frames.capture(actual,.137,(response,character,(1.2,1.6,2.55)))
+        other=frames.capture(actual,.137,(response,(.25,.75,.25),phases))
+        for candidate in (quiet,evolved,other):
+            assert np.max(candidate[HEIGHT//3:HEIGHT*2//3,WIDTH//3:WIDTH*2//3])==0
+            assert np.all(candidate[...,:3]<=candidate[...,3,None]+1)
+        assert np.abs(evolved[...,:3].astype(int)-quiet[...,:3].astype(int)).mean()>.2, \
+            'The reflected pattern must evolve beyond a plain sliding wallpaper'
+        assert np.abs(other[...,:3].astype(int)-quiet[...,:3].astype(int)).mean()>.15, \
+            'Different song profiles must produce distinct optical compositions'
+        beat=frames.capture(actual,.137,((1.,.55,.45,.35),character,phases))
+        difference=beat[...,:3].astype(int)-quiet[...,:3].astype(int)
+        assert difference.min()>=-1 and difference.max()<30
+        assert np.count_nonzero(difference.max(axis=2)>2)>200, \
+            'A measured beat should broaden visible local reflections'
+        assert np.mean(np.abs(difference))<3, 'Beat accents must not flash the whole room'
+        previous=quiet
+        for index in range(1,61):
+            phase=tuple(a+index/60*1.5*rate for a,rate in zip(phases,(.19,.113,.071)))
+            current=frames.capture(actual,.137,(response,character,phase))
+            assert np.abs(current[...,:3].astype(int)-previous[...,:3].astype(int)).max()<=5, \
+                'A continuous optical phase must not snap between display frames'
+            previous=current
+        loop=frames.capture(actual,.137,(response,character,tuple(a+np.pi*2 for a in phases)))
+        assert np.abs(loop.astype(int)-quiet.astype(int)).max()<=1, 'Wrapped light phases must be seamless'
+        assert frames.uploads==uploads+1, 'Light, beat and profile changes must update uniforms only'
+
         driver = frames.driver
         textures = (driver.texture, driver.room_texture, driver.previous_texture)
         program, vao = driver.program, driver.vao
@@ -264,6 +298,7 @@ with patch('urllib.request.urlopen', side_effect=AssertionError('Unexpected fixt
         settle(lambda: frames.released)
         assert frames.driver is None, 'Unrealize must release the isolated renderer'
         print('PASS mirror panorama framebuffer: positive horizontal travel, fixed soft vignette, '
-              'premultiplied detail, seamless repeat, uniform-only animation, GL state and cleanup')
+              'premultiplied detail, seamless repeat, varied optical weave, soft beat accents, '
+              'uniform-only animation, GL state and cleanup')
     finally:
         frames.close()
