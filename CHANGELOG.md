@@ -2,6 +2,10 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.16 — 2026-11-15
+
+- Reuse unchanged collection and queue rows when reopening tabs or updating playback. Dissolve two retained viewport frames on the presentation clock instead of repainting both live GTK trees each frame; keep the selected backdrop visible, reuse the work surface, and release it after interruption, resize or completion. Verify pixels, real intermediate frames and row identity. Frame timing remains dependent on hardware and first-time page preparation.
+
 ## 0.31.15 — 2026-11-15
 
 - Let the glass tab indicator flow between destinations: the leading edge draws out first, a curved liquid bridge follows, and the trailing edge settles into the new tab. Keep real text refraction, preserve the visible contour on rapid clicks, and stop the small cached animation at rest or when reduced motion is enabled.

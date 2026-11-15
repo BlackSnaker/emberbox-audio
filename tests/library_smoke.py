@@ -79,6 +79,16 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         assert len(queue.rows)==3
         # Local time changes the heading without rebuilding the queue or touching playback.
         original_rows=list(queue.rows);original_plays=list(plays)
+        # Returning to a prepared page must reuse its rows, including after
+        # playback-only metadata changes. No expensive widget reconstruction.
+        original_songs=tuple(view.song_buttons)
+        stage.show_page('library');f.settle(.35)
+        assert tuple(view.song_buttons)==original_songs,'Cached library rows were recreated'
+        stage.show_page('queue');f.settle(.35)
+        assert queue.rows==original_rows,'Reopening queue rebuilt every row'
+        old_playing=host.playing;host.playing=not old_playing;queue.render();host.playing=old_playing;queue.render()
+        assert queue.rows==original_rows,'Playback state alone must not rebuild queue rows'
+
         periods=((0,'Late hours, favourite songs.','Ночь — время любимых треков.'),
                  (4,'Late hours, favourite songs.','Ночь — время любимых треков.'),
                  (5,'Let the morning play.','Пусть утро звучит.'),

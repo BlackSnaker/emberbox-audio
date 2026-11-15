@@ -143,6 +143,7 @@ jobs:
         run: |
           GDK_SCALE=1 LIBGL_ALWAYS_SOFTWARE=1 GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/reveal_backdrop_smoke.py
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/header_glass_smoke.py
+          GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/page_transition_smoke.py
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1280x720x24' /usr/bin/python3 tests/reveal_smoke.py
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1280x720x24' /usr/bin/python3 tests/theme_reveal_smoke.py
           EMBERBOX_REVEAL_TEST_GL=1 GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1280x720x24' /usr/bin/python3 tests/theme_reveal_smoke.py

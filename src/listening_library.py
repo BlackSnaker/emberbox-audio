@@ -177,7 +177,7 @@ class LibraryView(Gtk.Box):
         self.wave_button.set_no_show_all(True);foot.pack_end(self.wave_button,False,False,0)
         self.pack_end(foot,False,False,0)
         self.unsubscribe=service.subscribe(self.service_changed)
-        self.favorite_revision=-1;self.favorite_tables=[];self.favorite_limit=200
+        self.favorite_revision=-1;self.favorite_tables=[];self.favorite_limit=200;self.rendered_key=None
         self.unsubscribe_favorites=service.favorites.subscribe(self.favorites_changed)
         self.show_all();self.context.hide();self.connect_button.hide();self.wave_button.hide();self.sync_tabs()
 
@@ -220,6 +220,8 @@ class LibraryView(Gtk.Box):
     def load(self,refresh=False,append=False):
         if not self.active:return
         if self.category=='favorites':
+            if self.rendered_key==self.key() and self.favorite_revision==self.service.favorites.revision:
+                self.favorites_changed();return
             self.request+=1;self.service.cancel_browse();self.busy=False;self.spinner.stop()
             self.notice.set_text('');self.connect_button.hide();self.items=list(self.service.favorites.items.values())[::-1]
             self.next_offset=None;self.favorite_revision=self.service.favorites.revision;self.render();return
@@ -227,7 +229,12 @@ class LibraryView(Gtk.Box):
         if self.category=='search' and not key[2] and not self.selected:
             self.items=[];self.next_offset=None;self.render();return
         if not refresh and not append and key in self.cache:
-            self.items,self.next_offset,note=self.cache[key];self.render();self.notice.set_text(note);return
+            values,self.next_offset,note=self.cache[key]
+            unchanged=self.rendered_key==key and self.items==values
+            self.items=values
+            if unchanged:self.update_playback()
+            else:self.render()
+            self.notice.set_text(note);return
         self.request+=1;request=self.request
         self.busy=True;self.spinner.start();self.notice.set_text(text('Finding your music…','Ищу твою музыку…'))
         self.connect_button.hide()
@@ -286,6 +293,7 @@ class LibraryView(Gtk.Box):
         self.service.stop();self.service.host.start_yandex_wave()
 
     def render(self):
+        self.rendered_key=self.key()
         self.close_editor(render=False)
         self.hero.show();self.filters.show()
         if self.category=='favorites':self.render_favorites();return
@@ -437,7 +445,7 @@ class QueueView(Gtk.Box):
     def __init__(self,service,artwork,open_artist=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL,spacing=14)
         self.service,self.artwork=service,artwork;self.active=False;self.rows=[];self.key=None
-        self.track_table=None;self.list_width=1000;self.dense=False
+        self.track_table=None;self.list_width=1000;self.dense=False;self.rows_key=None
         self.open_artist=open_artist
         hero=Gtk.Box(spacing=15);names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=5)
         self.title=label(queue_greeting(),'stage-library-title',40)
@@ -469,7 +477,7 @@ class QueueView(Gtk.Box):
         self.unsubscribe=service.subscribe(self.changed)
         self.show_all()
 
-    def activate(self):self.active=True;self.render(force=True)
+    def activate(self):self.active=True;self.render()
     def deactivate(self):self.active=False
     def changed(self):
         if self.active:self.render()
@@ -497,6 +505,9 @@ class QueueView(Gtk.Box):
                                    '▶ '+text('Play queue','Слушать очередь'))
         self.play_button.set_sensitive(bool(pending or self.service.error) and not self.service.loading and not (running and h.playing))
         self.clear_button.set_sensitive(bool(pending));self.notice.set_text(self.service.error)
+        rows_key=(book.revision,source)
+        if not force and rows_key==self.rows_key:return
+        self.rows_key=rows_key
         clear(self.content);self.rows=[]
         table=self.track_table=RecordList(action_count=3) if pending else None
         if table:self.content.pack_start(table,False,False,0)
