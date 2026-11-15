@@ -2,6 +2,11 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.12 — 2026-11-15
+
+- Raise the glass navigation back into the upper toolbar on wider windows, keeping its centre independent of the logo and source controls in both artwork and lyrics modes. Retain a centred second row on small screens so captions stay readable.
+- Verify the prepared Nocturne background after its immediate selected-colour placeholder; keep the placeholder's pixel storage aligned.
+
 ## 0.31.11 — 2026-11-15
 
 - Centre the glass navigation in its own row across all themes. Artwork mode shares that centre; lyrics mode retains the same header position. Source controls and translated edition names no longer push it sideways.

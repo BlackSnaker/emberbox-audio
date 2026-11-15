@@ -206,16 +206,18 @@ class FullscreenPlayer:
         self.layout=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18)
         self.layout.set_halign(Gtk.Align.FILL);self.layout.set_valign(Gtk.Align.FILL)
         overlay.add_overlay(self.layout)
-        header=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8);self.header=header
+        header=Gtk.Overlay();self.header=header
         header.get_style_context().add_class('stage-header-glass')
-        toolbar=Gtk.Box(spacing=8);header.pack_start(toolbar,False,False,0)
-        wordmark=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3)
+        self.header_layout=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8);header.add(self.header_layout)
+        toolbar=Gtk.Box(spacing=8);self.toolbar=toolbar;self.header_layout.pack_start(toolbar,False,False,0)
+        wordmark=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3);self.wordmark=wordmark
         wordmark.pack_start(label('EMBER','stage-brand'),False,False,0)
         self.edition_label=label(text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'),'stage-overline')
         self.edition_label.set_line_wrap(True);self.edition_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
         self.edition_label.set_width_chars(1);self.edition_label.set_max_width_chars(72)
         wordmark.pack_start(self.edition_label,False,False,0)
-        toolbar.pack_start(wordmark,True,True,0)
+        toolbar.pack_start(wordmark,False,False,0)
+        toolbar.pack_start(Gtk.Box(),True,True,0)
         navigation=Gtk.Box(spacing=2);navigation.get_style_context().add_class('stage-nav')
         navigation.get_style_context().add_class('stage-top-nav')
         navigation.set_halign(Gtk.Align.CENTER);self.page_tabs={}
@@ -226,8 +228,9 @@ class FullscreenPlayer:
         self.glass_navigation=GlassNavigation(navigation)
         self.navigation_row=Gtk.Box()
         self.glass_navigation.set_halign(Gtk.Align.CENTER)
-        self.navigation_row.pack_start(self.glass_navigation,True,False,0)
-        header.pack_end(self.navigation_row,False,False,0)
+        header.add_overlay(self.glass_navigation)
+        self.navigation_row.set_no_show_all(True)
+        self.header_layout.pack_end(self.navigation_row,False,False,0)
         self.lyrics_button=self.button(text('Lyrics','Текст песни'),self.toggle_lyrics,'stage-quiet')
         self.lyrics_button.set_valign(Gtk.Align.CENTER)
         toolbar.pack_start(self.lyrics_button,False,False,0)
@@ -407,7 +410,7 @@ class FullscreenPlayer:
         # Discard the preceding theme's gradient immediately. Its replacement
         # is baked asynchronously; transitions meanwhile use the selected ink.
         tone=(12,16,21) if self.appearance.mirrorball else (18,20,20) if self.appearance.nocturne else (18,34,28) if self.appearance.christmas else (23,27,24)
-        ink=GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB,False,8,1,1)
+        ink=GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB,True,8,1,1)
         ink.fill((tone[0]<<24)|(tone[1]<<16)|(tone[2]<<8)|255);self.background.set_from_pixbuf(ink)
         self.bg_key=None;self.paint_background()
 
@@ -668,8 +671,17 @@ class FullscreenPlayer:
         context=self.layout.get_style_context()
         context.add_class('small-screen') if small else context.remove_class('small-screen')
         self.layout.set_spacing(10 if small else 18)
-        self.header.set_spacing(4 if small else 8)
+        self.header_layout.set_spacing(4 if small else 8)
         margin=max(24,min(88,int(width*.047)))
+        nav_height=max(1,self.glass_navigation.get_preferred_height()[1]-self.glass_navigation.get_margin_top()-self.glass_navigation.get_margin_bottom())
+        inline=width>=1280
+        self.wordmark.set_size_request(min(360,max(180,width-2*margin-380)),-1)
+        self.edition_label.set_max_width_chars(72)
+        self.edition_label.set_size_request(-1,self.edition_label.create_pango_layout('AgЙ\nAgЙ').get_pixel_size()[1])
+        self.navigation_row.set_size_request(1,nav_height)
+        self.navigation_row.set_visible(not inline)
+        self.glass_navigation.set_valign(Gtk.Align.CENTER if inline else Gtk.Align.START)
+        self.glass_navigation.set_margin_top(0 if inline else self.toolbar.get_preferred_height()[1]+self.header_layout.get_spacing())
         self.library_view.resize(width-2*margin,height);self.queue_view.resize(width-2*margin,height)
         self.layout.set_margin_start(margin);self.layout.set_margin_end(margin)
         self.layout.set_margin_top(12 if small else 36);self.layout.set_margin_bottom(14 if small else 32)

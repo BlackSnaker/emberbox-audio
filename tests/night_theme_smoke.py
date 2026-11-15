@@ -68,7 +68,8 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected night
         wait(lambda:popup.get_mapped(),'Settings popup did not map')
         assert not host.settings.night_switch.get_active()
         host.settings.night_switch.set_active(True)
-        wait(lambda:pixels(stage.background)!=classic,'Classic → Nocturne must repaint the actual backdrop')
+        wait(lambda:pixels(stage.background)!=classic and stage.background.get_pixbuf().get_width()>1,
+             'Classic → Nocturne must prepare the actual backdrop, beyond its immediate selected-colour placeholder')
         assert host.appearance.theme=='nocturne' and host.appearance.nocturne and not host.appearance.christmas
         assert 'nocturne-theme' in stage.window.get_style_context().list_classes()
         assert 'nocturne-theme' in popup.get_style_context().list_classes()

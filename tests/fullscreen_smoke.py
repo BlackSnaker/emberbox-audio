@@ -232,6 +232,9 @@ def assert_long_titles_fit(stage,host):
                         assert scroll.get_upper()>scroll.get_page_size(),'Oversize metadata must remain readable by scrolling'
                     nav=rectangle(stage.glass_navigation)
                     assert abs(nav[0]+nav[2]/2-width/2)<=1,'Navigation drifted away from the window centre'
+                    if width>=1280:
+                        source=rectangle(stage.source_button)
+                        assert abs(nav[1]+nav[3]/2-source[1]-source[3]/2)<=1,'Wide-screen navigation must remain in the upper toolbar'
                     if not lyrics:
                         art=rectangle(stage.cover)
                         assert abs(art[0]+art[2]/2-width/2)<=1,'Artwork must share the navigation centre'
