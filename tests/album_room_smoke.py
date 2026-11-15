@@ -329,8 +329,9 @@ def run():
             upper = adjustment.get_upper()
             original_plays = list(plays)
             view.read_button.clicked()
-            f.settle(.45)
-            assert view.notes_revealer.get_reveal_child() and view.notes_revealer.get_child_revealed()
+            wait(lambda: view.notes_revealer.get_reveal_child() and
+                 view.notes_revealer.get_child_revealed() and adjustment.get_upper()>upper+60,
+                 'Liner notes must finish revealing and extend the album scroll')
             assert adjustment.get_upper() > upper+60, 'Opening liner notes must extend the main album scroll'
             assert any(RELEASE['description'].split('\n')[0] in value
                        for value in f.labels(view.notes_revealer))
