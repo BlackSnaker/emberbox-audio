@@ -2,6 +2,11 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.9 — 2026-11-15
+
+- Keep the player visible through fullscreen and lyrics transitions after changing themes. Replace the compatibility renderer's whole-window fade with two retained scenes and smoothly moving artwork over the current theme's background.
+- Capture each endpoint once, release the frames on completion/cancellation, and preserve playback. Exercise repeated theme changes, fullscreen entry/exit and lyrics in both the Cairo and real GL paths, including reduced motion and native-window continuity.
+
 ## 0.31.8 — 2026-11-14
 
 - Make the cover palette authoritative: preserve actual sampled RGB and saturation, include neutral image colours, and tint the glass material itself as well as its moving highlights. Remove the preset-colour dilution.

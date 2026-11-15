@@ -481,7 +481,7 @@ class FullscreenPlayer:
             self.on_size(self.window,geometry)
             allocation=geometry.copy();allocation.x=allocation.y=0
             self.layout.show();self.layout.size_allocate(allocation)
-            if self.reveal.active and not self.reveal.fallback:self.reveal.capture(allocation)
+            if self.reveal.active:self.reveal.capture(allocation)
         if monitor:
             index=next((i for i in range(display.get_n_monitors()) if display.get_monitor(i)==monitor),0)
             self.window.fullscreen_on_monitor(self.window.get_screen(),index)

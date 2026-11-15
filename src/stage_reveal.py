@@ -1,4 +1,4 @@
-"""GPU entrance with fixed GTK geometry and a cheap compositor-fade fallback."""
+"""Fixed-geometry transitions with GPU or retained in-window composition."""
 from gi.repository import GLib, Gtk
 from cover_tint import BASE_COLOR
 from reveal_gl import RevealGL
@@ -14,7 +14,7 @@ def interpolate(start,end,amount):
     return tuple(a+(b-a)*amount for a,b in zip(start,end))
 
 
-class StageReveal(Gtk.GLArea):
+class StageReveal(Gtk.Overlay):
     DURATION=.9
 
     def __init__(self,window,background,layout,cover,art_shell,current_art=None):
@@ -29,34 +29,43 @@ class StageReveal(Gtk.GLArea):
         self.pigment=(.26,.26,.24)
         self.room=None
         self.previous=None;self.cover_end=(0,0,1,1)
-        self.reversing=False;self.morphing=False;self.completed=None;self.change=None
-        self.set_required_version(3,2);self.set_use_es(False)
-        self.set_has_alpha(True);self.set_auto_render(False)
+        self.reversing=False;self.morphing=False;self.completed=None
+        from stage_reveal_paint import RevealPaint
+        self.paint=RevealPaint(self);self.add(self.paint.area)
+        self.area=Gtk.GLArea();self.area.set_required_version(3,2);self.area.set_use_es(False)
+        self.area.set_has_alpha(True);self.area.set_auto_render(False)
+        self.area.set_no_show_all(True);self.area.set_can_focus(False)
+        self.add_overlay(self.area);self.set_overlay_pass_through(self.area,True)
         self.get_style_context().add_class('stage-gl')
         self.set_halign(Gtk.Align.FILL);self.set_valign(Gtk.Align.FILL)
         self.set_no_show_all(True)
-        self.connect('render',self.render_scene)
-        self.connect('unrealize',self.release)
+        self.area.connect('render',self.render_scene)
+        self.area.connect('unrealize',self.release)
+        self.connect('destroy',lambda *_:self.paint.close())
+
+    def queue_render(self):
+        if self.fallback:self.paint.area.queue_draw()
+        else:self.area.queue_render()
 
     def warmup(self,pixels=None,allow_software=False,room=None,monitor=None):
         """Compile and draw offscreen before a fullscreen click, never in it."""
         if self.driver or self.error:return
         try:
-            self.window.realize();self.get_parent().realize();self.realize()
-            self.make_current()
-            if self.get_error():raise RuntimeError('OpenGL context unavailable')
+            self.window.realize();self.get_parent().realize();self.realize();self.area.realize()
+            self.area.make_current()
+            if self.area.get_error():raise RuntimeError('OpenGL context unavailable')
             self.driver=RevealGL(allow_software=allow_software)
             display=self.window.get_display()
             monitor=monitor or display.get_primary_monitor() or display.get_monitor(0)
             if monitor:
                 allocation=monitor.get_geometry().copy();allocation.x=allocation.y=0
-                self.size_allocate(allocation)
-            self.attach_buffers()
+                self.size_allocate(allocation);self.area.size_allocate(allocation)
+            self.area.attach_buffers()
             width,height=self.get_allocated_width(),self.get_allocated_height()
             self.driver.call('Viewport',0,0,width*self.get_scale_factor(),height*self.get_scale_factor())
             self.driver.draw(width,height,(0,0,width,height),(0,0,100,100),self.pigment,.5,pixels,room)
             self.driver.call('Finish')
-            if monitor:warm_window(self,self.window,allocation)
+            if monitor:warm_window(self.area,self.window,allocation)
         except (RuntimeError,OSError,AttributeError) as error:
             self.error=str(error)
             if self.driver:self.driver.close();self.driver=None
@@ -86,12 +95,10 @@ class StageReveal(Gtk.GLArea):
         if getattr(getattr(host,'appearance',None),'dark',False):self.pigment=(.065,.069,.067)
         self.active=True;self.started=None;self.progress=1. if reverse else 0.;self.handed_off=False
         self.reversing=reverse
-        self.fallback=self.driver is None
+        self.fallback=self.driver is None or self.area.get_error() is not None
         if self.fallback:
-            # Cold clicks and systems without GL use compositor window opacity.
-            # Never compile shaders or reconstruct a GTK scene in the click.
-            native=self.window.get_window()
-            if native:native.set_opacity(self.progress)
+            # Never fade the native window out: that looks like closing the
+            # player, especially while a newly selected theme is warming up.
             self.fallback_tick=GLib.timeout_add(16,self.fade_step)
         else:
             if self.window.get_screen().is_composited():
@@ -100,7 +107,7 @@ class StageReveal(Gtk.GLArea):
             # these trees instead; their allocations were prepared offscreen.
             for widget in (self.background,self.layout):
                 widget.set_no_show_all(True);widget.hide()
-            self.show();self.queue_render()
+            self.area.show();self.show();self.queue_render()
 
     def fade_step(self):
         self.advance(GLib.get_monotonic_time())
@@ -117,7 +124,7 @@ class StageReveal(Gtk.GLArea):
             if gap>50_000:self.started+=gap-50_000
         if self.started is None:self.started=now
         self.last_now=now
-        duration=(.32 if self.morphing else .24) if self.fallback else .66 if self.morphing else self.DURATION
+        duration=.66 if self.morphing else self.DURATION
         raw=max(0.,min(1.,(now-self.started)/1_000_000/duration))
         self.progress=1.-raw if self.reversing else raw
         if raw>=1.:
@@ -126,13 +133,7 @@ class StageReveal(Gtk.GLArea):
             if completed:completed()
             return
         if self.fallback:
-            native=self.window.get_window()
-            if self.morphing:
-                if raw>=.4 and self.change:
-                    change,self.change=self.change,None;change()
-                alpha=1.-smooth(raw/.4) if raw<.4 else smooth((raw-.4)/.6)
-            else:alpha=smooth(self.progress)
-            if native:native.set_opacity(alpha)
+            self.queue_render()
         else:
             if self.progress>=.62 and not self.handed_off and self.room is None:
                 # A single GTK paint behind an opaque GL frame, no per-frame
@@ -173,21 +174,24 @@ class StageReveal(Gtk.GLArea):
             if without_art:self.art_shell.set_opacity(1.)
 
     def capture(self,allocation,without_art=False):
-        if self.active and not self.fallback:
-            try:self.room=self.scene(allocation,without_art)
+        if self.active:
+            try:self.room=self.scene(allocation,without_art or self.fallback)
             except (OSError,AttributeError,RuntimeError):self.room=None
-            self.layout.hide()
             self.cover_end=self.cover_rect()
+            if self.fallback:
+                if self.room is None:self.finish();return
+                try:self.paint.prepare(self.room,self.previous,self.background.get_pixbuf(),self.current_art() or self.cover_pixels)
+                except (OSError,AttributeError,RuntimeError):self.finish();return
+                for widget in (self.background,self.layout):widget.set_no_show_all(True);widget.hide()
+                self.area.hide();self.paint.area.show();self.show();self.queue_render()
+            else:self.layout.hide()
 
     def morph(self,change,completed):
         self.finish()
         if not self.window.get_settings().get_property('gtk-enable-animations'):
             change();completed();return
         self.active=True;self.progress=0.;self.morphing=True;self.completed=completed
-        self.fallback=self.driver is None
-        if self.fallback:
-            self.change=change;self.fallback_tick=GLib.timeout_add(16,self.fade_step)
-            return
+        self.fallback=self.driver is None or self.area.get_error() is not None
         allocation=self.window.get_allocation();allocation.x=allocation.y=0
         try:self.previous=self.scene(allocation,without_art=True)
         except (OSError,AttributeError,RuntimeError):
@@ -198,13 +202,16 @@ class StageReveal(Gtk.GLArea):
         change();self.capture(allocation,without_art=True)
         if self.room is None:
             self.finish();completed();return
+        if self.fallback:self.fallback_tick=GLib.timeout_add(16,self.fade_step)
+        else:self.area.show()
         self.show();self.queue_render()
 
     def finish(self):
         if self.fallback_tick:GLib.source_remove(self.fallback_tick);self.fallback_tick=0
         self.active=False;self.started=None;self.last_now=None;self.progress=1.;self.handed_off=False
-        self.hide();self.cover_origin=None;self.cover_pixels=None;self.room=None;self.previous=None
-        self.reversing=self.morphing=False;self.completed=self.change=None
+        self.hide();self.area.hide();self.paint.area.hide();self.paint.clear()
+        self.cover_origin=None;self.cover_pixels=None;self.room=None;self.previous=None
+        self.reversing=self.morphing=False;self.completed=None
         for widget in (self.background,self.layout):
             widget.set_no_show_all(False);widget.set_opacity(1.);widget.show()
         self.art_shell.set_opacity(1.)
@@ -214,6 +221,6 @@ class StageReveal(Gtk.GLArea):
 
     def release(self,_area):
         if self.driver:
-            self.make_current()
-            if not self.get_error():self.driver.close()
+            self.area.make_current()
+            if not self.area.get_error():self.driver.close()
             self.driver=None
