@@ -126,7 +126,6 @@ class KaraokeView(Gtk.Box):
         self.cover=Gtk.Image();self.cover.set_size_request(42,42)
         metadata.pack_start(self.cover,False,False,0)
         self.song=caption('','karaoke-title');self.song.set_line_wrap(True);self.song.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
-        self.song.set_width_chars(1)
         self.song.set_max_width_chars(65);metadata.pack_start(self.song,False,False,0)
         self.pack_start(metadata,False,False,0)
         self.scenes=Gtk.Stack();self.scenes.set_transition_type(Gtk.StackTransitionType.CROSSFADE)

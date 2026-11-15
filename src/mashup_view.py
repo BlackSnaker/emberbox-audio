@@ -272,7 +272,9 @@ class MashupView(Gtk.Box):
                     self.results.pack_start(row,False,False,0)
                 self.more.set_sensitive(not error and self.catalog_page<10)
                 self.results.show_all();return False
-            GLib.idle_add(apply)
+            # Results must not wait for a quiet frame while the glass tab or
+            # themed background is animating at GTK's redraw priority.
+            GLib.idle_add(apply,priority=GLib.PRIORITY_DEFAULT)
         future.add_done_callback(done)
 
     def select(self,item,index=None):

@@ -73,6 +73,7 @@ CSS=b'''
 }
 .ember-stage .stage-header-glass button:disabled { color: #8e8d81; }
 .ember-stage .small-screen .stage-header-glass .stage-top-nav button.stage-tab { padding: 6px 8px; font-size: 10px; }
+.ember-stage .short-screen .stage-header-glass .stage-top-nav button.stage-tab { min-height: 0; padding: 5px 8px; }
 .ember-stage .stage-header-glass .stage-top-nav.glass-flight button.stage-tab {
  background-color: transparent; background-image: none; border-color: transparent;
  box-shadow: none; transition-duration: 0ms;

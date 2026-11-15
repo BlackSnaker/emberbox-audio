@@ -111,6 +111,7 @@ window.ember-stage.stage-opening { background-color: transparent; }
 .ember-stage .small-screen button.stage-line { font-size: 24px; padding: 10px 0; }
 .ember-stage .small-screen .stage-empty-title { font-size: 32px; }
 .ember-stage .small-screen .stage-artist { font-size: 14px; }
+.ember-stage .short-screen .stage-console { padding: 8px 18px; }
 '''
 
 
@@ -666,25 +667,28 @@ class FullscreenPlayer:
         self.dj_view.resize(width,height)
         self.mashups.resize(width,height)
         small=height<850 or width<1200
+        short=height<680
         self.karaoke.resize(height<800)
         self.equalizer.set_compact(small)
         context=self.layout.get_style_context()
         context.add_class('small-screen') if small else context.remove_class('small-screen')
-        self.layout.set_spacing(10 if small else 18)
+        context.add_class('short-screen') if short else context.remove_class('short-screen')
+        self.layout.set_spacing(8 if short else 10 if small else 18)
+        self.footer.set_spacing(6 if short else 10)
         self.header_layout.set_spacing(4 if small else 8)
         margin=max(24,min(88,int(width*.047)))
         nav_height=max(1,self.glass_navigation.get_preferred_height()[1]-self.glass_navigation.get_margin_top()-self.glass_navigation.get_margin_bottom())
         inline=width>=1280
-        self.wordmark.set_size_request(min(360,max(180,width-2*margin-380)),-1)
+        self.wordmark.set_size_request(min(360 if inline else 400,max(180,width-2*margin-380)),-1)
         self.edition_label.set_max_width_chars(72)
-        self.edition_label.set_size_request(-1,self.edition_label.create_pango_layout('AgЙ\nAgЙ').get_pixel_size()[1])
+        self.edition_label.set_size_request(-1,self.edition_label.create_pango_layout('AgЙ\nAgЙ' if inline else 'AgЙ').get_pixel_size()[1])
         self.navigation_row.set_size_request(1,nav_height)
         self.navigation_row.set_visible(not inline)
         self.glass_navigation.set_valign(Gtk.Align.CENTER if inline else Gtk.Align.START)
         self.glass_navigation.set_margin_top(0 if inline else self.toolbar.get_preferred_height()[1]+self.header_layout.get_spacing())
         self.library_view.resize(width-2*margin,height);self.queue_view.resize(width-2*margin,height)
         self.layout.set_margin_start(margin);self.layout.set_margin_end(margin)
-        self.layout.set_margin_top(12 if small else 36);self.layout.set_margin_bottom(14 if small else 32)
+        self.layout.set_margin_top(8 if short else 12 if small else 36);self.layout.set_margin_bottom(10 if short else 14 if small else 32)
         self.body.set_spacing(max(32,min(100,int(width*.052))) if self.lyrics_visible else 0)
         size=(max(180,min(560,int(width*.34),height-(410 if small else 460))) if self.lyrics_visible else
               max(160,min(720,width-2*margin-40,height-(420 if small else 460))))

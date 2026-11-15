@@ -2,6 +2,11 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.13 — 2026-11-15
+
+- Keep the complete transport and karaoke controls inside 1024×600: condense short-screen chrome and spacing while retaining full-size knobs and readable captions.
+- Deliver mashup catalogue results at the regular main-loop priority so animated glass cannot postpone them. Check studio, collection, transition desk, artists, reading, DJ and quality pages in both languages.
+
 ## 0.31.12 — 2026-11-15
 
 - Raise the glass navigation back into the upper toolbar on wider windows, keeping its centre independent of the logo and source controls in both artwork and lyrics modes. Retain a centred second row on small screens so captions stay readable.
