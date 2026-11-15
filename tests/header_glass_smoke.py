@@ -33,7 +33,7 @@ buttons=[]
 for title in ('Listening','Collection','Queue','DJ','Mashups','Karaoke'):
     button=Gtk.ToggleButton(label=title);button.get_style_context().add_class('stage-tab')
     nav.pack_start(button,False,False,0);buttons.append(button)
-lens=glass.GlassNavigation(nav);header.pack_start(lens,False,False,0)
+lens=glass.GlassNavigation(nav);lens.set_valign(Gtk.Align.CENTER);header.pack_start(lens,False,False,0)
 window.show_all();settle(.2)
 
 def select(index):
@@ -48,6 +48,28 @@ def wait():
     assert lens.nav.get_opacity()==1. and not lens.layer.get_visible()
 
 try:
+    # Both travel directions must stretch into a real neck, then settle exactly.
+    for start,end in (((8.,4.,80.,40.),(390.,4.,94.,40.)),
+                      ((390.,4.,94.,40.),(8.,4.,80.,40.))):
+        assert glass.liquid_geometry(start,end,0)==(start,0.)
+        assert glass.liquid_geometry(start,end,1)==(end,0.)
+        poses=[glass.liquid_geometry(start,end,i/100) for i in range(101)]
+        assert max(rect[2] for rect,neck in poses)>max(start[2],end[2])+60
+        assert max(neck for rect,neck in poses)>.5,'Long travel needs a liquid bridge, not a rigid capsule'
+        left=[rect[0] for rect,neck in poses];right=[rect[0]+rect[2] for rect,neck in poses]
+        direction=1 if end[0]>start[0] else -1
+        assert all(direction*(b-a)>=-1e-8 for edge in (left,right) for a,b in zip(edge,edge[1:])), 'No backwards snap or overshoot'
+    # Check the painted silhouette, not just its bounding box: a transparent
+    # concave waist with a continuous body between both rounded lobes.
+    c=lens.c;mask=c.cairo_image_surface_create(0,340,64);cr=c.cairo_create(mask)
+    try:
+        glass.liquid_path(c,cr,(8.,10.,300.,40.),.68)
+        c.cairo_set_source_rgba(cr,1,1,1,1);c.cairo_fill_preserve(cr)
+        c.cairo_surface_flush(mask)
+        pixels=np.frombuffer(C.string_at(c.cairo_image_surface_get_data(mask),340*64*4),np.uint8).reshape(64,340,4)
+        assert pixels[14,40,3]>200 and pixels[14,158,3]==0,'The waist must visibly narrow'
+        assert pixels[30,10:306,3].min()>200,'Liquid must remain connected during travel'
+    finally:c.cairo_destroy(cr);c.cairo_surface_destroy(mask)
     select(0);geometry=window.get_size()
     with patch.object(glass,'snapshot',wraps=glass.snapshot) as capture:
         select(5);assert lens.active
@@ -66,8 +88,10 @@ try:
         assert any(.1<p<.8 for p in samples) and refracted,'Moving glass must actually refract the cached letters'
         assert capture.call_count==1,'Do not recapture or rerasterise live GTK every frame'
         wait();assert window.get_size()==geometry
-        select(0);settle(.16);previous=lens.rect
-        select(3);assert lens.active and lens.start==previous,'An interrupted lens must continue from its visible position'
+        select(0);settle(.30);previous=lens.rect;neck=lens.neck
+        select(3);assert lens.active and lens.start==previous and lens.neck==neck,'An interrupted lens must retain its visible contour'
+        rect,resumed_neck=glass.liquid_geometry(lens.start,lens.end,0,lens.start_neck)
+        assert rect==previous and resumed_neck==neck
         wait()
         for theme in ('nocturne-theme','mirrorball-theme','christmas-theme'):
             window.get_style_context().add_class(theme);select(1);settle(.08);select(4);wait()
@@ -81,7 +105,7 @@ try:
         window.show_all();settle(.1);select(0);settle(.06)
         lens.resized(lens,type('Allocation',(),{'width':1,'height':1})())
         assert not lens.active and lens.canvas is None
-    print('PASS clear glass: real text refraction, intermediate frames, one cached strip, smooth retargeting, stable geometry, themes, reduced motion, hide/resize and cleanup')
+    print('PASS flowing glass: independent edges, connected neck, exact endpoints, contour-preserving retargeting, real text refraction, intermediate frames, one cached strip, smooth retargeting, stable geometry, themes, reduced motion, hide/resize and cleanup')
 finally:
     lens.close();lens.close();window.destroy()
     Gtk.StyleContext.remove_provider_for_screen(window.get_screen(),provider)

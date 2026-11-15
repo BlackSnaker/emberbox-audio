@@ -2,6 +2,10 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.15 — 2026-11-15
+
+- Let the glass tab indicator flow between destinations: the leading edge draws out first, a curved liquid bridge follows, and the trailing edge settles into the new tab. Keep real text refraction, preserve the visible contour on rapid clicks, and stop the small cached animation at rest or when reduced motion is enabled.
+
 ## 0.31.14 — 2026-11-15
 
 - Centre the bottom playback controls beneath the artwork, independently of the different widths of the spectrum and volume controls.
