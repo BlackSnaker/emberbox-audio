@@ -49,7 +49,7 @@ CSS=b'''
 
 def ellipsis(value,style):
     label=Gtk.Label(label=str(value or ''));label.set_xalign(0)
-    label.set_ellipsize(Pango.EllipsizeMode.END);label.set_width_chars(1)
+    label.set_line_wrap(True);label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR);label.set_width_chars(1)
     label.set_max_width_chars(1);label.set_hexpand(True)
     label.get_style_context().add_class(style)
     return label

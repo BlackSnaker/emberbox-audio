@@ -36,7 +36,8 @@ from widget_settings import SettingsMenu
 def settle(seconds=.2):
     deadline = time.monotonic()+seconds
     while time.monotonic() < deadline:
-        while GLib.MainContext.default().pending():
+        for _ in range(6):
+            if not GLib.MainContext.default().pending():break
             GLib.MainContext.default().iteration(False)
         time.sleep(.005)
 
@@ -216,7 +217,7 @@ def assert_long_titles_fit(stage,host):
                     host.title.set_text(title);stage.update();settle(.12)
                     assert stage.window.get_size()==(width,height)
                     assert_controls_fit(stage)
-                    for widget in (stage.footer,stage.console,stage.title,stage.artist_button,stage.album,stage.quality):
+                    for widget in (stage.footer,stage.console,stage.metadata_scroll,stage.art_shell):
                         x,y,w,h=rectangle(widget)
                         assert y>=0 and y+h<=height,(lyrics,(width,height),title[:40],type(widget).__name__,(x,y,w,h))
                     console=rectangle(stage.console);progress=rectangle(stage.progress)
@@ -224,8 +225,16 @@ def assert_long_titles_fit(stage,host):
                     assert (console,progress)==anchor,('The console moved when metadata wrapped',lyrics,(width,height),anchor,(console,progress))
                     lx,ly,lw,lh=rectangle(stage.left);fx,fy,fw,fh=rectangle(stage.footer)
                     assert ly+lh<=fy,('Artwork/metadata overlapped the fixed console',lyrics,(width,height),ly+lh,fy)
-                    assert stage.title.get_layout().get_line_count()<=2
-                    if title!=titles[0]:assert stage.title.get_layout().get_line_count()==2,'The regression fixture must actually wrap'
+                    assert stage.title.get_text()==title and not stage.title.get_layout().is_ellipsized()
+                    if title!=titles[0]:assert stage.title.get_layout().get_line_count()>=2,'The regression fixture must actually wrap'
+                    if title==titles[-1]:
+                        scroll=stage.metadata_scroll.get_vadjustment()
+                        assert scroll.get_upper()>scroll.get_page_size(),'Oversize metadata must remain readable by scrolling'
+                    nav=rectangle(stage.glass_navigation)
+                    assert abs(nav[0]+nav[2]/2-width/2)<=1,'Navigation drifted away from the window centre'
+                    if not lyrics:
+                        art=rectangle(stage.cover)
+                        assert abs(art[0]+art[2]/2-width/2)<=1,'Artwork must share the navigation centre'
         assert host.calls==playback_calls,'Layout-only metadata changes must not send playback commands'
     finally:
         for widget,value in zip((host.title,host.artist,host.album),original):widget.set_text(value)
@@ -292,12 +301,16 @@ def assert_lyrics_under_repaint(stage, host):
         assert host.sound.calls == sound_calls, 'Passive VU must not change volume'
         host.sound.muted=True
         settle(.85)
+        deadline=time.monotonic()+3
+        while stage.volume_meter.level>=.01 and time.monotonic()<deadline:settle(.03)
         assert stage.volume_meter.level < .01, 'Muted sound must fade to rest'
         host.sound.muted=False
         settle(.3)
         assert stage.volume_meter.level > .3
         GLib.source_remove(measure_timer);measure_timer=0
         settle(1.2)
+        deadline=time.monotonic()+3
+        while stage.volume_meter.level>=.01 and time.monotonic()<deadline:settle(.03)
         assert stage.volume_meter.level < .01, 'A stalled audio stream must fade to rest'
     finally:
         if busy:GLib.source_remove(busy)
@@ -344,6 +357,7 @@ def run():
             assert host.calls == [], 'Entering listening mode must not start or seek music'
             assert 'Afterglow' in set(labels(stage.window))
             assert stage.cover.get_pixbuf() is not None
+            wait_transition(stage)
             paints = [0]
             stage.window.get_frame_clock().connect(
                 'after-paint', lambda *_args: paints.__setitem__(0, paints[0]+1))
@@ -376,6 +390,8 @@ def run():
                               if isinstance(b,Gtk.Button) and b.get_label()==fullscreen.text('Soundstage · speakers / headphones','Звуковая сцена · колонки / наушники'))
             scene_button.clicked();settle(.85)
             assert host.settings.scene_popup.get_mapped()
+            deadline=time.monotonic()+3
+            while host.settings.scene_control.diagram.tick and time.monotonic()<deadline:settle(.03)
             assert not host.settings.scene_control.diagram.tick
             assert host.calls==before_settings,'Opening scene settings must not change playback'
             stage.hide();settle(.2)
@@ -474,10 +490,16 @@ def run():
             assert len(client.calls) == hidden_calls
             assert original == (host.window.get_position(), host.window.get_size(), host.compact,
                                 host.expanded, host.drawer.get_reveal_child())
-            stage.open();settle()
-            key(stage.window, 'F11');settle()
-            assert not stage.visible
-            assert not stage.reveal.active and stage.tick==0
+            # A completed entrance uses the animated return; an interrupted
+            # entrance cancels immediately. Neither depends on how much work
+            # a particular GTK runner drains during a fixed 200 ms sleep.
+            for during_entrance in (True,False):
+                stage.open()
+                if not during_entrance:wait_transition(stage)
+                assert key(stage.window,'F11'),'F11 must reach the fullscreen handler'
+                wait_transition(stage)
+                assert not stage.visible
+                assert not stage.reveal.active and stage.tick==0
             stage.open()
             stage.hide()
             assert not stage.reveal.active and stage.reveal.cover_pixels is None

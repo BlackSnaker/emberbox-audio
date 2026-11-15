@@ -60,7 +60,9 @@ CSS+=RECORD_CSS+FLOW_CSS
 def label(value,style,width=0):
     item=Gtk.Label(label=str(value));item.set_xalign(0)
     item.get_style_context().add_class(style)
-    if width:item.set_max_width_chars(width);item.set_ellipsize(Pango.EllipsizeMode.END)
+    if width:
+        item.set_max_width_chars(width);item.set_width_chars(1)
+        item.set_line_wrap(True);item.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
     return item
 
 

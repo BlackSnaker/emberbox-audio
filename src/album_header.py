@@ -79,11 +79,11 @@ button.album-artist-button:hover .album-header-artist { color: #f6d58c; }
 .ember-stage .album-medium button.album-play-button, .album-medium button.album-play-button,
 .ember-stage .album-medium button.album-queue-button, .album-medium button.album-queue-button { padding: 8px 17px; font-size: 12px; min-height: 18px; }
 .album-header.album-compact { border-radius: 19px; }
-.album-header.album-compact .album-header-content { padding: 8px 18px; }
+.album-header.album-compact .album-header-content { padding: 4px 18px; }
 .album-compact .album-cover-mount { padding: 5px; border-radius: 9px; }
 .album-compact .album-header-title { font-size: 28px; letter-spacing: -.7px; }
-.album-compact .album-header-title.album-title-long { font-size: 23px; }
-.album-compact .album-header-title.album-title-very-long { font-size: 21px; }
+.album-compact .album-header-title.album-title-long { font-size: 21px; }
+.album-compact .album-header-title.album-title-very-long { font-size: 18px; }
 .album-compact .album-header-artist { font-size: 14px; }
 .album-compact .album-header-kicker { font-size: 9px; letter-spacing: .4px; }
 .ember-stage .album-compact button.album-play-button, .album-compact button.album-play-button,
@@ -95,7 +95,7 @@ button.album-artist-button:hover .album-header-artist { color: #f6d58c; }
 def album_metrics(width, height):
     """Cover size, masthead height, and spacing for a viewport, not an image."""
     if height < 680 or width < 1000:
-        return 108, 140, 18, 2, 'album-compact'
+        return 108, 128, 18, 2, 'album-compact'
     if height < 900 or width < 1400:
         return 176, 242, 26, 6, 'album-medium'
     return 264, 324, 38, 8, ''
@@ -206,6 +206,7 @@ class AlbumHeader(Gtk.Overlay):
         self.release = dict(release)
         self.source_name, self.artwork, self.pool = source_name, artwork, pool
         self.closed = False
+        self.height_idle = 0
         self.pixels = None
         self._serial = 0
         self._rendered_key = None
@@ -239,14 +240,15 @@ class AlbumHeader(Gtk.Overlay):
         self.content.pack_start(self.names, True, True, 0)
         self._kicker = str(source_name).upper() + '  /  ' + release_type(release)
         self.kicker_label = _label(self._kicker, 'album-header-kicker')
-        self.kicker_label.set_ellipsize(Pango.EllipsizeMode.END)
+        self.kicker_label.set_line_wrap(True);self.kicker_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.kicker_label.set_width_chars(1)
         self.names.pack_start(self.kicker_label, False, False, 0)
         name = str(release.get('title') or release.get('name') or text('Album', 'Альбом'))
         self.title_label = _label(name, 'album-header-title')
         self.title_label.set_line_wrap(True)
         self.title_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
         self.title_label.set_lines(2)
-        self.title_label.set_ellipsize(Pango.EllipsizeMode.END)
+        self.title_label.set_width_chars(1)
         self.title_label.set_max_width_chars(34)
         self.title_label.set_hexpand(True)
         if len(name) > 44:
@@ -256,7 +258,8 @@ class AlbumHeader(Gtk.Overlay):
         self.names.pack_start(self.title_label, False, False, 0)
         artist_name = str(release.get('artist') or '')
         self.artist_label = _label(artist_name, 'album-header-artist')
-        self.artist_label.set_ellipsize(Pango.EllipsizeMode.END)
+        self.artist_label.set_line_wrap(True);self.artist_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.artist_label.set_width_chars(1)
         self.artist_label.set_max_width_chars(60)
         self.artist_button = None
         if artist and artist_name:
@@ -272,7 +275,8 @@ class AlbumHeader(Gtk.Overlay):
             self.names.pack_start(self.artist_label, False, False, 0)
         self.metadata = release_metadata(release)
         self.metadata_label = _label(self.metadata, 'album-header-metadata')
-        self.metadata_label.set_ellipsize(Pango.EllipsizeMode.END)
+        self.metadata_label.set_line_wrap(True);self.metadata_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        self.metadata_label.set_width_chars(1)
         self.metadata_label.set_no_show_all(True)
         self.names.pack_start(self.metadata_label, False, False, 0)
         self.controls = Gtk.Box(spacing=10)
@@ -323,7 +327,17 @@ class AlbumHeader(Gtk.Overlay):
         area.x = area.y = 0
         area.width = max(1, self.get_allocated_width())
         area.height = max(1, self.get_allocated_height())
+        if widget is self.content:
+            desired=max(self.header_height,self.content.get_preferred_height_for_width(area.width)[1])
+            self.requested_height=desired
+            if self.base.get_size_request()[1]!=desired and not self.height_idle:
+                self.height_idle=GLib.idle_add(self.fit_content,priority=GLib.PRIORITY_DEFAULT)
         return True
+
+    def fit_content(self):
+        self.height_idle=0
+        if not self.closed:self.base.set_size_request(-1,self.requested_height);self.queue_resize()
+        return False
 
     def resize(self, width, height):
         if self.closed:
@@ -432,6 +446,7 @@ class AlbumHeader(Gtk.Overlay):
         if self.closed:
             return
         self.closed = True
+        if self.height_idle:GLib.source_remove(self.height_idle);self.height_idle=0
         for future in self._pending.values():
             future.cancel()
         self._pending.clear()

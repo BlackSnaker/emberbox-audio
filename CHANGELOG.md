@@ -2,6 +2,13 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.11 — 2026-11-15
+
+- Centre the glass navigation in its own row across all themes. Artwork mode shares that centre; lyrics mode retains the same header position. Source controls and translated edition names no longer push it sideways.
+- Keep the selected theme through GPU transitions too: reuse the actual room backdrop instead of the procedural Classic underlay. Immediately retire the preceding theme's gradient while the new one is being baked; verify intermediate framebuffer colours and cached uploads.
+- Wrap complete track, artist, album and collection captions instead of ellipsizing them, including record lists, artist releases and DJ results. Album mastheads grow to their text; unusually long now-playing metadata scrolls within its own space while the transport remains anchored.
+- Check both immediate F11 cancellation and the completed animated return, waiting for the actual transition instead of a fixed delay. Bound the fixture's GTK event draining so continuous paints cannot starve its clock.
+
 ## 0.31.10 — 2026-11-15
 
 - Give the fullscreen navigation and upper controls clear bubble-glass materials: transparent centres, fine champagne/cyan/rose edges, soft reflections and finite hover/press transitions. Adapt the glass to Classic, Nocturne, Mirrorball and Winter Glow without live blur or continuous background animation.

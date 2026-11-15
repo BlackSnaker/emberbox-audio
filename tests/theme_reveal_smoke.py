@@ -65,6 +65,9 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected fixtu
                 assert stage.window.get_window()==native
                 assert (len(maps),len(unmaps))==before,'Lyrics remapped the player after a theme change'
                 assert stage.layout.get_mapped() and stage.background.get_mapped()
+                x,_=stage.glass_navigation.translate_coordinates(stage.window,0,0)
+                assert abs(x+stage.glass_navigation.get_allocated_width()/2-stage.window.get_size()[0]/2)<=1,'A theme or lyrics toggle shifted the centred navigation'
+                assert not stage.edition_label.get_layout().is_ellipsized(),'The theme caption must remain complete'
             stage.dismiss();transition()
             assert not stage.visible and not stage.window.get_mapped()
             stage.open();transition()

@@ -153,7 +153,7 @@ class ArtistView(Gtk.Box):
         foot=self.foot=Gtk.Box(spacing=12);foot.set_no_show_all(True)
         self.notice=label('','stage-library-note');self.notice.set_line_wrap(True);self.notice.set_lines(2)
         self.notice.show()
-        self.notice.set_ellipsize(Pango.EllipsizeMode.END);foot.pack_start(self.notice,True,True,0)
+        foot.pack_start(self.notice,True,True,0)
         self.accounts_button=button(text('Accounts','Аккаунты'),accounts)
         self.accounts_button.set_no_show_all(True);foot.pack_end(self.accounts_button,False,False,0)
         self.pack_end(foot,False,False,0)
@@ -413,6 +413,8 @@ class ArtistView(Gtk.Box):
             self.notes_revealer.connect('notify::child-revealed',lambda r,_p:r.hide() if not r.get_reveal_child() and not r.get_child_revealed() else None)
         if self.items:
             self.release_tracks=RecordList(album=True);context=tuple(self.songs())
+            self.release_tracks.header.set_no_show_all(self.height<680)
+            self.release_tracks.header.set_visible(self.height>=680)
             for i,item in enumerate(self.items):
                 play=lambda v=item:self.service.play_now(v,context=context)
                 row=RecordRow(item,i,self.source,self.artwork,play,None,
@@ -530,7 +532,7 @@ class ArtistView(Gtk.Box):
         panel.pack_start(label(title,'stage-artist-section',40),False,False,0)
         prose=paragraph(bio or text('Explore albums, singles and collaborations from the connected source.',
             'Открой альбомы, синглы и совместные записи в подключённом источнике.'),'stage-overview-story')
-        prose.set_lines(5);prose.set_ellipsize(Pango.EllipsizeMode.END);panel.pack_start(prose,True,True,0)
+        panel.pack_start(prose,True,True,0)
         action=button(text('Read their story','Читать об артисте')+'  ›',lambda:self.select('about'),'stage-artist-link')
         action.set_halign(Gtk.Align.START);panel.pack_start(action,False,False,0)
         return panel
@@ -582,7 +584,7 @@ class ArtistView(Gtk.Box):
         self.reader_focus.stop()
         self.reader=None
         self.release_hero=self.release_tracks=None;self.notes_revealer=None;self.playback_key=None
-        self.content.set_spacing(12 if self.release_ref else 18)
+        self.content.set_spacing((6 if self.height<680 else 12) if self.release_ref else 18)
         self.song_buttons=[];self.album_buttons=[];self.choice_buttons=[];self.filters={}
         self.overview_panels={};self.shelf_widgets=[]
         self.overview_columns=None;self.overview_fit_key=None
@@ -636,7 +638,10 @@ class ArtistView(Gtk.Box):
             retry=button(text('Continue loading the discography','Продолжить загрузку дискографии'),self.load_catalog)
             retry.set_sensitive(not self.busy);self.content.pack_start(retry,False,False,0)
         self.content.show_all()
-        if self.release_tracks:self.release_tracks.resize(self.list_width)
+        if self.release_tracks:
+            self.release_tracks.resize(self.list_width)
+            self.release_tracks.header.set_no_show_all(self.height<680)
+            self.release_tracks.header.set_visible(self.height>=680)
         self.update_playback()
         self.fit_overview()
         if animate:self.entrance.begin(self.hero_banner)
@@ -726,7 +731,7 @@ class ArtistView(Gtk.Box):
             names=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=1)
             play=button(value.get('title',''),lambda v=value:self.service.play_now(v,context=context),'stage-song')
             prime_on_hover(play,self.service,value)
-            play.get_child().set_xalign(0);play.get_child().set_ellipsize(Pango.EllipsizeMode.END);play.get_child().set_max_width_chars(65)
+            play.get_child().set_xalign(0);play.get_child().set_line_wrap(True);play.get_child().set_line_wrap_mode(Pango.WrapMode.WORD_CHAR);play.get_child().set_max_width_chars(65)
             play.get_style_context().add_class('stage-card-title');names.pack_start(play,False,False,0)
             if compact:play.get_style_context().add_class('stage-song-compact')
             else:names.pack_start(label(value.get('artist',''),'stage-card-subtitle',65),False,False,5)

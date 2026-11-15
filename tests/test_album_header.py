@@ -60,11 +60,14 @@ class AlbumFacts(unittest.TestCase):
     def test_cover_and_mount_fit_inside_every_requested_header(self):
         for width, height in ((1744, 1080), (1104, 720), (928, 600)):
             cover, header, *_ = album_metrics(width, height)
-            inset = 16 if height < 680 else 40
+            inset = 8 if height < 680 else 40
             mount = 12 if height < 680 else 16
             self.assertLessEqual(cover + mount + inset, header)
         self.assertGreaterEqual(album_metrics(1744, 1080)[0], 260)
-        self.assertEqual(album_metrics(928, 600)[:2], (108, 140))
+        cover,header,*_=album_metrics(928,600)
+        self.assertGreaterEqual(cover,100)
+        self.assertGreaterEqual(header,cover+16)
+        self.assertLessEqual(header,132,'Compact mastheads must leave room for the first recording')
 
 
 class AlbumAtmosphere(unittest.TestCase):

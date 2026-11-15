@@ -28,6 +28,8 @@ uniform sampler2D room;
 uniform int hasRoom;
 uniform sampler2D previous;
 uniform int hasPrevious;
+uniform sampler2D backdrop;
+uniform int hasBackdrop;
 uniform int coverOnly;
 uniform float cornerRadius;
 float ease(float t){t=clamp(t,0.0,1.0);return t*t*(3.0-2.0*t);}
@@ -51,6 +53,7 @@ void main(){
   bg=mix(bg,pigment,.58*max(0.0,1.0-length(a)));
   bg=mix(bg,vec3(.62,.45,.22),.16*max(0.0,1.0-length(b)));
   bg=mix(bg,vec3(.047,.071,.055),.65*uv.y);
+  if(hasBackdrop==1)bg=texture(backdrop,uv).rgb;
   if(hasPrevious==1){
     vec4 old=texture(previous,uv);
     vec4 next=texture(room,uv);
@@ -94,6 +97,7 @@ class RevealGL:
         if not allow_software and any(name in self.renderer.lower() for name in ('llvmpipe','softpipe','swrast','software rasterizer')):
             raise RuntimeError('Software OpenGL: use compositor fade')
         self.program=self.vao=self.texture=self.room_texture=self.previous_texture=0
+        self.backdrop_texture=0;self.backdrop_uploaded=None
         self.uploaded=self.room_uploaded=self.previous_uploaded=None
         self.texture_size=None
         u,i,f,p=C.c_uint,C.c_int,C.c_float,C.c_void_p
@@ -138,8 +142,9 @@ class RevealGL:
             self.call('GenTextures',1,C.byref(value));self.texture=value.value
             self.call('GenTextures',1,C.byref(value));self.room_texture=value.value
             self.call('GenTextures',1,C.byref(value));self.previous_texture=value.value
+            self.call('GenTextures',1,C.byref(value));self.backdrop_texture=value.value
             self.uniforms={name:self.call('GetUniformLocation',self.program,name.encode()) for name in
-                           ('viewport','shell','artwork','pigment','progress','hasCover','cover','room','hasRoom','previous','hasPrevious','coverOnly','cornerRadius')+tuple(uniforms)}
+                           ('viewport','shell','artwork','pigment','progress','hasCover','cover','room','hasRoom','previous','hasPrevious','backdrop','hasBackdrop','coverOnly','cornerRadius')+tuple(uniforms)}
         except Exception:
             self.close();raise
         finally:
@@ -176,7 +181,7 @@ class RevealGL:
         self.call('PixelStorei',0x0CF5,1);self.call('PixelStorei',0x0CF2,0)
         self.call('TexImage2D',0x0DE1,0,0x8058,w,h,0,0x80E1,0x1401,C.create_string_buffer(data))
 
-    def draw(self,width,height,shell,artwork,pigment,progress,pixels,room=None,previous=None):
+    def draw(self,width,height,shell,artwork,pigment,progress,pixels,room=None,previous=None,backdrop=None):
         self.call('Disable',0x0BE2)  # The shader outputs premultiplied alpha.
         self.call('UseProgram',self.program);self.call('BindVertexArray',self.vao)
         self.call('ActiveTexture',0x84C0);self.upload(pixels)
@@ -189,12 +194,23 @@ class RevealGL:
         self.call('ActiveTexture',0x84C2);self.call('BindTexture',0x0DE1,self.previous_texture)
         if previous is not None and previous is not self.previous_uploaded:
             self.previous_uploaded=previous;self.raw_texture(self.previous_texture,previous)
+        self.call('ActiveTexture',0x84C3);self.call('BindTexture',0x0DE1,self.backdrop_texture)
+        if backdrop is not None and backdrop is not self.backdrop_uploaded:
+            w,h,n=backdrop.get_width(),backdrop.get_height(),backdrop.get_n_channels()
+            raw=backdrop.get_pixels();stride=backdrop.get_rowstride()
+            data=raw if stride==w*n else b''.join(raw[y*stride:y*stride+w*n] for y in range(h))
+            for name,value in ((0x2801,0x2601),(0x2800,0x2601),(0x2802,0x812F),(0x2803,0x812F)):
+                self.call('TexParameteri',0x0DE1,name,value)
+            self.call('PixelStorei',0x0CF5,1);self.call('PixelStorei',0x0CF2,0)
+            self.call('TexImage2D',0x0DE1,0,0x8058,w,h,0,0x1908 if n==4 else 0x1907,0x1401,C.c_char_p(data))
+            self.backdrop_uploaded=backdrop
         for name,kind,values in (
                 ('coverOnly','1i',(0,)),
                 ('viewport','2f',(width,height)),('shell','4f',shell),('artwork','4f',artwork),
                 ('pigment','3f',pigment),('progress','1f',(progress,)),
                 ('hasCover','1i',(int(pixels is not None),)),('cover','1i',(0,)),
-                ('hasRoom','1i',(int(room is not None),)),('room','1i',(1,))):
+                ('hasRoom','1i',(int(room is not None),)),('room','1i',(1,)),
+                ('backdrop','1i',(3,)),('hasBackdrop','1i',(int(backdrop is not None),))):
             self.call('Uniform'+kind,self.uniforms[name],*values)
         for name,kind,values in (
                 ('previous','1i',(2,)),('hasPrevious','1i',(int(previous is not None),))):
@@ -221,7 +237,9 @@ class RevealGL:
         if self.texture:self.call('DeleteTextures',1,C.byref(C.c_uint(self.texture)))
         if self.room_texture:self.call('DeleteTextures',1,C.byref(C.c_uint(self.room_texture)))
         if self.previous_texture:self.call('DeleteTextures',1,C.byref(C.c_uint(self.previous_texture)))
+        if self.backdrop_texture:self.call('DeleteTextures',1,C.byref(C.c_uint(self.backdrop_texture)))
         if self.vao:self.call('DeleteVertexArrays',1,C.byref(C.c_uint(self.vao)))
         if self.program:self.call('DeleteProgram',self.program)
         self.program=self.vao=self.texture=self.room_texture=self.previous_texture=0
         self.uploaded=self.room_uploaded=self.previous_uploaded=None
+        self.backdrop_texture=0;self.backdrop_uploaded=None

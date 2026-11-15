@@ -27,7 +27,7 @@ class StageReveal(Gtk.Overlay):
         self.driver=None;self.error='';self.fallback=False
         self.fallback_tick=0
         self.pigment=(.26,.26,.24)
-        self.room=None
+        self.room=self.backdrop=None
         self.previous=None;self.cover_end=(0,0,1,1)
         self.reversing=False;self.morphing=False;self.completed=None
         from stage_reveal_paint import RevealPaint
@@ -95,6 +95,7 @@ class StageReveal(Gtk.Overlay):
         if getattr(getattr(host,'appearance',None),'dark',False):self.pigment=(.065,.069,.067)
         self.active=True;self.started=None;self.progress=1. if reverse else 0.;self.handed_off=False
         self.reversing=reverse
+        self.backdrop=self.background.get_pixbuf()
         self.fallback=self.driver is None or self.area.get_error() is not None
         if self.fallback:
             # Never fade the native window out: that looks like closing the
@@ -153,7 +154,7 @@ class StageReveal(Gtk.Overlay):
             artwork=interpolate(self.cover_origin,self.cover_end,smooth(t) if self.morphing else smooth(t/.7))
         try:
             self.driver.draw(width,height,shell,artwork,self.pigment,t,self.cover_pixels,self.room,
-                             self.previous)
+                             self.previous,self.backdrop)
         except (RuntimeError,OSError,AttributeError):
             completed=self.completed
             self.finish()
@@ -175,6 +176,7 @@ class StageReveal(Gtk.Overlay):
 
     def capture(self,allocation,without_art=False):
         if self.active:
+            self.backdrop=self.background.get_pixbuf()
             try:self.room=self.scene(allocation,without_art or self.fallback)
             except (OSError,AttributeError,RuntimeError):self.room=None
             self.cover_end=self.cover_rect()
@@ -210,7 +212,7 @@ class StageReveal(Gtk.Overlay):
         if self.fallback_tick:GLib.source_remove(self.fallback_tick);self.fallback_tick=0
         self.active=False;self.started=None;self.last_now=None;self.progress=1.;self.handed_off=False
         self.hide();self.area.hide();self.paint.area.hide();self.paint.clear()
-        self.cover_origin=None;self.cover_pixels=None;self.room=None;self.previous=None
+        self.cover_origin=None;self.cover_pixels=None;self.room=None;self.previous=None;self.backdrop=None
         self.reversing=self.morphing=False;self.completed=None
         for widget in (self.background,self.layout):
             widget.set_no_show_all(False);widget.set_opacity(1.);widget.show()
