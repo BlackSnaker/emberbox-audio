@@ -135,7 +135,7 @@ class GlassNavigation(Gtk.Overlay):
         self.callback=C.CFUNCTYPE(C.c_int,C.c_void_p,C.c_void_p,C.c_void_p)(self.draw_lens)
         self.handler=self.g.g_signal_connect_data(self.ptr,b'draw',self.callback,None,None,0)
         self.frame=self.canvas=self.cr=None;self.current=None;self.rect=self.start=self.end=None
-        self.neck=self.start_neck=0.
+        self.neck=self.start_neck=self.swell=self.start_swell=0.
         self.frame_size=None
         self.tick=0;self.progress=self.age=0.;self.last=None;self.active=self.closed=self.handed_off=False
         self.connect('unmap',lambda *_:self.finish())
@@ -151,11 +151,18 @@ class GlassNavigation(Gtk.Overlay):
         end=(*point,button.get_allocated_width(),button.get_allocated_height()) if point else None
         if not previous or not end or not self.get_mapped() or not self.get_settings().get_property('gtk-enable-animations'):
             self.finish();self.rect=end;return
+        if self.active:
+            # Reuse the same optical strip through a burst of clicks. Restoring
+            # live CSS and taking a fresh snapshot here flashes the checked pill.
+            self.start,self.end=self.rect,end
+            self.start_neck=self.neck;self.start_swell=self.swell
+            self.age=self.progress=0.
+            return
         point=previous.translate_coordinates(self.nav,0,0)
         start=self.rect if self.active else ((*point,previous.get_allocated_width(),previous.get_allocated_height()) if point else end)
         neck=self.neck if self.active else 0.
         self.finish();self.start,self.end,self.rect=start,end,start
-        self.neck=self.start_neck=neck
+        self.neck=self.start_neck=neck;self.swell=self.start_swell=0.
         allocation=self.nav.get_allocation().copy();area=allocation.copy();area.x=area.y=0
         if area.width>2048 or area.height>128:return
         self.nav.get_style_context().add_class('glass-flight')
@@ -185,11 +192,6 @@ class GlassNavigation(Gtk.Overlay):
         self.rect,self.neck=liquid_geometry(self.start,self.end,self.progress,self.start_neck)
         if self.progress>=1.:
             self.tick=0;self.finish();return False
-        if self.progress>=.90:
-            if not self.handed_off:
-                self.handed_off=True;self.nav.get_style_context().remove_class('glass-flight')
-            alpha=ease((self.progress-.90)/.10)
-            self.nav.set_opacity(alpha);self.layer.set_opacity(1.-alpha)
         self.layer.queue_draw();return True
 
     def draw_lens(self,_area,cr,_data):
@@ -200,7 +202,8 @@ class GlassNavigation(Gtk.Overlay):
         c.cairo_save(out)
         liquid_path(c,out,self.rect,self.neck);c.cairo_clip(out)
         c.cairo_translate(out,x+w/2,y+h/2)
-        swell=math.sin(math.pi*self.progress)
+        swell=self.start_swell*(1-ease(self.progress))+(1-self.start_swell)*math.sin(math.pi*self.progress)
+        self.swell=swell
         c.cairo_scale(out,1.+.035*swell,1.+.065*swell)
         c.cairo_translate(out,-x-w/2,-y-h/2)
         c.cairo_set_source_surface(out,self.frame,0,0)

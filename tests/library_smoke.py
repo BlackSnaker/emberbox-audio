@@ -105,6 +105,20 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
                 assert queue.title.get_text()==text(en,ru),(hour,queue.title.get_text())
             assert queue.rows==original_rows and plays==original_plays
         queue.render()
+        # A burst never composites a stack of half-faded pages. The indicator
+        # follows every click, while the content honours only the latest intent.
+        from unittest.mock import patch as watch
+        import page_transition
+        with watch.object(page_transition,'snapshot',wraps=page_transition.snapshot) as captures:
+            stage.show_page('playing')
+            assert stage.page_transition.active
+            for destination in ('library','queue','library','playing','queue'):
+                stage.show_page(destination)
+            assert stage.page=='playing' and stage.pending_page=='queue'
+            wait(lambda:stage.page=='queue' and not stage.page_transition.active and stage.pending_page is None)
+            assert captures.call_count<=4,'A click burst must not build a multi-page ghost image'
+            assert stage.pages.get_opacity()==1. and stage.page_transition.canvas is None
+        assert host.calls==[],'Visual navigation must not control playback'
         queue.rows[2][1].clicked()
         assert [i['id'] for _,i in service.book.upcoming('spotify')]==['A','C','B']
         queue.rows[2][3].clicked()

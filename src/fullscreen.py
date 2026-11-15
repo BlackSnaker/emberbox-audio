@@ -343,7 +343,8 @@ class FullscreenPlayer:
         self.karaoke=KaraokeView(self);self.pages.add_named(self.karaoke,'karaoke')
         self.mashups=MashupView(self);self.pages.add_named(self.mashups,'mashup')
         self.pages.set_visible_child_name('playing')
-        self.page_transition=PageTransition(self.pages);self.layout.pack_start(self.page_transition,True,True,0)
+        self.pending_page=None
+        self.page_transition=PageTransition(self.pages,self.page_finished);self.layout.pack_start(self.page_transition,True,True,0)
         footer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10);self.footer=footer
         self.playing_caption=label('','stage-library-note',True);self.playing_caption.set_width_chars(1)
         self.playing_caption.set_no_show_all(True);footer.pack_start(self.playing_caption,False,False,0)
@@ -405,7 +406,7 @@ class FullscreenPlayer:
         if self.closed:return
         if getattr(self,'applied_theme',None)==self.appearance.theme:return
         self.applied_theme=self.appearance.theme
-        self.page_transition.finish()
+        self.pending_page=None;self.page_transition.finish()
         self.glass_navigation.finish()
         edition=text('CHRISTMAS, IN YOUR RHYTHM','РОЖДЕСТВО В ТВОЁМ РИТМЕ') if self.appearance.christmas else (
             text('MIRRORBALL · THE LISTENING ROOM','ЗЕРКАЛЬНЫЙ ЗАЛ · КОМНАТА ПРОСЛУШИВАНИЯ') if self.appearance.mirrorball else
@@ -433,10 +434,20 @@ class FullscreenPlayer:
         count=len(self.music.book.upcoming(source))
         self.page_tabs['queue'].set_label(text('Queue','Очередь')+(f' · {count}' if count else ''))
         self.nav_sync=True
-        for key,b in self.page_tabs.items():b.set_active(key==self.page)
+        for key,b in self.page_tabs.items():b.set_active(key==(self.pending_page or self.page))
         self.nav_sync=False
 
+    def page_finished(self):
+        page=self.pending_page;self.pending_page=None
+        if page and self.visible and not self.closed:self.show_page(page)
+
     def show_page(self,page,force=False):
+        if not force and self.page_transition.active and page in self.page_tabs:
+            # Finish one clean dissolve, then honour the latest request. Never
+            # stack half-transparent copies of many pages during rapid clicks.
+            self.pending_page=page;self.music_changed()
+            self.glass_navigation.select(self.page_tabs[page]);return
+        self.pending_page=None
         if not force and (self.reveal.active or page==self.page):
             self.music_changed();return
         self.library_view.deactivate();self.queue_view.deactivate();self.artist_view.deactivate()
@@ -465,7 +476,9 @@ class FullscreenPlayer:
             self.page_transition.finish()
             self.glass_navigation.finish();self.glass_navigation.current=None
         if self.visible:self.update()
-        if page!='artist':self.page_transition.begin()
+        if page!='artist':
+            self.layout.get_preferred_size();self.layout.size_allocate(self.layout.get_allocation())
+            self.page_transition.begin()
 
     def open_artist(self,item=None):
         if self.reveal.active:return
@@ -550,7 +563,7 @@ class FullscreenPlayer:
         if getattr(self.host,'settings',None):self.host.settings.dismiss_for(self.window)
         self.cover_change.reset()
         self.cover_pause.reset()
-        self.page_transition.finish()
+        self.pending_page=None;self.page_transition.finish()
         self.glass_navigation.finish()
         self.reveal.finish()
         self.dismiss_pending=False
@@ -570,7 +583,7 @@ class FullscreenPlayer:
 
     def dismiss(self):
         if not self.visible:return
-        self.page_transition.finish()
+        self.pending_page=None;self.page_transition.finish()
         self.glass_navigation.finish()
         if getattr(self.host,'settings',None):self.host.settings.dismiss_for(self.window)
         self.artist_view.cancel_intro()
@@ -633,7 +646,7 @@ class FullscreenPlayer:
 
     def toggle_lyrics(self):
         if self.reveal.active:return
-        self.page_transition.finish()
+        self.pending_page=None;self.page_transition.finish()
         self.glass_navigation.finish()
         self.cover_pause.reset()
         target=not self.lyrics_visible
@@ -663,7 +676,7 @@ class FullscreenPlayer:
         if self.owns_music:self.music.close()
         self.lyrics.close()
         self.motion_lookup.close()
-        self.page_transition.close()
+        self.pending_page=None;self.page_transition.close()
         self.glass_navigation.close()
         self.artwork.pool.shutdown(wait=False,cancel_futures=True)
         Gtk.StyleContext.remove_provider_for_screen(self.window.get_screen(),self.provider)

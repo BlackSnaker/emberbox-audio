@@ -88,8 +88,9 @@ try:
         assert any(.1<p<.8 for p in samples) and refracted,'Moving glass must actually refract the cached letters'
         assert capture.call_count==1,'Do not recapture or rerasterise live GTK every frame'
         wait();assert window.get_size()==geometry
-        select(0);settle(.30);previous=lens.rect;neck=lens.neck
+        select(0);settle(.30);previous=lens.rect;neck=lens.neck;strip=lens.frame;captures=capture.call_count
         select(3);assert lens.active and lens.start==previous and lens.neck==neck,'An interrupted lens must retain its visible contour'
+        assert lens.frame==strip and capture.call_count==captures,'Rapid clicks must not restore live CSS or recapture the strip'
         rect,resumed_neck=glass.liquid_geometry(lens.start,lens.end,0,lens.start_neck)
         assert rect==previous and resumed_neck==neck
         wait()

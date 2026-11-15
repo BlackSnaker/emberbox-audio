@@ -2,6 +2,10 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.17 — 2026-11-15
+
+- Keep the same optical strip and liquid contour throughout rapid tab clicks. Coalesce content navigation to the last request after the current dissolve rather than layering half-faded pages; settle viewport geometry before capture. Reset the compositor before each blend so repeated frames cannot accumulate brightness. Verify stable repeated pixels, retained colour/opacity, bounded capture count and final navigation intent. Keep shared favourites populated when changing sources.
+
 ## 0.31.16 — 2026-11-15
 
 - Reuse unchanged collection and queue rows when reopening tabs or updating playback. Dissolve two retained viewport frames on the presentation clock instead of repainting both live GTK trees each frame; keep the selected backdrop visible, reuse the work surface, and release it after interruption, resize or completion. Verify pixels, real intermediate frames and row identity. Frame timing remains dependent on hardware and first-time page preparation.

@@ -35,9 +35,18 @@ try:
         w,h=fade.size;c=fade.c;c.cairo_surface_flush(fade.canvas)
         pixels=np.frombuffer(C.string_at(c.cairo_image_surface_get_data(fade.canvas),w*h*4),np.uint8).reshape(h,w,4)
         assert np.max(np.abs(pixels[12,12,:3].astype(int)-np.array((128,104,80))))<=2,'Premultiplied frames must actually mix at the midpoint'
+        # Repainting a held frame must be idempotent: no brightness/alpha
+        # accumulation over dozens of frames or when a transition is interrupted.
+        held=pixels.copy()
+        for _ in range(20):fade.layer.queue_draw();settle(.004)
+        c.cairo_surface_flush(fade.canvas)
+        assert np.array_equal(pixels,held),'Repeated paints accumulated light or transparency'
         assert capture.call_count==2,'Capture each page once, never on animation frames'
         prior=fade.canvas
         fade.prepare();assert fade.before and not fade.active and stack.get_opacity()==1.
+        c.cairo_surface_flush(fade.before)
+        retained=np.frombuffer(C.string_at(c.cairo_image_surface_get_data(fade.before),w*h*4),np.uint8).reshape(h,w,4)
+        assert np.max(np.abs(retained[12,12].astype(int)-np.array((128,104,80,255))))<=2, ('Retargeting must preserve visible colour and opacity',retained[12,12].tolist())
         stack.set_visible_child_name('old');fade.begin()
         deadline=time.monotonic()+2;frames=[]
         while fade.active and time.monotonic()<deadline:

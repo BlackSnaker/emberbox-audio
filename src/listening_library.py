@@ -220,10 +220,11 @@ class LibraryView(Gtk.Box):
     def load(self,refresh=False,append=False):
         if not self.active:return
         if self.category=='favorites':
-            if self.rendered_key==self.key() and self.favorite_revision==self.service.favorites.revision:
+            values=list(self.service.favorites.items.values())[::-1]
+            if self.rendered_key==self.key() and self.favorite_revision==self.service.favorites.revision and self.items==values:
                 self.favorites_changed();return
             self.request+=1;self.service.cancel_browse();self.busy=False;self.spinner.stop()
-            self.notice.set_text('');self.connect_button.hide();self.items=list(self.service.favorites.items.values())[::-1]
+            self.notice.set_text('');self.connect_button.hide();self.items=values
             self.next_offset=None;self.favorite_revision=self.service.favorites.revision;self.render();return
         key=self.key()
         if self.category=='search' and not key[2] and not self.selected:
