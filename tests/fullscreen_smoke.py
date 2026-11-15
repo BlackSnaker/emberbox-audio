@@ -230,6 +230,10 @@ def assert_long_titles_fit(stage,host):
                     if title==titles[-1]:
                         scroll=stage.metadata_scroll.get_vadjustment()
                         assert scroll.get_upper()>scroll.get_page_size(),'Oversize metadata must remain readable by scrolling'
+                    if width>=1280:
+                        previous=rectangle(stage.previous_button);following=rectangle(stage.next_button)
+                        transport_centre=(previous[0]+following[0]+following[2])/2
+                        assert abs(transport_centre-width/2)<=1,('Transport must align beneath the artwork',width,transport_centre)
                     nav=rectangle(stage.glass_navigation)
                     assert abs(nav[0]+nav[2]/2-width/2)<=1,'Navigation drifted away from the window centre'
                     if width>=1280:

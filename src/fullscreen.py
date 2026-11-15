@@ -367,7 +367,9 @@ class FullscreenPlayer:
         self.play_button=self.button('Ⅱ',lambda:self.action('toggle'),'stage-transport','stage-play')
         self.next_button=self.button('⏭',lambda:self.action('next'),'stage-transport')
         for b in (self.previous_button,self.play_button,self.next_button):transport.pack_start(b,False,False,0)
-        console.pack_start(transport,False,False,0)
+        # Align playback controls with the artwork, independently of the
+        # different natural widths of the spectrum and volume controls.
+        console.set_center_widget(transport)
         volume_box=Gtk.Box(spacing=8);volume_box.set_hexpand(True);volume_box.set_halign(Gtk.Align.END)
         volume_box.set_valign(Gtk.Align.CENTER)
         self.mute=MuteToggle(self.toggle_mute);self.mute.set_compact(True)

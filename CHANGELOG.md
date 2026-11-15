@@ -2,6 +2,10 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.14 — 2026-11-15
+
+- Centre the bottom playback controls beneath the artwork, independently of the different widths of the spectrum and volume controls.
+
 ## 0.31.13 — 2026-11-15
 
 - Keep the complete transport and karaoke controls inside 1024×600: condense short-screen chrome and spacing while retaining full-size knobs and readable captions.
