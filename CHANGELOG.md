@@ -2,6 +2,11 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.10 — 2026-11-15
+
+- Give the fullscreen navigation and upper controls clear bubble-glass materials: transparent centres, fine champagne/cyan/rose edges, soft reflections and finite hover/press transitions. Adapt the glass to Classic, Nocturne, Mirrorball and Winter Glow without live blur or continuous background animation.
+- Let the selected tab flow between positions as a soft lens, refracting the letters beneath it. Capture the small navigation strip once per switch, resample it locally and release it after the transition. Rapid selections retarget from the current position; reduced motion, theme changes, resize and hiding settle it safely.
+
 ## 0.31.9 — 2026-11-15
 
 - Keep the player visible through fullscreen and lyrics transitions after changing themes. Replace the compatibility renderer's whole-window fade with two retained scenes and smoothly moving artwork over the current theme's background.

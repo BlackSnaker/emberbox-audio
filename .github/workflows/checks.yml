@@ -141,6 +141,7 @@ jobs:
           EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/mashup_smoke.py
       - name: Fullscreen shader and offscreen room
         run: |
+          GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/header_glass_smoke.py
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1280x720x24' /usr/bin/python3 tests/reveal_smoke.py
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1280x720x24' /usr/bin/python3 tests/theme_reveal_smoke.py
           EMBERBOX_REVEAL_TEST_GL=1 GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1280x720x24' /usr/bin/python3 tests/theme_reveal_smoke.py

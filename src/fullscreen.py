@@ -28,6 +28,7 @@ from cover_change import CoverChange
 from cover_pause import CoverPause
 from favorite_button import FavoriteButton,CSS as FAVORITE_CSS
 from mashup_view import MashupView,CSS as MASHUP_CSS
+from header_glass import GlassNavigation,CSS as GLASS_CSS
 
 
 CSS = b'''
@@ -197,6 +198,8 @@ class FullscreenPlayer:
         provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS+KARAOKE_CSS+ARTIST_CSS+DJ_CSS+FLOW_CSS+FAVORITE_CSS+MASHUP_CSS)
         Gtk.StyleContext.add_provider_for_screen(self.window.get_screen(),provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+5)
         self.provider=provider
+        self.glass_provider=Gtk.CssProvider();self.glass_provider.load_from_data(GLASS_CSS)
+        Gtk.StyleContext.add_provider_for_screen(self.window.get_screen(),self.glass_provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+20)
         overlay=Gtk.Overlay();overlay.add(Gtk.Box());self.window.add(overlay)
         self.background=Gtk.Image();self.background.set_halign(Gtk.Align.FILL);self.background.set_valign(Gtk.Align.FILL)
         overlay.add_overlay(self.background);overlay.set_overlay_pass_through(self.background,True)
@@ -204,6 +207,7 @@ class FullscreenPlayer:
         self.layout.set_halign(Gtk.Align.FILL);self.layout.set_valign(Gtk.Align.FILL)
         overlay.add_overlay(self.layout)
         header=Gtk.Box(spacing=8);self.header=header
+        header.get_style_context().add_class('stage-header-glass')
         wordmark=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3)
         wordmark.pack_start(label('EMBER','stage-brand'),False,False,0)
         self.edition_label=label(text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'),'stage-overline')
@@ -217,7 +221,8 @@ class FullscreenPlayer:
             b=Gtk.ToggleButton(label=name);b.get_style_context().add_class('stage-tab');b.set_has_tooltip(False)
             b.connect('clicked',lambda _b,k=key:self.show_page(k) if not self.nav_sync else None)
             navigation.pack_start(b,False,False,0);self.page_tabs[key]=b
-        header.pack_start(navigation,True,True,0)
+        self.glass_navigation=GlassNavigation(navigation);self.glass_navigation.set_halign(Gtk.Align.CENTER)
+        header.pack_start(self.glass_navigation,True,True,0)
         self.lyrics_button=self.button(text('Lyrics','Текст песни'),self.toggle_lyrics,'stage-quiet')
         self.lyrics_button.set_valign(Gtk.Align.CENTER)
         header.pack_start(self.lyrics_button,False,False,0)
@@ -378,6 +383,7 @@ class FullscreenPlayer:
         if self.closed:return
         if getattr(self,'applied_theme',None)==self.appearance.theme:return
         self.applied_theme=self.appearance.theme
+        self.glass_navigation.finish()
         edition=text('CHRISTMAS, IN YOUR RHYTHM','РОЖДЕСТВО В ТВОЁМ РИТМЕ') if self.appearance.christmas else (
             text('MIRRORBALL · THE LISTENING ROOM','ЗЕРКАЛЬНЫЙ ЗАЛ · КОМНАТА ПРОСЛУШИВАНИЯ') if self.appearance.mirrorball else
             text('NOCTURNE · THE LISTENING ROOM','ТЁПЛАЯ НОЧЬ · КОМНАТА ПРОСЛУШИВАНИЯ') if self.appearance.nocturne else
@@ -424,6 +430,9 @@ class FullscreenPlayer:
             self.lyrics.set_track('','');self.motion.set_playing(False)
         if page=='karaoke':self.motion.set_playing(False)
         self.music_changed()
+        if page in self.page_tabs:self.glass_navigation.select(self.page_tabs[page])
+        else:
+            self.glass_navigation.finish();self.glass_navigation.current=None
         if self.visible:self.update()
 
     def open_artist(self,item=None):
@@ -509,6 +518,7 @@ class FullscreenPlayer:
         if getattr(self.host,'settings',None):self.host.settings.dismiss_for(self.window)
         self.cover_change.reset()
         self.cover_pause.reset()
+        self.glass_navigation.finish()
         self.reveal.finish()
         self.dismiss_pending=False
         self.visible=False
@@ -527,6 +537,7 @@ class FullscreenPlayer:
 
     def dismiss(self):
         if not self.visible:return
+        self.glass_navigation.finish()
         if getattr(self.host,'settings',None):self.host.settings.dismiss_for(self.window)
         self.artist_view.cancel_intro()
         if self.reveal.active:self.hide();return
@@ -588,6 +599,7 @@ class FullscreenPlayer:
 
     def toggle_lyrics(self):
         if self.reveal.active:return
+        self.glass_navigation.finish()
         self.cover_pause.reset()
         target=not self.lyrics_visible
         if target:
@@ -616,8 +628,10 @@ class FullscreenPlayer:
         if self.owns_music:self.music.close()
         self.lyrics.close()
         self.motion_lookup.close()
+        self.glass_navigation.close()
         self.artwork.pool.shutdown(wait=False,cancel_futures=True)
         Gtk.StyleContext.remove_provider_for_screen(self.window.get_screen(),self.provider)
+        Gtk.StyleContext.remove_provider_for_screen(self.window.get_screen(),self.glass_provider)
         self.window.destroy()
 
     def on_size(self,_window,allocation):
