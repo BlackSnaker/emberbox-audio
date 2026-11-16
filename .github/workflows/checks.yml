@@ -25,7 +25,18 @@ jobs:
       - name: Generate the native playback host and immersive launcher
         run: npm --prefix quest/android run generate -- https://blacksnaker.github.io/ "$RUNNER_TEMP/ember-quest-android"
       - name: Android SDK for the Meta immersive package
-        run: sdkmanager 'platforms;android-32' 'build-tools;35.0.0' > "$RUNNER_TEMP/ember-quest-sdk.log"
+        run: |
+          ember_android_sdk="${ANDROID_HOME:-$RUNNER_TEMP/ember-quest-sdk}"
+          ember_sdkmanager="$ember_android_sdk/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$ember_sdkmanager" ]; then
+            mkdir -p "$RUNNER_TEMP/ember-quest-tools" "$ember_android_sdk/cmdline-tools/latest"
+            curl --fail --location --retry 3 https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -o "$RUNNER_TEMP/ember-quest-tools.zip"
+            unzip -q "$RUNNER_TEMP/ember-quest-tools.zip" -d "$RUNNER_TEMP/ember-quest-tools"
+            cp -a "$RUNNER_TEMP/ember-quest-tools/cmdline-tools/." "$ember_android_sdk/cmdline-tools/latest/"
+          fi
+          printf 'ANDROID_HOME=%s\n' "$ember_android_sdk" >> "$GITHUB_ENV"
+          (yes || true) | "$ember_sdkmanager" --sdk_root="$ember_android_sdk" --licenses > "$RUNNER_TEMP/ember-quest-sdk-licenses.log"
+          "$ember_sdkmanager" --sdk_root="$ember_android_sdk" 'platforms;android-32' 'build-tools;35.0.0' > "$RUNNER_TEMP/ember-quest-sdk.log"
       - name: Compile the unsigned APK without publishing signing material
         run: bash "$RUNNER_TEMP/ember-quest-android/gradlew" -p "$RUNNER_TEMP/ember-quest-android" --no-daemon --max-workers=2 assembleRelease
       - uses: actions/upload-artifact@v7
