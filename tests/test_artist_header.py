@@ -95,12 +95,15 @@ class ArtistPortraits(unittest.TestCase):
         for width,height in ((1744,360),(928,212)):
             with self.subTest(banner=(width,height)):
                 data,atmosphere=compose(pixels,width,height,with_atmosphere=True)
-                frame=np.asarray(Image.frombytes('RGBA',(width,height),data))
+                settled=Image.frombytes('RGBA',(width,height),data)
+                frame=np.asarray(Image.frombytes('RGBA',(width,height),settled.tobytes('raw','BGRa'),'raw','BGRA'))
                 aw,ah,ambient=atmosphere
                 self.assertEqual((aw,ah),(width,height))
                 field=np.asarray(Image.frombytes('RGBA',(width,height),ambient,'raw','BGRA'))
                 x,y,w,h=portrait_rect(source.size,width,height)
                 outside=np.ones((height,width),dtype=bool);outside[y:y+h,x:x+w]=False
+                self.assertTrue(np.all(field[:,:,:3]<=field[:,:,3,None]),
+                    'The GPU atmosphere must be premultiplied, including its transparent corners')
                 self.assertTrue(np.array_equal(frame[outside],field[outside]),
                     'The glass mount and outer edge must stay unchanged through artist entrance/handoff')
 

@@ -125,7 +125,9 @@ def compose(pixels,width,height,with_atmosphere=False):
     # artist entrance, so its glass mount cannot pop in after the animation.
     mask=Image.new('L',(width,height));ImageDraw.Draw(mask).rounded_rectangle((0,0,width-1,height-1),26,fill=255)
     base.putalpha(mask)
-    atmosphere=(width,height,base.tobytes('raw','BGRA')) if with_atmosphere else None
+    # RevealGL consumes Cairo-style premultiplied BGRA. Transparent rounded
+    # corners must not retain RGB that could light up the shader's edge mask.
+    atmosphere=(width,height,base.tobytes('raw','BGRa')) if with_atmosphere else None
     # All four edges and every source pixel of the contained photograph stay
     # clear: the mount and lighting never cross into this rectangle.
     x,y,pw,ph=rect
