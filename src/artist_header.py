@@ -24,7 +24,7 @@ def atmospheric_backdrop(photo,width,height):
     backdrop=Image.new('RGBA',photo.size,(35,41,31,255));backdrop.alpha_composite(photo)
     scale=min(1,960/width);small=(max(1,round(width*scale)),max(1,round(height*scale)))
     field=ImageOps.fit(backdrop.convert('RGB'),small,Image.Resampling.LANCZOS,centering=(.5,.4))
-    field=ImageEnhance.Color(field).enhance(.72)
+    field=ImageEnhance.Color(field).enhance(1.08)
     # Two optical depths keep the photograph's light and colour without a
     # distracting second face. Broad highlights illuminate the matte surface.
     near=field.filter(ImageFilter.GaussianBlur(max(12,height*.055)*scale))
@@ -34,20 +34,26 @@ def atmospheric_backdrop(photo,width,height):
     yy,xx=np.mgrid[0:small[1],0:small[0]].astype(np.float32)
     xx/=max(1,small[0]-1);yy/=max(1,small[1]-1)
     reading_edge=(width-portrait_slot(width,height))/width
-    reveal=np.clip((xx-reading_edge+.19)/.50,0,1);reveal=reveal*reveal*(3-2*reveal)
-    exposure=(.14+.46*reveal)*(1-.20*(2*yy-1)**2-.08*(2*xx-1)**2)
+    reveal=np.clip((xx-reading_edge+.10)/.38,0,1);reveal=reveal*reveal*(3-2*reveal)
+    exposure=(.18+.60*reveal)*(1-.20*(2*yy-1)**2-.08*(2*xx-1)**2)
     ink=np.array((16,23,21),dtype=np.float32)
     rgb=ink+(rgb-ink)*exposure[:,:,None]
     palette=np.asarray(backdrop.convert('RGB').resize((1,1),Image.Resampling.BOX),dtype=np.float32)[0,0]
     reflected=palette/max(1,float(palette.max()))*155+np.array((45,27,4))
-    reflected=reflected*.6+np.array((199,155,91))*.4
+    reflected=reflected*.88+np.array((199,155,91))*.12
     luminance=np.asarray(far.convert('L'),dtype=np.float32)/255
-    key=np.exp(-.5*(((xx-.70)/.27)**2+((yy-.12)/.86)**2))
-    key*=.16+.09*luminance
-    bounce=np.exp(-.5*(((xx-.18)/.38)**2+((yy-1.12)/.62)**2))*.045
+    key=np.exp(-.5*(((xx-.66)/.34)**2+((yy-.12)/.86)**2))
+    key*=.18+.10*luminance
+    bounce=np.exp(-.5*(((xx-.18)/.38)**2+((yy-1.12)/.78)**2))*.055
     # Screen light into the photo rather than laying a flat brown tint over it.
     rgb+=(255-rgb)*(reflected[None,None,:]/255)*key[:,:,None]
-    rgb+=(255-rgb)*(np.array((111,134,107))/255)*bounce[:,:,None]
+    rgb+=(255-rgb)*(reflected/255)*bounce[:,:,None]
+    # Keep strong chroma while limiting only bright light beneath the text.
+    reading=np.clip((xx-reading_edge+.02)/.15,0,1)
+    reading=reading*reading*(3-2*reading)
+    luminance=rgb@np.array((.2126,.7152,.0722))
+    limit=105+150*reading
+    rgb*=np.minimum(1.,limit/np.maximum(luminance,1.))[:,:,None]
     base=Image.fromarray(np.clip(rgb,0,255).astype('uint8'),'RGB').resize((width,height),Image.Resampling.BICUBIC)
     # Fixed neutral grain prevents gradient banding; it never touches the
     # clear portrait and cannot shimmer when a cached banner is reapplied.

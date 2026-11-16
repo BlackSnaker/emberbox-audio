@@ -80,8 +80,8 @@ class ArtistPortraits(unittest.TestCase):
         # Read outside the clear photograph, where a fixed bronze wash would
         # otherwise make unrelated artists look identical.
         red,blue=[rgb[24:-24,width//2:width*2//3,:3].mean(axis=(0,1)) for rgb in fields]
-        self.assertGreater(red[0]-red[2],25)
-        self.assertGreater(blue[2]-blue[0],25)
+        self.assertGreater(red[0]-red[2],60)
+        self.assertGreater(blue[2]-blue[0],60)
         mono=Image.linear_gradient('L').rotate(90).resize((640,640)).convert('RGBA')
         result=np.asarray(atmospheric_backdrop(mono,width,height))
         self.assertGreater(float(result[24:-24,width//2:width*2//3,:3].std()),7,
