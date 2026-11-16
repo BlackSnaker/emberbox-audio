@@ -133,7 +133,7 @@ class ArtistView(Gtk.Box):
         self.release_hero=self.release_tracks=None;self.playback_key=None;self.list_width=1744
         self.notes_revealer=None;self.notes_open=False;self.album_intro_pending=False
         self.album_opening=AlbumOpening(self)
-        toolbar=Gtk.Box(spacing=12)
+        toolbar=Gtk.Box(spacing=12);toolbar.get_style_context().add_class('artist-glass-toolbar')
         self.back_button=button('‹ '+text('Back','Назад'),self.back)
         toolbar.pack_start(self.back_button,False,False,0)
         self.crumb=label(text('THE ARTIST ROOM','КОМНАТА АРТИСТА'),'stage-artist-kicker')
@@ -142,7 +142,7 @@ class ArtistView(Gtk.Box):
         self.refresh_button=button('↻',self.refresh,accessible=text('Refresh artist','Обновить артиста'))
         toolbar.pack_end(self.refresh_button,False,False,0)
         self.pack_start(toolbar,False,False,0)
-        self.filter_bar=Gtk.Box(spacing=3);self.filter_bar.get_style_context().add_class('stage-nav')
+        self.filter_bar=Gtk.Box(spacing=3);self.filter_bar.get_style_context().add_class('stage-nav');self.filter_bar.get_style_context().add_class('artist-glass-selector')
         self.filter_bar.set_halign(Gtk.Align.START);self.filter_bar.set_no_show_all(True)
         toolbar.pack_start(self.filter_bar,False,False,0)
         self.content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=18)
@@ -462,6 +462,7 @@ class ArtistView(Gtk.Box):
             names.pack_start(chips,False,False,0)
         controls=Gtk.Box(spacing=9);songs=self.songs()
         self.play_all_button=button('▶ '+text('Listen','Слушать'),lambda:self.service.play_all(self.songs()),'stage-accent')
+        if not release:self.play_all_button.get_style_context().add_class('artist-play-key')
         self.add_all_button=button('+ '+text('Queue','В очередь'),lambda:self.add(self.songs()))
         self.play_all_button.set_sensitive(bool(songs));self.add_all_button.set_sensitive(bool(songs))
         controls.pack_start(self.play_all_button,False,False,0);controls.pack_start(self.add_all_button,False,False,0)
@@ -577,6 +578,8 @@ class ArtistView(Gtk.Box):
     def render(self):
         if self.entrance.busy:
             self.render_queued=True;return
+        style=self.get_style_context()
+        style.remove_class('artist-glass-room') if self.release_ref else style.add_class('artist-glass-room')
         animate=False
         if self.intro_pending and self.profile and not self.release_ref:
             self.intro_pending=False;animate=self.entrance.hold_loading()

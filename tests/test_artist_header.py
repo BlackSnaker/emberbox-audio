@@ -87,6 +87,23 @@ class ArtistPortraits(unittest.TestCase):
         self.assertGreater(float(result[24:-24,width//2:width*2//3,:3].std()),7,
             'Monochrome photos still need visible light and shadow')
 
+    def test_artist_entrance_and_settled_banner_share_identical_glass_mount_pixels(self):
+        # ArtistReveal uses the separate atmosphere texture before handing off
+        # to the finished banner. Their mount/edge must not pop or brighten.
+        source=Image.linear_gradient('L').resize((320,480)).convert('RGB')
+        pixels=(source.tobytes(),source.size,False,source.width*3)
+        for width,height in ((1744,360),(928,212)):
+            with self.subTest(banner=(width,height)):
+                data,atmosphere=compose(pixels,width,height,with_atmosphere=True)
+                frame=np.asarray(Image.frombytes('RGBA',(width,height),data))
+                aw,ah,ambient=atmosphere
+                self.assertEqual((aw,ah),(width,height))
+                field=np.asarray(Image.frombytes('RGBA',(width,height),ambient,'raw','BGRA'))
+                x,y,w,h=portrait_rect(source.size,width,height)
+                outside=np.ones((height,width),dtype=bool);outside[y:y+h,x:x+w]=False
+                self.assertTrue(np.array_equal(frame[outside],field[outside]),
+                    'The glass mount and outer edge must stay unchanged through artist entrance/handoff')
+
     def test_cached_composition_has_static_grain_and_untinted_clear_photo(self):
         source=Image.linear_gradient('L').resize((480,640)).convert('RGB')
         pixels=(source.tobytes(),source.size,False,source.width*3)

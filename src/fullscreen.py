@@ -21,6 +21,7 @@ from quality_badge import QualityBadge,CSS as QUALITY_CSS
 from karaoke import KaraokeView,CSS as KARAOKE_CSS
 from artist_catalog import artist_ref,album_ref
 from artist_view import ArtistView,CSS as ARTIST_CSS
+from artist_glass import CSS as ARTIST_GLASS_CSS
 from dj_service import DJService
 from dj_view import DJView,CSS as DJ_CSS
 from flow_control import FlowControl,CSS as FLOW_CSS
@@ -200,7 +201,7 @@ class FullscreenPlayer:
         provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS+KARAOKE_CSS+ARTIST_CSS+DJ_CSS+FLOW_CSS+FAVORITE_CSS+MASHUP_CSS)
         Gtk.StyleContext.add_provider_for_screen(self.window.get_screen(),provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+5)
         self.provider=provider
-        self.glass_provider=Gtk.CssProvider();self.glass_provider.load_from_data(GLASS_CSS)
+        self.glass_provider=Gtk.CssProvider();self.glass_provider.load_from_data(GLASS_CSS+ARTIST_GLASS_CSS)
         Gtk.StyleContext.add_provider_for_screen(self.window.get_screen(),self.glass_provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+20)
         overlay=Gtk.Overlay();overlay.add(Gtk.Box());self.window.add(overlay)
         self.background=Gtk.Image();self.background.set_halign(Gtk.Align.FILL);self.background.set_valign(Gtk.Align.FILL)

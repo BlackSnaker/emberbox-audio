@@ -6,6 +6,12 @@
 
 Grunesphism is the name we use for Emberbox’s visual language. It combines a Gruvbox palette, restrained neumorphism and details borrowed from small hi-fi instruments. It is a project design vocabulary, not a claim of a separate established design movement.
 
+## Artist-room Liquid Glass
+
+The artist room combines clear, low-opacity glass with the shallow depth of an audio component. The portrait sits in a narrow smoked-glass surround: a photo-lit field is displaced slightly beneath its rim, a champagne/cyan highlight describes thickness, and a close contact seam seats it in the housing. The photograph itself stays complete and untinted. The same surround is included in both entrance layers and the settled banner.
+
+The Listen key uses a warm machined surface; secondary controls, artist filters and discovery panels use thin translucent rims. Track actions and genre plaques sit in small recesses. Hover and press change light and shadow without changing control dimensions. These materials are confined to the artist room and respect all four themes. The portrait field is baked in the existing worker/cache; panel reflections are static CSS with finite interaction transitions. No permanent blur or new animation loop is added.
+
 ## Surfaces and colour
 
 **Nocturne / «Тёплая ночь»** uses neutral charcoal materials: a near-black

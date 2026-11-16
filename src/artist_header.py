@@ -57,30 +57,79 @@ def atmospheric_backdrop(photo,width,height):
     return base
 
 
+def glass_mount(base,rect):
+    """A shallow, photo-lit glass mount; every highlight stays outside the photo.
+
+    Its refracted field and edge normals are baked once in the worker, not
+    evaluated on GTK's frame clock. The same mount is retained by the entrance.
+    """
+    x,y,pw,ph=rect;outset=8;radius=16
+    bounds=(x-outset,y-outset,x+pw+outset-1,y+ph+outset-1)
+    fw,fh=pw+2*outset,ph+2*outset
+    # Contact shadow and a dark seating seam give the glass a place in the
+    # housing without a broad floating drop shadow or decorative metal corners.
+    shadow=Image.new('RGBA',base.size)
+    ImageDraw.Draw(shadow).rounded_rectangle(tuple(v+(2 if i%2==0 else 3) for i,v in enumerate(bounds)),
+                                           radius,fill=(3,8,10,118))
+    base=Image.alpha_composite(base,shadow.filter(ImageFilter.GaussianBlur(6)))
+    yy,xx=np.mgrid[0:fh,0:fw].astype(np.float32);xx+=.5;yy+=.5
+    qx=np.abs(xx-fw/2)-(fw/2-radius);qy=np.abs(yy-fh/2)-(fh/2-radius)
+    ox=np.maximum(qx,0);oy=np.maximum(qy,0);length=np.maximum(np.hypot(ox,oy),.0001)
+    distance=np.hypot(ox,oy)+np.minimum(np.maximum(qx,qy),0)-radius
+    nx=np.where((ox+oy)>0,ox/length,np.where(qx>qy,1.,0.))*np.sign(xx-fw/2)
+    ny=np.where((ox+oy)>0,oy/length,np.where(qy>=qx,1.,0.))*np.sign(yy-fh/2)
+    key=np.clip(-.56*nx-.74*ny,0,1);bounce=np.clip(.70*nx+.55*ny,0,1)
+    depth=-distance
+    # A tiny spatial displacement in the atmospheric field reads as clear
+    # thickness. Low neutral smoke leaves the source light visible beneath it.
+    reflected=base.crop((bounds[0]-2,bounds[1]-1,bounds[2]-1,bounds[3])).convert('RGB')
+    rgb=np.asarray(reflected,dtype=np.float32)*.73+np.array((12.,15.,17.))
+    crown=np.exp(-.5*((depth-1.05)/.78)**2)
+    shoulder=np.exp(-.5*((depth-2.8)/1.35)**2)
+    groove=np.exp(-.5*((depth-6.4)/.85)**2)
+    rgb+=np.array((255.,231.,190.))*((.09+.30*key)*crown)[:,:,None]
+    rgb+=np.array((166.,215.,234.))*(.17*bounce*crown)[:,:,None]
+    rgb+=np.array((230.,230.,213.))*(.045*key*shoulder)[:,:,None]
+    rgb*=1-(.23*groove)[:,:,None]
+    alpha=np.clip(.5-distance,0,1)
+    pixels=np.empty((fh,fw,4),dtype=np.uint8)
+    pixels[:,:,:3]=np.clip(rgb,0,255).astype('uint8');pixels[:,:,3]=(alpha*255+.5).astype('uint8')
+    base.alpha_composite(Image.fromarray(pixels,'RGBA'),bounds[:2])
+    seam=Image.new('RGBA',base.size);edge=ImageDraw.Draw(seam)
+    # These two hairlines are behind the photograph's actual boundary.
+    edge.rectangle((x-2,y-2,x+pw+1,y+ph+1),outline=(184,197,190,34),width=1)
+    edge.rectangle((x-1,y-1,x+pw,y+ph),outline=(5,10,12,210),width=1)
+    return Image.alpha_composite(base,seam)
+
+
+def glass_edge(base):
+    """A restrained meniscus around the masthead, shared with its cached layer."""
+    width,height=base.size
+    edge=Image.new('RGBA',base.size);draw=ImageDraw.Draw(edge)
+    draw.rounded_rectangle((0,0,width-1,height-1),26,outline=(211,225,226,30),width=1)
+    draw.rounded_rectangle((1,1,width-2,height-2),25,outline=(4,10,13,62),width=1)
+    # Short soft edge reflections suggest a continuous polished surface rather
+    # than a white rectangular border. The central body remains transparent.
+    draw.line((27,1,max(28,round(width*.57)),1),fill=(247,229,191,38),width=1)
+    draw.line((1,27,1,max(28,round(height*.53))),fill=(181,220,232,27),width=1)
+    draw.line((round(width*.64),height-2,width-28,height-2),fill=(170,188,220,19),width=1)
+    return Image.alpha_composite(base,edge)
+
+
 def compose(pixels,width,height,with_atmosphere=False):
     raw,size,alpha,stride=pixels
     photo=Image.frombytes('RGBA' if alpha else 'RGB',size,raw,'raw','RGBA' if alpha else 'RGB',stride).convert('RGBA')
-    base=atmospheric_backdrop(photo,width,height)
-    atmosphere=(width,height,base.tobytes('raw','BGRA')) if with_atmosphere else None
-    # The background is atmospheric; the actual photo is contained in full,
-    # with no face crop, stretching, edge fade or text painted over it.
-    x,y,pw,ph=portrait_rect(photo.size,width,height)
-    portrait=photo.resize((pw,ph),Image.Resampling.LANCZOS)
-    bounds=(x-6,y-6,x+pw+5,y+ph+5)
-    shadow=Image.new('RGBA',(width,height));ImageDraw.Draw(shadow).rounded_rectangle(
-        tuple(value+(3 if index%2==0 else 4) for index,value in enumerate(bounds)),14,fill=(5,10,6,100))
-    base=Image.alpha_composite(base,shadow.filter(ImageFilter.GaussianBlur(10)))
-    # A narrow gallery mount and one light edge keep the photograph dominant.
-    fw,fh=bounds[2]-bounds[0]+1,bounds[3]-bounds[1]+1
-    ramp=Image.blend(Image.linear_gradient('L').resize((fw,fh)),
-        ImageOps.mirror(Image.linear_gradient('L').rotate(90)).resize((fw,fh)),.25)
-    metal=ImageOps.colorize(ramp,(53,57,46),(27,32,26)).convert('RGBA')
-    bezel=Image.new('L',(fw,fh));ImageDraw.Draw(bezel).rounded_rectangle((0,0,fw-1,fh-1),14,fill=255);metal.putalpha(bezel)
-    frame=Image.new('RGBA',(width,height));frame.alpha_composite(metal,bounds[:2]);edge=ImageDraw.Draw(frame)
-    edge.rounded_rectangle(bounds,14,outline=(226,215,183,42),width=1)
-    edge.line((bounds[0]+14,bounds[1]+1,bounds[2]-14,bounds[1]+1),fill=(247,231,193,35))
-    base=Image.alpha_composite(base,frame);base.alpha_composite(portrait,(x,y))
+    rect=portrait_rect(photo.size,width,height)
+    base=glass_edge(glass_mount(atmospheric_backdrop(photo,width,height),rect))
+    # Retain the complete housing under the photographic layer during the
+    # artist entrance, so its glass mount cannot pop in after the animation.
     mask=Image.new('L',(width,height));ImageDraw.Draw(mask).rounded_rectangle((0,0,width-1,height-1),26,fill=255)
+    base.putalpha(mask)
+    atmosphere=(width,height,base.tobytes('raw','BGRA')) if with_atmosphere else None
+    # All four edges and every source pixel of the contained photograph stay
+    # clear: the mount and lighting never cross into this rectangle.
+    x,y,pw,ph=rect
+    base.alpha_composite(photo.resize((pw,ph),Image.Resampling.LANCZOS),(x,y))
     base.putalpha(mask)
     data=base.tobytes()
     return (data,atmosphere) if with_atmosphere else data

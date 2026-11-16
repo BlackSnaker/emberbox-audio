@@ -2,6 +2,10 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.31.18 — 2026-11-16
+
+- Give the artist room clear Liquid Glass with a shallow physical chassis: photo-lit smoked-glass portrait surround, a fine warm/cool edge, machined amber Listen key, recessed chips and track controls. Apply restrained reflections to discovery panels, release sleeves and artist filters in all four themes. Preserve the complete untinted photograph, cached worker rendering, stable hover/press geometry and album-room styling; verify matching mount pixels through the artist entrance.
+
 ## 0.31.17 — 2026-11-15
 
 - Keep the same optical strip and liquid contour throughout rapid tab clicks. Coalesce content navigation to the last request after the current dissolve rather than layering half-faded pages; settle viewport geometry before capture. Reset the compositor before each blend so repeated frames cannot accumulate brightness. Verify stable repeated pixels, retained colour/opacity, bounded capture count and final navigation intent. Keep shared favourites populated when changing sources.

@@ -159,6 +159,7 @@ jobs:
           EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/record_list_smoke.py
       - name: Artist room, releases and source changes
         run: |
+          GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/artist_glass_smoke.py
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/artist_smoke.py
           EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/artist_smoke.py
       - name: Editorial reading, Russian translation and responsive offline failures

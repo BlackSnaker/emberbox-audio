@@ -112,6 +112,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         assert host.album.get_text() in stage.album_button.get_accessible().get_name()
         stage.album_button.clicked();wait(lambda:view.release is not None and len(view.song_buttons)==5)
         assert view.direct_release and stage.page=='artist'
+        assert not view.get_style_context().has_class('artist-glass-room'),'The artist glass scope must not recolour the album room'
         assert calls[-1][1]=='release' and calls[-1][2]['songUri']=='spotify:track:1'
         assert not any(category=='artist' for _,category,_,_ in calls),'Opening the album must not first load an artist/discography'
         assert view.release_ref['id']=='1','Pagination must retain the resolved release ID'
@@ -128,6 +129,9 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         assert stage.page=='artist' and view.album_buttons and not plays
         assert all(b.get_mapped() for b in view.filters.values()),'Artist categories must be visible, not just programmatically clickable'
         overview_first_screen(view,stage)
+        assert view.get_style_context().has_class('artist-glass-room'),'The real artist page must opt into its scoped glass material'
+        assert view.filter_bar.get_style_context().has_class('artist-glass-selector')
+        assert view.play_all_button.get_style_context().has_class('artist-play-key')
         for b,_ in view.album_buttons:
             assert b.get_accessible().get_name(),'Every release must have an accessible name'
         shot(stage,'artist')
@@ -174,6 +178,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         view.filters['albums'].clicked();wait(lambda:len(view.album_buttons)==6)
         assert calls[-1][2]['section']=='albums'
         view.album_buttons[0][0].clicked();wait(lambda:len(view.song_buttons)==5)
+        assert not view.get_style_context().has_class('artist-glass-room'),'Opening an artist release must remove artist-only material rules'
         assert not view.song_buttons[2][0].get_sensitive(),'Unavailable songs must not be playable'
         assert not view.song_buttons[2][1].get_sensitive()
         view.read_button.clicked();f.settle(.4)
@@ -189,6 +194,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         assert plays==['spotify:track:2']
         assert [v['id'] for _,v in service.book.upcoming('spotify')]==['1','4','5'],'Release playback must retain explicit queue entries and skip unavailable songs'
         view.back_button.clicked();wait(lambda:view.release_ref is None and len(view.album_buttons)==6)
+        assert view.get_style_context().has_class('artist-glass-room'),'Returning from a release must restore the artist material'
         assert view.section=='albums' and len(plays)==1,'Back must restore the discography without restarting music'
         view.filters['overview'].clicked();f.settle(.2)
         for width,height in ((1024,600),(1280,720),(1920,1080)):
