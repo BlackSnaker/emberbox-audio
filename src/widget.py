@@ -52,6 +52,7 @@ from kwin_desktop import KWinDesktop
 from widget_settings import SettingsMenu, settings_button, window_button
 from seasonal_theme import Appearance
 from widget_control import WidgetControl
+from quest_bridge import start_if_enabled as start_quest_bridge
 from widget_morph import WidgetMorph
 from music_library import MusicService
 from flow_control import FlowControl,CSS as FLOW_CSS
@@ -566,6 +567,7 @@ class Widget:
         if self.desktop_mode == 'normal':
             self.kwin_desktop = KWinDesktop()
         self.widget_control=WidgetControl(self.show_widget,self.hide_widget,self.quit)
+        self.quest_bridge=start_quest_bridge(self)
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGTERM, self.quit)
         GLib.unix_signal_add(GLib.PRIORITY_DEFAULT, signal.SIGINT, self.quit)
 
@@ -608,6 +610,7 @@ class Widget:
         if self.resources_closed:
             return
         self.resources_closed = True
+        if getattr(self,'quest_bridge',None):self.quest_bridge.close()
         self.music.close()
         self.layout_transition.finish(notify=False)
         if getattr(self,'fullscreen_prewarm',0):GLib.source_remove(self.fullscreen_prewarm);self.fullscreen_prewarm=0

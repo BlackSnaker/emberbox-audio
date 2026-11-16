@@ -2,6 +2,11 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.32.0 — 2026-11-16
+
+- Introduce the early Ember Quest port: a real WebXR listening room, physical transport and captured volume dial, seek rail, four themes and audio-reactive tubes. Add an opt-in loopback Linux companion for current services, catalogue/search, albums/artists, queue, favourites, text DJ, lyrics and PC-side vocal reduction. Pair over USB with authenticated, origin-limited requests and source-only in-memory PCM streaming.
+- Add official Meta immersive PWA Android packaging and an offline static shell. This is not standalone streaming or full desktop feature parity: headset voice, the XR mashup editor and independent service connections remain work in progress. Report the source quality separately from the stereo 48 kHz headset transport. Add bridge, PCM and interaction regression tests plus a dedicated web build job.
+
 ## 0.31.18 — 2026-11-16
 
 - Give the artist room clear Liquid Glass with a shallow physical chassis: photo-lit smoked-glass portrait surround, a fine warm/cool edge, machined amber Listen key, recessed chips and track controls. Apply restrained reflections to discovery panels, release sleeves and artist filters in all four themes. Preserve the complete untinted photograph, cached worker rendering, stable hover/press geometry and album-room styling; verify matching mount pixels through the artist entrance.

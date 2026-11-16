@@ -1,0 +1,11 @@
+{
+  "name": "ember-quest-package",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "generate": "node generate.cjs"
+  },
+  "dependencies": {
+    "@meta-quest/bubblewrap-core": "1.24.1"
+  }
+}

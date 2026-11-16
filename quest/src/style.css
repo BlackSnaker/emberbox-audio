@@ -1,0 +1,130 @@
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: #111615;
+  color: #f4e5bf;
+  font:
+    15px system-ui,
+    sans-serif;
+  overflow: hidden;
+}
+canvas {
+  display: block;
+}
+#hud {
+  position: fixed;
+  left: 24px;
+  top: 20px;
+  right: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  pointer-events: none;
+}
+#hud strong {
+  letter-spacing: 6px;
+}
+#status {
+  font-size: 12px;
+  color: #c0b59f;
+  max-width: 430px;
+}
+#controls {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+button,
+.file-label {
+  border: 1px solid #bba67855;
+  border-radius: 24px;
+  color: #f4e5bf;
+  background: linear-gradient(135deg, #454b3a99, #151d2099);
+  padding: 12px 19px;
+  font: inherit;
+  cursor: pointer;
+  box-shadow:
+    inset 0 1px #f4e5bf22,
+    0 4px 12px #0004;
+}
+button:hover,
+.file-label:hover {
+  border-color: #efd192aa;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+#enter {
+  background: linear-gradient(135deg, #e8cf95, #a47c3c);
+  color: #222820;
+  font-weight: 650;
+}
+input[type="file"] {
+  display: none;
+}
+#hint {
+  position: fixed;
+  right: 24px;
+  bottom: 27px;
+  max-width: 330px;
+  color: #b7ad98;
+  font-size: 12px;
+  line-height: 1.6;
+  pointer-events: none;
+}
+#query {
+  position: fixed;
+  left: 50%;
+  top: 20%;
+  transform: translateX(-50%);
+  display: none;
+  gap: 8px;
+  padding: 20px;
+  background: #19211ff5;
+  border: 1px solid #a99b7455;
+  border-radius: 22px;
+}
+#query input {
+  padding: 13px;
+  border-radius: 12px;
+  background: #101917;
+  color: #f4e5bf;
+  border: 1px solid #a99b7455;
+  width: 340px;
+}
+#error {
+  position: fixed;
+  top: 80px;
+  left: 24px;
+  color: #e2be7d;
+  max-width: 500px;
+  font-size: 13px;
+}
+body.xr-active #hud,
+body.xr-active #controls,
+body.xr-active #hint,
+body.xr-active #error {
+  display: none;
+}
+@media (max-width: 800px) {
+  #hint {
+    display: none;
+  }
+  #hud {
+    top: 12px;
+    left: 12px;
+    right: 12px;
+  }
+  #controls {
+    bottom: 12px;
+    left: 12px;
+  }
+}

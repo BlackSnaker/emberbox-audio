@@ -8,6 +8,8 @@
 
 ## Mirrorball · A room made of light
 
+> **Ember Quest · early port:** [Meta Quest 3S room, setup and feature matrix](quest/README.md). Transport, catalogue and audio use the Linux companion; standalone streaming is still in development.
+
 Mirrored facets become part of Ember's architecture: graphite, silver glass,
 champagne light and quiet indigo reflections. There is no literal disco ball.
 A seamless mirror panorama glides **left to right**, with folded silver and
