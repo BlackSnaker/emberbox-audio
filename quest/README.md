@@ -13,8 +13,7 @@ The headset receives stereo float32 PCM at 48 kHz after an explicit audio action
 this is not a claim of direct Atmos or Hi-Res playback on Quest. Local browser
 file playback is available independently of streaming services.
 
-Headset voice capture, the full mashup editor, XR karaoke controls, in-app mixed
-reality and standalone streaming-service integrations are still pending. See the
+Headset voice capture, the full mashup editor and in-app mixed reality remain pending. Karaoke controls use PC processing; native service playback is experimental and still under account testing. See the
 [feature matrix](README.ru.md) for precise boundaries.
 
 ## Run
@@ -58,3 +57,9 @@ interactions must be checked on device. Windowed FPS is not immersive FPS.
 The hosted app connects only to the local USB companion. Set `EMBERBOX_QUEST_ORIGIN` to its exact HTTPS origin; pairing remains mandatory. Local-network permission may be requested by the headset browser. Pairing is stored in app storage and can be removed with Forget pairing.
 
 Karaoke controls now support AI/stereo vocal reduction and amount; processing and model installation remain on the PC. Headset voice and the mashup editor still need XR adaptation. Offline startup and the latest APK need a device check. An earlier WebXR build measured 90 FPS / 44 draw calls / 17,628 triangles on Quest 3S; this is not a measurement of the revised room.
+
+## Experimental native service host
+
+The Android package now contains a system WebView playback host, a private loopback metadata/control bridge, and a foreground media session. It reuses the existing website adapters. A genuine Apple Music sign-in window and platform Widevine support have been verified on Quest 3S; full subscription playback is still awaiting the user sign-in check. CDM availability alone is not proof of playback. Cookies and DRM state stay in the provider WebView. No service session is copied from the PC.
+
+`tools/quest.py open-app` opens the native route; `open-companion-app` explicitly uses the Linux companion. Native DJ, neural karaoke, mashups, EmberFlow and direct Atmos/Hi-Res are not ported yet. YouTube background playback restrictions are not bypassed. There is no test oscillator in the product: Play without a playable source remains silent.

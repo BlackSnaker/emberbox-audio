@@ -2,7 +2,15 @@ import { decodeArtwork } from "./artwork.js";
 export class EmberClient {
   constructor() {
     const hash = new URLSearchParams(location.hash.slice(1));
-    this.base = location.protocol === "https:" ? "http://localhost:8769" : "";
+    this.bridgeMode =
+      hash.get("bridge") || localStorage.getItem("ember-quest-bridge") || "pc";
+    if (!["pc", "quest"].includes(this.bridgeMode)) this.bridgeMode = "pc";
+    if (hash.get("bridge"))
+      localStorage.setItem("ember-quest-bridge", this.bridgeMode);
+    this.base =
+      location.protocol === "https:"
+        ? "http://localhost:" + (this.bridgeMode === "quest" ? 8768 : 8769)
+        : "";
     this.token =
       hash.get("pair") ||
       localStorage.getItem("ember-quest-pair") ||
@@ -71,7 +79,9 @@ export class EmberClient {
         this.online = false;
         this.error =
           location.protocol === "https:" && e instanceof TypeError
-            ? "Проверь USB и разрешение локальной сети для Ember Quest."
+            ? this.bridgeMode === "quest"
+              ? "Открой Ember Quest заново: движок шлема пока недоступен."
+              : "Проверь USB и разрешение локальной сети для Ember Quest."
             : e.message;
       }
       for (const fn of this.listeners) fn(this.state);

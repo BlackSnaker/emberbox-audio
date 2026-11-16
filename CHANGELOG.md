@@ -2,6 +2,11 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.33.0 — 2026-11-16 · Quest native preview
+
+- Add an experimental Android provider host with system WebView, app-private sign-in, protected-media permission UI, a foreground media session and a token-protected localhost bridge. Reuse the desktop website adapters without exporting cookies or DRM material. Verify the embedded Apple Music window and Widevine availability on Quest 3S; full-track subscription playback is still under device verification. Keep the Linux companion as a distinct mode and compile the unsigned Android APK in CI.
+- Correct clockwise volume indication, add a textured floor and skirting, serialize PCM connections and cancel stale worklets. Remove the test synthesizer completely: missing or disconnected music stays silent. Add regression checks for concurrent audio starts, cancellation, failed streams and silent empty playback.
+
 ## 0.32.1 — 2026-11-16
 
 - Correct ImageBitmap artwork orientation for both service and bundled images. Separate the stable glass navigation, full artwork and metadata into individual XR surfaces; retain hidden-surface hit testing, readable titles and artwork on pause. Rebuild thin glass with rounded extrusions, recess circular transport keys into the charcoal chassis, add smooth mechanical travel and a warm heart lens, and remove the disconnected joint-sphere hand display. Use finer mirror facets with bounded cover-colour light motion and cached tube glow, without realtime mirror cameras.

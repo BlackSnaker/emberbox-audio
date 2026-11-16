@@ -14,6 +14,7 @@ app.innerHTML = `<div id="hud"><strong>EMBER</strong><span id="status">Комн�
 const $ = (s) => document.querySelector(s),
   client = new EmberClient(),
   audio = new AudioEngine();
+let autoSoundStarted = false;
 let localActive = false,
   localFiles = [],
   localIndex = 0;
@@ -119,16 +120,75 @@ const amber = new THREE.MeshStandardMaterial({
   emissive: "#5b2b04",
   emissiveIntensity: 0.18,
 });
+const timberCanvas = document.createElement("canvas");
+timberCanvas.width = 1024;
+timberCanvas.height = 1024;
+const timber = timberCanvas.getContext("2d");
+let grainSeed = 91;
+const rand = () => {
+  grainSeed = (1664525 * grainSeed + 1013904223) >>> 0;
+  return grainSeed / 4294967296;
+};
+for (let row = 0; row < 12; row++) {
+  const y = (row * 1024) / 12,
+    h = 1024 / 12;
+  for (let col = -1; col < 4; col++) {
+    const x = col * 340 + (row % 2) * 170,
+      v = Math.floor(rand() * 6);
+    timber.fillStyle = `rgb(${34 + v},${36 + v},${36 + v})`;
+    timber.fillRect(x, y + 1, 338, h - 2);
+    timber.fillStyle = "#090d1060";
+    timber.fillRect(x, y, 340, 1);
+    timber.fillRect(x, y, 1, h);
+    for (let g = 0; g < 55; g++) {
+      timber.strokeStyle = g % 2 ? "#a08d6710" : "#05090c24";
+      timber.lineWidth = 0.3 + rand();
+      timber.beginPath();
+      const yy = y + rand() * h;
+      timber.moveTo(x, yy);
+      timber.bezierCurveTo(
+        x + 100,
+        yy - 3 + rand() * 6,
+        x + 220,
+        yy - 2 + rand() * 4,
+        x + 338,
+        yy,
+      );
+      timber.stroke();
+    }
+  }
+}
+const timberTexture = new THREE.CanvasTexture(timberCanvas);
+timberTexture.colorSpace = THREE.SRGBColorSpace;
+timberTexture.wrapS = timberTexture.wrapT = THREE.RepeatWrapping;
+timberTexture.repeat.set(8, 8);
+timberTexture.anisotropy = Math.min(
+  4,
+  renderer.capabilities.getMaxAnisotropy(),
+);
 const floor = new THREE.Mesh(
-  new THREE.CircleGeometry(14, 64),
+  new THREE.PlaneGeometry(28, 28),
   new THREE.MeshStandardMaterial({
-    color: "#090f13",
-    roughness: 0.86,
-    metalness: 0.12,
+    map: timberTexture,
+    color: "#d0c6ae",
+    roughness: 0.88,
+    metalness: 0,
+    envMapIntensity: 0.12,
   }),
 );
 floor.rotation.x = -Math.PI / 2;
 scene.add(floor);
+const skirting = new THREE.Mesh(
+  new THREE.CylinderGeometry(6.03, 6.03, 0.28, 128, 1, true),
+  new THREE.MeshStandardMaterial({
+    color: "#1d2427",
+    roughness: 0.8,
+    side: THREE.BackSide,
+  }),
+);
+skirting.position.y = 0.14;
+scene.add(skirting);
+
 const rug = new THREE.Mesh(
   new THREE.RingGeometry(1.3, 3.4, 96),
   new THREE.MeshBasicMaterial({
@@ -849,10 +909,17 @@ function paintListeningSurfaces() {
       ? browse("artist", "", state.artistRef)
       : chooseFile(),
   );
-  chip(state.album || "", 470, 280, 852, () =>
-    client.online && !localActive
-      ? browse("release", "", state.albumRef)
-      : chooseFile(),
+  chip(
+    state.album || (state.native ? "Войти и открыть медиатеку" : ""),
+    470,
+    280,
+    852,
+    () =>
+      state.native && !state.authorized
+        ? command("login")
+        : client.online && !localActive
+          ? browse("release", "", state.albumRef)
+          : chooseFile(),
   );
   const toggleFavorite = () => {
     if (localActive) {
@@ -962,7 +1029,14 @@ function paint() {
         },
         themeIndex === i,
       );
-    text("Музыкальный источник на подключённом ПК", 60, 438, 32);
+    text(
+      state.native
+        ? "Музыкальные сервисы в шлеме"
+        : "Музыкальный источник на подключённом ПК",
+      60,
+      438,
+      32,
+    );
     for (const [i, [id, name]] of [
       ["spotify", "Spotify"],
       ["apple-music", "Apple Music"],
@@ -982,7 +1056,15 @@ function paint() {
         },
         state.source === id,
       );
-    button("Звук с ПК", 60, 632, 470, 72, connectSound, audio.mode === "pc");
+    button(
+      state.native ? "Войти в сервис" : "Звук с ПК",
+      60,
+      632,
+      470,
+      72,
+      state.native ? () => command("login") : connectSound,
+      audio.mode === "pc",
+    );
     button("Остановить передачу", 570, 632, 520, 72, () => audio.disconnect());
     button("Вернуть пульт", 1130, 632, 550, 72, recenter);
     button("Забыть сопряжение", 60, 730, 500, 58, () => {
@@ -1233,7 +1315,22 @@ async function command(op, details = {}) {
     return;
   }
   try {
-    await client.action(op, details);
+    const reply = await client.action(op, details);
+    if (
+      reply.needsLogin &&
+      ["apple-music", "spotify", "yandex-music", "youtube"].includes(
+        reply.source,
+      )
+    ) {
+      const open = () =>
+        location.assign(
+          "intent://source/" +
+            reply.source +
+            "#Intent;scheme=emberquest;package=io.emberbox.quest;end",
+        );
+      if (xrSession) xrSession.end().then(open);
+      else open();
+    }
     notice = "";
   } catch (e) {
     notice = e.message;
@@ -1242,7 +1339,6 @@ async function command(op, details = {}) {
 }
 async function action(op) {
   try {
-    await audio.ready();
     if (client.online && !localActive) {
       const listen = op !== "toggle" || !state.playing;
       await command(op);
@@ -1255,10 +1351,7 @@ async function action(op) {
         );
     } else if (op === "toggle") {
       await audio.toggle();
-      state.playing = audio.media
-        ? !audio.media.paused
-        : audio.demoNodes.length > 0;
-      state.title = audio.media ? state.title : "Проверка звучания · Ember";
+      state.playing = !!audio.media && !audio.media.paused;
       boardDirty = true;
     }
   } catch (e) {
@@ -1370,8 +1463,13 @@ async function connectSound() {
   try {
     localActive = false;
     if (client.state) state = client.state;
-    if (!client.online)
-      throw Error("Сначала открой парную ссылку из Ember на ПК.");
+    if (state.audio?.native) {
+      audio.mode = "native";
+      notice = "";
+      boardDirty = true;
+      return;
+    }
+    if (!client.online) throw Error("Сначала подключи музыкальный источник.");
     await audio.stream(client);
     notice = "Музыка в комнате";
     setTimeout(() => {
@@ -1473,13 +1571,18 @@ client.listeners.add((value) => {
       lastSignature = signature;
       boardDirty = true;
     }
+    if (xrSession && !autoSoundStarted && !localActive) {
+      autoSoundStarted = true;
+      connectSound();
+    }
     if (value.image && value.image !== lastArt) {
       lastArt = value.image;
       artwork(lastArt);
     }
   }
   $("#status").textContent = client.online
-    ? "Подключено к Ember на ПК · " + value.source
+    ? (value.native ? "Музыка в шлеме · " : "Подключено к Ember на ПК · ") +
+      value.source
     : "Автономный режим · локальные файлы";
 });
 client.poll();
@@ -1659,7 +1762,7 @@ dot.visible = false;
 scene.add(dot);
 async function enter() {
   try {
-    await audio.ready();
+    if (client.bridgeMode !== "quest") await audio.ready();
     const session = await navigator.xr.requestSession("immersive-vr", {
       optionalFeatures: ["local-floor", "bounded-floor", "hand-tracking"],
     });
@@ -1678,6 +1781,10 @@ async function enter() {
       if (target) await session.updateTargetFrameRate(target);
     }
     needsRecenter = true;
+    if (client.online && !localActive) {
+      autoSoundStarted = true;
+      connectSound();
+    }
   } catch (e) {
     showError(e);
   }
@@ -1759,7 +1866,7 @@ renderer.setAnimationLoop((now, xrFrame) => {
     : client.state && !localActive
       ? client.state.volume
       : audio.volume;
-  knob.rotation.y = (volume - 0.5) * Math.PI * 1.5;
+  knob.rotation.y = (0.5 - volume) * Math.PI * 1.5;
   if (xrSession) {
     dot.visible = false;
     for (const controller of controllers) {
@@ -1846,7 +1953,12 @@ renderer.setAnimationLoop((now, xrFrame) => {
       drawCalls: renderer.info.render.calls,
       triangles: renderer.info.render.triangles,
       mode: xrSession ? "xr" : "desktop",
-      audio: audio.mode,
+      audio: {
+        mode: audio.mode,
+        context: audio.context?.state,
+        level: Math.max(...audio.levels),
+        pcm: audio.pcmStats,
+      },
     };
     if (client.online)
       client

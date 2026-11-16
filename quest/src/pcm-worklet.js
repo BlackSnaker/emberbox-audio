@@ -8,6 +8,8 @@ class EmberPCM extends AudioWorkletProcessor {
     this.started = false;
     this.fade = 0;
     this.phase = 0;
+    this.meterFrames = 0;
+    this.peak = 0;
     this.step = (options.processorOptions?.inputRate || 48000) / sampleRate;
     this.port.onmessage = (e) => {
       const values = new Float32Array(e.data);
@@ -53,11 +55,22 @@ class EmberPCM extends AudioWorkletProcessor {
         this.phase -= advance;
         this.read = (this.read + advance) % 48000;
         this.count -= advance;
+        this.peak = Math.max(
+          this.peak,
+          Math.abs(left[n]),
+          Math.abs(right?.[n] || 0),
+        );
       } else {
         left[n] = 0;
         if (right) right[n] = 0;
         if (this.count < 2) this.started = false;
       }
+    }
+    this.meterFrames += left.length;
+    if (this.meterFrames >= sampleRate / 2) {
+      this.port.postMessage?.({ buffer: this.count, peak: this.peak });
+      this.meterFrames = 0;
+      this.peak = 0;
     }
     return true;
   }

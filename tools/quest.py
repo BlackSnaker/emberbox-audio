@@ -72,26 +72,30 @@ def pairing():
         except (OSError,ValueError):time.sleep(.1)
     raise RuntimeError('Quest companion is not running. Run install-companion first.')
 
-def open_room(app=False):
+def open_room(app=False,companion=False):
     binary=adb();result=subprocess.check_output([binary,'devices'],text=True)
     if 'unauthorized' in result:raise RuntimeError('Confirm USB debugging inside your Quest, then repeat open')
     if not any(line.endswith('\tdevice') for line in result.splitlines()):raise RuntimeError('Connect and unlock the Quest over USB first')
+    if app and not companion:
+        run([binary,'shell','am','start','-n','io.emberbox.quest/.LauncherActivity'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        print('Native Ember Quest opened. Service sign-in and playback stay on the headset.');return
     pair=pairing();run([binary,'reverse',f"tcp:{pair['port']}",f"tcp:{pair['port']}"],stdout=subprocess.DEVNULL)
     url=pair['url'].replace('/#','/?build='+str(int(time.time()))+'#')
     command=[binary,'shell','am','start','-a','android.intent.action.VIEW','-d',url]
     if app:
-        url='https://blacksnaker.github.io/?build='+str(int(time.time()))+'#pair='+pair['url'].split('#pair=',1)[1]
+        url='https://blacksnaker.github.io/?build='+str(int(time.time()))+'#bridge=pc&pair='+pair['url'].split('#pair=',1)[1]
         command=[binary,'shell','am','start','-n','io.emberbox.quest/.LauncherActivity','-a','android.intent.action.VIEW','-d',url]
     run(command,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     print('Ember Quest app opened and paired.' if app else 'Ember opened on Quest. Press «Войти в комнату» in the headset, then connect audio explicitly.')
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('action',choices=('build','install-companion','open','open-app','install-app','disable'));parser.add_argument('--service');parser.add_argument('--player-dir');parser.add_argument('--apk',type=Path);args=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('action',choices=('build','install-companion','open','open-app','open-companion-app','install-app','disable'));parser.add_argument('--service');parser.add_argument('--player-dir');parser.add_argument('--apk',type=Path);args=parser.parse_args()
     try:
         if args.action=='build':build()
         elif args.action=='install-companion':install(args)
         elif args.action=='open':open_room()
         elif args.action=='open-app':open_room(app=True)
+        elif args.action=='open-companion-app':open_room(app=True,companion=True)
         elif args.action=='install-app':
             if not args.apk or not args.apk.is_file():raise RuntimeError('Pass --apk /path/to/Ember-Quest.apk')
             run([adb(),'install','-r',str(args.apk.resolve())]);open_room(app=True)
