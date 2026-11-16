@@ -1,3 +1,4 @@
+import { decodeArtwork } from "./artwork.js";
 export class EmberClient {
   constructor() {
     const hash = new URLSearchParams(location.hash.slice(1));
@@ -83,7 +84,9 @@ export class EmberClient {
       "/api/image?url=" + encodeURIComponent(url),
       { raw: true },
     );
-    return createImageBitmap(await response.blob());
+    // WebGL cannot apply UNPACK_FLIP_Y to ImageBitmap. Perform this at
+    // decode time; Texture.flipY alone leaves service artwork upside down.
+    return decodeArtwork(await response.blob());
   }
 }
 export const initialState = {

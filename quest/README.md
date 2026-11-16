@@ -4,8 +4,7 @@
 
 An early immersive WebXR port for Meta Quest 3S, running in Quest Browser.
 It includes a three-dimensional listening room, physical controls, audio-reactive
-tubes, controller rays/hand-pinch input and four room materials. It is **not yet
-a standalone Android APK or a complete desktop replacement**.
+tubes, controller rays/hand-pinch input and four room materials. It also has a signed, installable **immersive PWA APK** using the official Meta runtime. It is **not a standalone streaming client or a complete desktop replacement**.
 
 The optional Linux companion reuses Ember's connected sources, catalogue,
 playback, queue, favourites, text DJ and lyrics. Streaming-service sign-in and

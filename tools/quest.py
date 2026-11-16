@@ -80,10 +80,10 @@ def open_room(app=False):
     url=pair['url'].replace('/#','/?build='+str(int(time.time()))+'#')
     command=[binary,'shell','am','start','-a','android.intent.action.VIEW','-d',url]
     if app:
-        url='https://blacksnaker.github.io/#pair='+pair['url'].split('#pair=',1)[1]
+        url='https://blacksnaker.github.io/?build='+str(int(time.time()))+'#pair='+pair['url'].split('#pair=',1)[1]
         command=[binary,'shell','am','start','-n','io.emberbox.quest/.LauncherActivity','-a','android.intent.action.VIEW','-d',url]
     run(command,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    print('Ember opened on Quest. Press «Войти в комнату» in the headset, then connect audio explicitly.')
+    print('Ember Quest app opened and paired.' if app else 'Ember opened on Quest. Press «Войти в комнату» in the headset, then connect audio explicitly.')
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('action',choices=('build','install-companion','open','open-app','install-app','disable'));parser.add_argument('--service');parser.add_argument('--player-dir');parser.add_argument('--apk',type=Path);args=parser.parse_args()

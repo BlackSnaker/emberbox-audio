@@ -5,6 +5,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { EmberClient, initialState } from "./client.js";
 import { AudioEngine } from "./audio.js";
 import { ListeningRoom } from "./room.js";
+import { decodeArtwork, artworkPalette } from "./artwork.js";
 import { volumeFromDrag, pageStart, fitLines } from "./interaction.js";
 import "./style.css";
 
@@ -94,7 +95,8 @@ scene.add(rim);
 const ink = new THREE.MeshStandardMaterial({
   color: "#252c2b",
   roughness: 0.62,
-  metalness: 0.28,
+  metalness: 0.18,
+  envMapIntensity: 0.25,
 });
 const brass = new THREE.MeshStandardMaterial({
   color: "#847455",
@@ -145,16 +147,50 @@ scene.add(deck);
 function box(w, h, d, r, material) {
   return new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 3, r), material);
 }
-const chassis = box(1.9, 0.3, 0.13, 0.07, ink);
+// A thin glass plate needs a rounded silhouette independent of its depth.
+// RoundedBoxGeometry clamps radius to depth/2 and makes shallow UI look square.
+function slab(w, h, d, r, material) {
+  r = Math.min(r, w / 2, h / 2);
+  const shape = new THREE.Shape();
+  shape.moveTo(r, 0);
+  shape.lineTo(w - r, 0);
+  shape.quadraticCurveTo(w, 0, w, r);
+  shape.lineTo(w, h - r);
+  shape.quadraticCurveTo(w, h, w - r, h);
+  shape.lineTo(r, h);
+  shape.quadraticCurveTo(0, h, 0, h - r);
+  shape.lineTo(0, r);
+  shape.quadraticCurveTo(0, 0, r, 0);
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth: d,
+    bevelEnabled: true,
+    bevelSegments: 3,
+    steps: 1,
+    bevelSize: 0.002,
+    bevelThickness: 0.002,
+    curveSegments: 12,
+  });
+  geometry.translate(-w / 2, -h / 2, -d / 2);
+  return new THREE.Mesh(geometry, material);
+}
+const chassis = slab(1.9, 0.3, 0.13, 0.07, ink);
 chassis.position.set(0, 0.7, -1.45);
 chassis.rotation.x = -0.32;
 deck.add(chassis);
-const trim = box(1.92, 0.32, 0.025, 0.07, brass);
+const caseRim = new THREE.MeshStandardMaterial({
+  color: "#4c504a",
+  roughness: 0.58,
+  metalness: 0.5,
+});
+const trim = slab(1.92, 0.32, 0.025, 0.07, caseRim);
 trim.position.copy(chassis.position);
 trim.position.z += 0.014;
 trim.rotation.copy(chassis.rotation);
 deck.add(trim);
-const face = box(1.89, 0.29, 0.022, 0.07, glass);
+const face = slab(1.89, 0.29, 0.022, 0.07, glass);
+face.material = glass.clone();
+face.material.opacity = 0.035;
+face.material.clearcoat = 0.35;
 face.position.copy(chassis.position);
 face.position.z += 0.085;
 face.rotation.copy(chassis.rotation);
@@ -162,13 +198,14 @@ deck.add(face);
 const boardCanvas = document.createElement("canvas");
 boardCanvas.width = 1792;
 boardCanvas.height = 1024;
-const ctx = boardCanvas.getContext("2d");
+let ctx = boardCanvas.getContext("2d");
+const boardContext = ctx;
 const boardTexture = new THREE.CanvasTexture(boardCanvas);
 boardTexture.colorSpace = THREE.SRGBColorSpace;
 boardTexture.minFilter = THREE.LinearFilter;
 boardTexture.generateMipmaps = false;
 const board = new THREE.Mesh(
-  new THREE.PlaneGeometry(1.75, 1.0),
+  new THREE.PlaneGeometry(2.2, 1.257),
   new THREE.MeshBasicMaterial({
     map: boardTexture,
     transparent: true,
@@ -176,26 +213,38 @@ const board = new THREE.Mesh(
     depthWrite: false,
   }),
 );
-board.position.set(0, 1.3, -2.0);
+board.position.set(0, 1.55, -2.4);
 board.scale.setScalar(1.08);
 deck.add(board);
 const artGroup = new THREE.Group();
-artGroup.position.set(0, 2.575, -3.35);
+artGroup.position.set(0, 1.85, -2.6);
+artGroup.scale.setScalar(0.8);
 deck.add(artGroup);
-const mount = box(1.55, 1.55, 0.075, 0.06, ink);
+const mount = slab(1.55, 1.55, 0.075, 0.06, ink);
 artGroup.add(mount);
-const artEdge = box(1.58, 1.58, 0.024, 0.06, brass);
+const artEdge = slab(1.58, 1.58, 0.024, 0.06, caseRim);
 artEdge.position.z = -0.01;
 artGroup.add(artEdge);
 const artMaterial = new THREE.MeshBasicMaterial({ toneMapped: false });
 const art = new THREE.Mesh(new THREE.PlaneGeometry(1.46, 1.46), artMaterial);
 art.position.z = 0.044;
 artGroup.add(art);
-new THREE.TextureLoader().load("/demo-cover.png", (texture) => {
-  texture.colorSpace = THREE.SRGBColorSpace;
-  artMaterial.map = texture;
-  artMaterial.needsUpdate = true;
-});
+fetch("/demo-cover.png")
+  .then((r) => r.blob())
+  .then(decodeArtwork)
+  .then((bitmap) => {
+    if (imageGeneration) {
+      bitmap.close();
+      return;
+    }
+    const texture = new THREE.CanvasTexture(bitmap);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    artMaterial.map = texture;
+    artMaterial.needsUpdate = true;
+    applyCoverPalette(bitmap);
+  })
+  .catch(() => {});
+
 const progressBase = new THREE.Mesh(
   new THREE.PlaneGeometry(1.68, 0.035),
   new THREE.MeshBasicMaterial({
@@ -204,7 +253,7 @@ const progressBase = new THREE.Mesh(
     opacity: 0.4,
   }),
 );
-progressBase.position.set(0, 0.72, -1.82);
+progressBase.position.set(0, 0.91, -1.7);
 progressBase.userData.seek = true;
 deck.add(progressBase);
 const progressFill = new THREE.Mesh(
@@ -216,9 +265,50 @@ progressBase.add(progressFill);
 const interact = [board, progressBase];
 let regions = [];
 const buttons = [];
+function drawKeyIcon(c, label, color) {
+  c.clearRect(0, 0, 256, 128);
+  c.fillStyle = color;
+  const triangle = (x, y, w, h, sign = 1) => {
+    c.beginPath();
+    c.moveTo(x, y - h / 2);
+    c.lineTo(x + sign * w, y);
+    c.lineTo(x, y + h / 2);
+    c.closePath();
+    c.fill();
+  };
+  if (label === "Ⅱ") {
+    c.fillRect(109, 42, 11, 44);
+    c.fillRect(137, 42, 11, 44);
+  } else if (label === "▶") triangle(113, 64, 40, 44);
+  else if (label === "⏮") {
+    c.fillRect(100, 46, 7, 36);
+    triangle(145, 64, 32, 36, -1);
+  } else {
+    triangle(109, 64, 32, 36);
+    c.fillRect(146, 46, 7, 36);
+  }
+}
 function physical(label, x, action, material = ink) {
-  const key = box(0.22, 0.15, 0.075, 0.045, material);
-  key.position.set(x, 0.86, -1.15);
+  const radius = material === amber ? 0.105 : 0.085;
+  const geometry = new THREE.CylinderGeometry(
+    radius,
+    radius + 0.004,
+    0.035,
+    64,
+  );
+  geometry.rotateX(Math.PI / 2);
+  const key = new THREE.Mesh(geometry, material);
+  key.position.set(x, 0.735, -1.342);
+  const seatGeometry = new THREE.CylinderGeometry(
+    radius + 0.013,
+    radius + 0.016,
+    0.02,
+    64,
+  );
+  seatGeometry.rotateX(Math.PI / 2);
+  const seat = new THREE.Mesh(seatGeometry, caseRim);
+  seat.position.z = -0.021;
+  key.add(seat);
   key.rotation.x = -0.34;
   key.userData.action = action;
   key.userData.homeZ = key.position.z;
@@ -229,11 +319,7 @@ function physical(label, x, action, material = ink) {
   canvas.width = 256;
   canvas.height = 128;
   const c = canvas.getContext("2d");
-  c.fillStyle = material === amber ? "#252a22" : "#f2dfb4";
-  c.font = "bold 58px system-ui";
-  c.textAlign = "center";
-  c.textBaseline = "middle";
-  c.fillText(label, 128, 64);
+  drawKeyIcon(c, label, material === amber ? "#252a22" : "#ead9b8");
   const t = new THREE.CanvasTexture(canvas);
   t.colorSpace = THREE.SRGBColorSpace;
   const letters = new THREE.Mesh(
@@ -245,7 +331,7 @@ function physical(label, x, action, material = ink) {
       depthWrite: false,
     }),
   );
-  letters.position.z = 0.04;
+  letters.position.z = 0.021;
   key.add(letters);
   key.userData.canvas = canvas;
   key.userData.texture = t;
@@ -261,7 +347,7 @@ const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.095, 0.07, 40), [
   brass,
 ]);
 knob.rotation.x = Math.PI / 2 - 0.3;
-knob.position.set(0.72, 0.87, -1.17);
+knob.position.set(0.72, 0.735, -1.342);
 deck.add(knob);
 knob.userData.knob = true;
 interact.push(knob);
@@ -286,12 +372,21 @@ for (let i = 0; i < 40; i++) {
 }
 knob.add(grip);
 const tubes = new THREE.Group();
-tubes.position.set(-0.69, 0.92, -1.2);
+tubes.position.set(-0.83, 0.735, -1.342);
 tubes.rotation.x = -0.3;
 deck.add(tubes);
 const glassTubes = new THREE.InstancedMesh(
   new THREE.CapsuleGeometry(0.021, 0.11, 3, 10),
-  glass,
+  new THREE.MeshPhysicalMaterial({
+    color: "#987346",
+    roughness: 0.18,
+    metalness: 0.0,
+    transparent: true,
+    opacity: 0.12,
+    clearcoat: 1,
+    envMapIntensity: 0.15,
+    depthWrite: false,
+  }),
   9,
 );
 tubes.add(glassTubes);
@@ -303,36 +398,109 @@ const filaments = new THREE.InstancedMesh(
 );
 filaments.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 tubes.add(filaments);
+const hotCores = new THREE.InstancedMesh(
+  new THREE.CapsuleGeometry(0.0022, 0.1, 2, 6),
+  new THREE.MeshBasicMaterial({ color: "#ffe2a5", toneMapped: false }),
+  9,
+);
+hotCores.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+tubes.add(hotCores);
+const tubeCanvas = document.createElement("canvas");
+tubeCanvas.width = 64;
+tubeCanvas.height = 128;
+const tubeContext = tubeCanvas.getContext("2d");
+tubeContext.scale(1, 2);
+const glowGradient = tubeContext.createRadialGradient(32, 32, 2, 32, 32, 32);
+glowGradient.addColorStop(0, "#ffa12b9c");
+glowGradient.addColorStop(0.28, "#ff761d50");
+glowGradient.addColorStop(0.7, "#ff640912");
+glowGradient.addColorStop(1, "#ff640900");
+tubeContext.fillStyle = glowGradient;
+tubeContext.fillRect(0, 0, 64, 64);
+const tubeTexture = new THREE.CanvasTexture(tubeCanvas);
+tubeTexture.colorSpace = THREE.SRGBColorSpace;
+const tubeGlow = new THREE.InstancedMesh(
+  new THREE.PlaneGeometry(0.088, 0.21),
+  new THREE.MeshBasicMaterial({
+    map: tubeTexture,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+    depthWrite: false,
+  }),
+  9,
+);
+tubes.add(tubeGlow);
+const tubeColor = new THREE.Color();
 const dummy = new THREE.Object3D();
 for (let i = 0; i < 9; i++) {
-  dummy.position.set(i * 0.063, 0, 0);
+  dummy.position.set(i * 0.052, 0, 0);
   dummy.scale.set(1, 1, 1);
   dummy.updateMatrix();
   glassTubes.setMatrixAt(i, dummy.matrix);
+  dummy.position.z = 0.016;
+  dummy.updateMatrix();
+  tubeGlow.setMatrixAt(i, dummy.matrix);
+  tubeGlow.setColorAt(i, tubeColor.setScalar(0));
 }
 const mirrors = new THREE.InstancedMesh(
-  new THREE.BoxGeometry(0.42, 0.4, 0.035),
+  new THREE.BoxGeometry(0.202, 0.202, 0.014),
   new THREE.MeshStandardMaterial({
-    color: "#84908e",
-    roughness: 0.35,
-    metalness: 0.88,
+    color: "#9ba6a9",
+    roughness: 0.11,
+    metalness: 0.98,
+    envMapIntensity: 2.2,
   }),
-  420,
+  3060,
 );
 const facetColor = new THREE.Color();
-for (let i = 0; i < 420; i++) {
-  const col = i % 60,
-    row = Math.floor(i / 60),
-    a = (col / 60) * Math.PI * 2;
-  dummy.position.set(Math.sin(a) * 7, 0.25 + row * 0.53, -Math.cos(a) * 7);
+for (let i = 0; i < 3060; i++) {
+  const col = i % 180,
+    row = Math.floor(i / 180),
+    a = (col / 180) * Math.PI * 2;
+  dummy.position.set(
+    Math.sin(a) * 6.15,
+    0.105 + row * 0.21,
+    -Math.cos(a) * 6.15,
+  );
   dummy.rotation.set(0.03 * Math.sin(i * 1.3), -a, 0.04 * Math.sin(i));
   dummy.scale.set(1, 1, 1);
   dummy.updateMatrix();
   mirrors.setMatrixAt(i, dummy.matrix);
-  facetColor.setScalar(0.18 + ((i * 17) % 13) / 80);
+  facetColor.setScalar(0.64 + ((i * 17) % 13) / 42);
   mirrors.setColorAt(i, facetColor);
 }
 scene.add(mirrors);
+const mirrorTime = { value: 0 },
+  mirrorEnergy = { value: 0 };
+const mirrorPalette = [
+  new THREE.Color("#32505c"),
+  new THREE.Color("#476f79"),
+  new THREE.Color("#62536e"),
+];
+mirrors.material.onBeforeCompile = (shader) => {
+  shader.uniforms.emberTime = mirrorTime;
+  shader.uniforms.emberEnergy = mirrorEnergy;
+  for (let i = 0; i < 3; i++)
+    shader.uniforms["emberColour" + i] = { value: mirrorPalette[i] };
+  shader.vertexShader =
+    "varying vec3 emberFacet;\n" +
+    shader.vertexShader.replace(
+      "#include <begin_vertex>",
+      "#include <begin_vertex>\nemberFacet=(instanceMatrix*vec4(position,1.0)).xyz;",
+    );
+  shader.fragmentShader =
+    "varying vec3 emberFacet;uniform float emberTime;uniform float emberEnergy;uniform vec3 emberColour0;uniform vec3 emberColour1;uniform vec3 emberColour2;\n" +
+    shader.fragmentShader.replace(
+      "#include <emissivemap_fragment>",
+      `#include <emissivemap_fragment>
+  float slide=.5+.5*sin(emberFacet.x*.48+emberFacet.z*.35+emberFacet.y*.8-emberTime*.14);
+  vec3 light=mix(mix(emberColour0,emberColour1,slide),emberColour2,.25+.25*sin(emberFacet.y+emberTime*.11));
+  float glint=pow(.5+.5*sin(emberFacet.x*.9-emberTime*.2+emberFacet.y*.7),8.0);
+  totalEmissiveRadiance+=light*(.012+glint*(.08+emberEnergy*.15));`,
+    );
+};
+
 const garland = new THREE.InstancedMesh(
   new THREE.SphereGeometry(0.026, 7, 5),
   new THREE.MeshBasicMaterial({ color: "#f0ba65" }),
@@ -359,7 +527,7 @@ function applyTheme() {
   );
   scene.fog.color.copy(scene.background);
   ink.color.set(
-    themeIndex === 2 ? "#28382e" : themeIndex === 3 ? "#34382b" : "#252c30",
+    themeIndex === 2 ? "#182620" : themeIndex === 3 ? "#23251f" : "#151a1f",
   );
   amber.color.set(themeIndex === 2 ? "#a44b40" : "#d1a454");
   boardDirty = true;
@@ -372,6 +540,29 @@ for (const object of [chassis, trim, face, ...buttons, knob, tubes]) {
 }
 consoleGroup.position.z = -0.35;
 deck.add(consoleGroup);
+const nameCanvas = document.createElement("canvas");
+nameCanvas.width = 512;
+nameCanvas.height = 96;
+const nameContext = nameCanvas.getContext("2d");
+nameContext.fillStyle = "#c9bd9b";
+nameContext.font = "500 30px system-ui";
+nameContext.textAlign = "center";
+nameContext.fillText("E M B E R", 256, 55);
+const nameTexture = new THREE.CanvasTexture(nameCanvas);
+nameTexture.colorSpace = THREE.SRGBColorSpace;
+const namePlate = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.3, 0.056),
+  new THREE.MeshBasicMaterial({
+    map: nameTexture,
+    transparent: true,
+    toneMapped: false,
+    depthWrite: false,
+  }),
+);
+namePlate.position.set(0, 0.603, -1.34);
+namePlate.rotation.x = -0.32;
+consoleGroup.add(namePlate);
+
 const colorTarget = new THREE.Color("#b89e65");
 const lightColor = new THREE.Color();
 let lastPalette = null;
@@ -390,27 +581,21 @@ async function artwork(url) {
     artMaterial.needsUpdate = true;
     previous?.dispose();
     previous?.image?.close?.();
-    const c = document.createElement("canvas");
-    c.width = c.height = 24;
-    const cc = c.getContext("2d");
-    cc.drawImage(bitmap, 0, 0, 24, 24);
-    const rgba = cc.getImageData(0, 0, 24, 24).data;
-    let r = 0,
-      g = 0,
-      b = 0;
-    for (let i = 0; i < rgba.length; i += 4) {
-      r += rgba[i];
-      g += rgba[i + 1];
-      b += rgba[i + 2];
-    }
-    colorTarget.setRGB(
-      r / (576 * 255),
-      g / (576 * 255),
-      b / (576 * 255),
-      THREE.SRGBColorSpace,
-    );
+    applyCoverPalette(bitmap);
     lastPalette = bitmap;
   } catch {}
+}
+function applyCoverPalette(bitmap) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 24;
+  const cc = c.getContext("2d");
+  cc.drawImage(bitmap, 0, 0, 24, 24);
+  const rgba = cc.getImageData(0, 0, 24, 24).data;
+  const palette = artworkPalette(rgba);
+  palette.forEach((rgb, i) =>
+    mirrorPalette[i].setRGB(...rgb, THREE.SRGBColorSpace),
+  );
+  colorTarget.copy(mirrorPalette[0]);
 }
 function round(x, y, w, h, r = 22, fill = "#24302c") {
   ctx.fillStyle = fill;
@@ -452,7 +637,7 @@ function wrapLines(value, size, width) {
   return lines;
 }
 function button(label, x, y, w, h, action, selected = false) {
-  round(x, y, w, h, Math.min(22, h / 2), selected ? "#b99b62" : "#27312f");
+  round(x, y, w, h, Math.min(22, h / 2), selected ? "#45473c" : "#20292f");
   if (!selected) {
     const sheen = ctx.createLinearGradient(x, y, x, y + h);
     sheen.addColorStop(0, "#e2e8dd10");
@@ -469,7 +654,7 @@ function button(label, x, y, w, h, action, selected = false) {
     x + 18,
     y + h * 0.63,
     h < 55 ? 25 : 30,
-    selected ? "#1e2723" : "#e8ddc4",
+    selected ? "#f6e2b1" : "#e8ddc4",
     w - 34,
   );
   regions.push({ x, y, w, h, action });
@@ -483,11 +668,221 @@ const tabs = [
   "Мешапы",
   "Настройки",
 ];
+function panel(width, height, worldWidth, worldHeight, position) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
+  texture.generateMipmaps = false;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(worldWidth, worldHeight),
+    new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      toneMapped: false,
+      depthWrite: false,
+    }),
+  );
+  mesh.position.copy(position);
+  deck.add(mesh);
+  interact.push(mesh);
+  mesh.userData.surface = { canvas, texture, regions: [] };
+  return mesh;
+}
+const navigation = panel(
+  1792,
+  160,
+  2.15,
+  0.192,
+  new THREE.Vector3(0, 2.63, -2.6),
+);
+const metadata = panel(
+  1792,
+  360,
+  2.15,
+  0.432,
+  new THREE.Vector3(0, 0.995, -2.6),
+);
+const navMount = slab(2.17, 0.209, 0.022, 0.085, ink);
+navMount.position.copy(navigation.position);
+navMount.position.z -= 0.02;
+deck.add(navMount);
+const liquidMarker = slab(
+  0.275,
+  0.106,
+  0.016,
+  0.052,
+  new THREE.MeshPhysicalMaterial({
+    color: "#b8c2bb",
+    roughness: 0.17,
+    metalness: 0.15,
+    transparent: true,
+    opacity: 0.22,
+    clearcoat: 1,
+    depthWrite: false,
+  }),
+);
+liquidMarker.position.copy(navigation.position);
+liquidMarker.position.z += 0.003;
+deck.add(liquidMarker);
+navigation.position.z += 0.014;
+const heartGroup = new THREE.Group();
+heartGroup.position.set(-0.681, 0.825, -2.568);
+deck.add(heartGroup);
+const heartSeat = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.052, 0.055, 0.014, 48).rotateX(Math.PI / 2),
+  caseRim,
+);
+heartGroup.add(heartSeat);
+const heartShape = new THREE.Shape();
+heartShape.moveTo(0, -0.026);
+heartShape.bezierCurveTo(-0.07, 0.015, -0.026, 0.062, 0, 0.027);
+heartShape.bezierCurveTo(0.026, 0.062, 0.07, 0.015, 0, -0.026);
+const heartLightMaterial = new THREE.MeshBasicMaterial({
+  color: "#efbb68",
+  transparent: true,
+  opacity: 0.14,
+  toneMapped: false,
+});
+const heartLight = new THREE.Mesh(
+  new THREE.ShapeGeometry(heartShape, 24),
+  heartLightMaterial,
+);
+heartLight.position.z = 0.01;
+heartGroup.add(heartLight);
+const heartLens = new THREE.Mesh(
+  new THREE.SphereGeometry(0.044, 20, 12),
+  new THREE.MeshPhysicalMaterial({
+    color: "#e3cda1",
+    roughness: 0.12,
+    metalness: 0.1,
+    transparent: true,
+    opacity: 0.11,
+    clearcoat: 1,
+    depthWrite: false,
+  }),
+);
+heartLens.scale.z = 0.32;
+heartLens.position.z = 0.011;
+heartGroup.add(heartLens);
+heartSeat.userData.action = () => {
+  if (localActive) {
+    notice = "Избранное доступно для подключённых музыкальных сервисов.";
+    boardDirty = true;
+    return;
+  }
+  favorite = !favorite;
+  command("favorite", { value: favorite });
+  boardDirty = true;
+};
+interact.push(heartSeat);
+let heartHeat = 0;
+let markerX = -0.91;
+function centerLabel(value, x, y, size, color, width) {
+  ctx.font = `${size >= 60 ? 600 : 400} ${size}px system-ui,sans-serif`;
+  ctx.fillStyle = color;
+  ctx.textAlign = "center";
+  for (const [i, line] of fitLines(ctx, value, width, 2).entries())
+    ctx.fillText(line, x, y + i * (size * 1.18));
+  ctx.textAlign = "left";
+}
+function paintListeningSurfaces() {
+  const savedRegions = regions;
+  ctx = navigation.userData.surface.canvas.getContext("2d");
+  regions = [];
+  ctx.clearRect(0, 0, 1792, 160);
+  round(2, 2, 1788, 156, 78, "#1a20253d");
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = "#dce7db35";
+  ctx.stroke();
+  for (const [i, tab] of tabs.entries()) {
+    const x = 22 + i * 250;
+    centerLabel(
+      tab === "Очередь" && state.queue?.length
+        ? `Очередь · ${state.queue.length}`
+        : tab,
+      x + 120,
+      94,
+      32,
+      page === tab ? "#fff0ce" : "#b8b9af",
+      234,
+    );
+    regions.push({ x, y: 20, w: 240, h: 120, action: () => navigate(tab) });
+  }
+  navigation.userData.surface.regions = regions;
+  navigation.userData.surface.texture.needsUpdate = true;
+  ctx = metadata.userData.surface.canvas.getContext("2d");
+  regions = [];
+  ctx.clearRect(0, 0, 1792, 360);
+  centerLabel(state.title, 896, 92, 72, "#f8ebcf", 1650);
+  if (notice) {
+    ctx.font = "24px system-ui";
+    centerLabel(
+      fitLines(ctx, notice, 1500, 1)[0] || "",
+      896,
+      193,
+      24,
+      "#d8b986",
+      1500,
+    );
+  }
+  const chip = (value, x, y, w, action) => {
+    ctx.font = "34px system-ui";
+    round(x, y, w, 60, 30, "#171e2280");
+    ctx.strokeStyle = "#e1deca20";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    centerLabel(
+      fitLines(ctx, value, w - 40, 1)[0] || "",
+      x + w / 2,
+      y + 41,
+      34,
+      "#c9c3af",
+      w - 40,
+    );
+    regions.push({ x, y, w, h: 60, action });
+  };
+  chip(state.artist || "Выбрать музыку", 390, 208, 1012, () =>
+    client.online && !localActive
+      ? browse("artist", "", state.artistRef)
+      : chooseFile(),
+  );
+  chip(state.album || "", 470, 280, 852, () =>
+    client.online && !localActive
+      ? browse("release", "", state.albumRef)
+      : chooseFile(),
+  );
+  const toggleFavorite = () => {
+    if (localActive) {
+      notice = "Избранное доступно для подключённых музыкальных сервисов.";
+      boardDirty = true;
+      return;
+    }
+    favorite = !favorite;
+    command("favorite", { value: favorite });
+    boardDirty = true;
+  };
+  regions.push({ x: 260, y: 264, w: 130, h: 90, action: toggleFavorite });
+  if (state.quality?.known)
+    centerLabel(state.quality.name, 1505, 322, 24, "#aaa995", 300);
+  metadata.userData.surface.regions = regions;
+  metadata.userData.surface.texture.needsUpdate = true;
+  ctx = boardContext;
+  regions = savedRegions;
+  board.visible = page !== "Слушать" || keyboard;
+  metadata.visible = !board.visible;
+  heartGroup.visible = metadata.visible;
+  heartSeat.visible = metadata.visible;
+}
 function paint() {
   boardDirty = false;
+  paintListeningSurfaces();
+  if (page === "Слушать" && !keyboard) return;
   regions = [];
   ctx.clearRect(0, 0, 1792, 1024);
-  round(0, 0, 1792, 1024, 42, "#14201fec");
+  round(0, 0, 1792, 1024, 42, "#171e23ed");
   const wash = ctx.createLinearGradient(0, 0, 1792, 1024);
   wash.addColorStop(0, "#d6e3cf0d");
   wash.addColorStop(0.4, "#d6e3cf00");
@@ -506,19 +901,6 @@ function paint() {
     "#b4bda9",
     600,
   );
-  let x = 34;
-  for (const tab of tabs) {
-    const w =
-      tab === "Коллекция"
-        ? 263
-        : tab === "Настройки"
-          ? 255
-          : tab === "Караоке"
-            ? 220
-            : 205;
-    button(tab, x, 82, w, 56, () => navigate(tab), tab === page);
-    x += w + 10;
-  }
   if (keyboard) {
     text(
       queryKind === "dj" ? "Пожелание для Эмбер" : "Поиск музыки",
@@ -564,81 +946,7 @@ function paint() {
     boardTexture.needsUpdate = true;
     return;
   }
-  if (page === "Слушать") {
-    ctx.font = "500 56px system-ui";
-    for (const [i, line] of fitLines(ctx, state.title, 1640, 2).entries())
-      text(line, 58, 220 + i * 64, 56, "#f7eac8", 1640);
-    button(state.artist || "Артист", 60, 330, 800, 70, () =>
-      browse("artist", "", state.artistRef),
-    );
-    button(state.album || "Альбом", 890, 330, 820, 70, () =>
-      browse("release", "", state.albumRef),
-    );
-    button(
-      favorite ? "♥ Сохранено" : "♡ В избранное",
-      60,
-      476,
-      350,
-      64,
-      () => {
-        if (localActive) {
-          favorite = !favorite;
-          boardDirty = true;
-        } else {
-          favorite = !favorite;
-          command("favorite", { value: favorite });
-          boardDirty = true;
-        }
-      },
-      favorite,
-    );
-    button("Источник", 440, 476, 290, 64, () => {
-      page = "Настройки";
-      boardDirty = true;
-    });
-    button(
-      state.flow ? "EmberFlow · ON" : "EmberFlow · OFF",
-      760,
-      476,
-      370,
-      64,
-      () => command("flow", { value: !state.flow }),
-      state.flow,
-    );
-    button("Текст песни", 1160, 476, 550, 64, () => {
-      navigate("Караоке");
-    });
-    if (state.quality?.known)
-      text(
-        "Источник · " + state.quality.name + " / в шлеме PCM 48 кГц",
-        60,
-        590,
-        25,
-        "#b2b9a8",
-        1650,
-      );
-    text(
-      audio.mode === "pc"
-        ? "ЗВУК ИЗ EMBER · СТЕРЕО PCM 48 КГЦ"
-        : "Выбери локальный файл или подключи звук Ember с ПК",
-      60,
-      666,
-      28,
-      "#cfb586",
-      1650,
-    );
-    button("Звук Ember с ПК", 60, 726, 510, 70, connectSound);
-    button("Файлы на устройстве", 600, 726, 510, 70, chooseFile);
-    button(themes[themeIndex], 1140, 726, 570, 70, nextTheme);
-    text(
-      "Пауза, треки и громкость — на физическом пульте перед тобой.",
-      60,
-      918,
-      27,
-      "#aaa58f",
-      1660,
-    );
-  } else if (page === "Настройки") {
+  if (page === "Настройки") {
     text("Твоё пространство", 56, 218, 48);
     let y = 260;
     for (let i = 0; i < themes.length; i++)
@@ -683,7 +991,7 @@ function paint() {
       boardDirty = true;
     });
     text(
-      "XR: цель 90 Гц при поддержке шлема. Фактическую частоту проверяем в шлеме.",
+      "Комната остаётся на месте при повороте головы. Пульт можно вернуть к себе кнопкой выше.",
       60,
       800,
       27,
@@ -936,8 +1244,9 @@ async function action(op) {
   try {
     await audio.ready();
     if (client.online && !localActive) {
+      const listen = op !== "toggle" || !state.playing;
       await command(op);
-      if (op === "toggle" && audio.mode !== "pc") connectSound();
+      if (listen && audio.mode !== "pc") connectSound();
     } else if (op === "next" || op === "previous") {
       if (localFiles.length)
         await openLocal(
@@ -1064,7 +1373,13 @@ async function connectSound() {
     if (!client.online)
       throw Error("Сначала открой парную ссылку из Ember на ПК.");
     await audio.stream(client);
-    notice = "Звук выбранного источника передаётся в шлем · стерео PCM";
+    notice = "Музыка в комнате";
+    setTimeout(() => {
+      if (notice === "Музыка в комнате") {
+        notice = "";
+        boardDirty = true;
+      }
+    }, 1800);
     boardDirty = true;
   } catch (e) {
     showError(e);
@@ -1147,6 +1462,8 @@ client.listeners.add((value) => {
       value.playing,
       value.source,
       value.flow,
+      value.favorite,
+      value.quality?.name,
       value.queue?.map((v) => v.uri),
       value.dj?.phase,
       value.dj?.reply,
@@ -1172,14 +1489,24 @@ const raycaster = new THREE.Raycaster(),
   rayDirection = new THREE.Vector3();
 let hovered = null,
   knobDrag = null;
+const pickable = [];
 function hit(ray) {
   raycaster.ray.copy(ray);
-  const hits = raycaster.intersectObjects(interact, false);
+  pickable.length = 0;
+  for (const object of interact) if (object.visible) pickable.push(object);
+  const hits = raycaster.intersectObjects(pickable, false);
   return hits[0] || null;
 }
 function clickHit(result, inputOwner = "mouse") {
   if (!result) return;
-  if (result.object === board) {
+  if (result.object.userData.surface) {
+    const surface = result.object.userData.surface;
+    const x = result.uv.x * surface.canvas.width,
+      y = (1 - result.uv.y) * surface.canvas.height;
+    surface.regions
+      .find((v) => x >= v.x && x <= v.x + v.w && y >= v.y && y <= v.y + v.h)
+      ?.action();
+  } else if (result.object === board) {
     const x = result.uv.x * 1792,
       y = (1 - result.uv.y) * 1024;
     const region = regions.find(
@@ -1206,10 +1533,8 @@ function clickHit(result, inputOwner = "mouse") {
     controls.enabled = false;
   } else {
     result.object.userData.action?.();
-    result.object.position.z -= 0.008;
-    setTimeout(() => {
-      result.object.position.z = result.object.userData.homeZ;
-    }, 100);
+    if (buttons.includes(result.object))
+      result.object.userData.pressUntil = performance.now() + 90;
   }
 }
 renderer.domElement.addEventListener("pointerdown", (e) => {
@@ -1314,8 +1639,12 @@ for (let i = 0; i < 2; i++) {
   scene.add(hand);
   const joints = new THREE.InstancedMesh(
     new THREE.SphereGeometry(0.006, 5, 4),
-    new THREE.MeshBasicMaterial({ color: "#d7c69e" }),
-    25,
+    new THREE.MeshBasicMaterial({
+      color: "#d7c69e",
+      transparent: true,
+      opacity: 0.3,
+    }),
+    1,
   );
   joints.frustumCulled = false;
   joints.visible = false;
@@ -1391,23 +1720,22 @@ renderer.setAnimationLoop((now, xrFrame) => {
     smooth[i] +=
       (Math.max(0.01, levels[i] || 0) - smooth[i]) *
       (1 - Math.exp(-dt * (levels[i] > smooth[i] ? 18 : 8)));
-    dummy.position.set(i * 0.063, -0.062 + smooth[i] * 0.063, 0);
+    dummy.position.set(i * 0.052, -0.062 + smooth[i] * 0.063, 0);
     dummy.rotation.set(0, 0, 0);
     dummy.scale.set(1, Math.max(0.02, smooth[i] * 1.3), 1);
     dummy.updateMatrix();
     filaments.setMatrixAt(i, dummy.matrix);
+    hotCores.setMatrixAt(i, dummy.matrix);
+    tubeGlow.setColorAt(i, tubeColor.setScalar(smooth[i] * 1.6));
   }
   filaments.instanceMatrix.needsUpdate = true;
+  hotCores.instanceMatrix.needsUpdate = true;
+  tubeGlow.instanceColor.needsUpdate = true;
   const label = state.playing ? "Ⅱ" : "▶";
   if (playKey.userData.label !== label) {
     playKey.userData.label = label;
     const c = playKey.userData.canvas.getContext("2d");
-    c.clearRect(0, 0, 256, 128);
-    c.fillStyle = "#252a22";
-    c.font = "bold 64px system-ui";
-    c.textAlign = "center";
-    c.textBaseline = "middle";
-    c.fillText(label, 128, 64);
+    drawKeyIcon(c, label, "#252a22");
     playKey.userData.texture.needsUpdate = true;
   }
   const progress = THREE.MathUtils.clamp(
@@ -1417,6 +1745,15 @@ renderer.setAnimationLoop((now, xrFrame) => {
   );
   progressFill.scale.x = Math.max(0.0001, 1.68 * progress);
   progressFill.position.x = -0.84 + 0.84 * progress;
+  for (const key of buttons) {
+    const target = now < (key.userData.pressUntil || 0) ? -0.006 : 0;
+    key.userData.pressSpeed =
+      (key.userData.pressSpeed || 0) +
+      ((target - (key.position.z - key.userData.homeZ)) * 220 -
+        (key.userData.pressSpeed || 0) * 28) *
+        dt;
+    key.position.z += key.userData.pressSpeed * dt;
+  }
   const volume = knobDrag
     ? state.volume
     : client.state && !localActive
@@ -1440,11 +1777,11 @@ renderer.setAnimationLoop((now, xrFrame) => {
       const hand = renderer.xr.getHand(controllers.indexOf(controller)),
         mesh = hand.userData.mesh;
       let count = 0;
-      for (const joint of Object.values(hand.joints || {})) {
-        if (!joint.visible) continue;
+      const joint = hand.joints?.["index-finger-tip"];
+      if (joint?.visible) {
         joint.getWorldPosition(pose);
         dummy.position.copy(pose);
-        dummy.scale.set(1, 1, 1);
+        dummy.scale.setScalar(0.6);
         dummy.rotation.set(0, 0, 0);
         dummy.updateMatrix();
         mesh.setMatrixAt(count++, dummy.matrix);
@@ -1470,14 +1807,34 @@ renderer.setAnimationLoop((now, xrFrame) => {
     }
   }
   if (boardDirty) paint();
+  heartHeat += ((favorite ? 1 : 0) - heartHeat) * (1 - Math.exp(-dt * 2.8));
+  heartLightMaterial.opacity = 0.16 + heartHeat * 0.84;
+  const tabIndex = Math.max(0, tabs.indexOf(page));
+  const markerTarget = ((22 + tabIndex * 250 + 120) / 1792) * 2.15 - 1.075;
+  markerX += (markerTarget - markerX) * (1 - Math.exp(-dt * 12));
+  liquidMarker.position.x = markerX;
+  liquidMarker.scale.x =
+    1 + Math.min(0.35, Math.abs(markerTarget - markerX) * 3);
+  liquidMarker.scale.y = 1 / Math.sqrt(liquidMarker.scale.x);
+  mirrorTime.value += dt;
+  mirrorEnergy.value +=
+    (smooth.reduce((a, b) => a + b, 0) / 9 - mirrorEnergy.value) *
+    (1 - Math.exp(-dt * 3));
   listeningRoom.update(dt, smooth, colorTarget, state.playing);
   lightColor.copy(colorTarget).multiplyScalar(0.42);
-  mirrors.material.color.lerp(lightColor, 1 - Math.exp(-dt * 0.6));
+
   rim.color.lerp(colorTarget, 1 - Math.exp(-dt * 0.4));
-  const artX = page === "Слушать" ? 0 : -2.25;
+  art.position.z +=
+    ((state.playing ? 0.049 : 0.043) - art.position.z) *
+    (1 - Math.exp(-dt * 5));
+  const coverScale = state.playing ? 1 : 0.985;
+  art.scale.x += (coverScale - art.scale.x) * (1 - Math.exp(-dt * 5));
+  art.scale.y = art.scale.x;
+  const listening = page === "Слушать" && !keyboard;
+  const artX = listening ? 0 : -2.25;
   artGroup.position.x += (artX - artGroup.position.x) * (1 - Math.exp(-dt * 5));
   artGroup.scale.lerp(
-    artScale.setScalar(page === "Слушать" ? 1 : 0.55),
+    artScale.setScalar(listening ? 0.8 : 0.5),
     1 - Math.exp(-dt * 5),
   );
   renderer.render(scene, camera);

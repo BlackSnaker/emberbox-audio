@@ -2,6 +2,10 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.32.1 — 2026-11-16
+
+- Correct ImageBitmap artwork orientation for both service and bundled images. Separate the stable glass navigation, full artwork and metadata into individual XR surfaces; retain hidden-surface hit testing, readable titles and artwork on pause. Rebuild thin glass with rounded extrusions, recess circular transport keys into the charcoal chassis, add smooth mechanical travel and a warm heart lens, and remove the disconnected joint-sphere hand display. Use finer mirror facets with bounded cover-colour light motion and cached tube glow, without realtime mirror cameras.
+
 ## 0.32.0 — 2026-11-16
 
 - Introduce the early Ember Quest port: a real WebXR listening room, physical transport and captured volume dial, seek rail, four themes and audio-reactive tubes. Add an opt-in loopback Linux companion for current services, catalogue/search, albums/artists, queue, favourites, text DJ, lyrics and PC-side vocal reduction. Pair over USB with authenticated, origin-limited requests and source-only in-memory PCM streaming.
