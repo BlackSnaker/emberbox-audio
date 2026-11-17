@@ -91,18 +91,23 @@ class DJService:
             if intent.action=='clarify':return intent,engine,[],[]
             if intent.action!='mix':return intent,engine,[],[]
             affinity=self.memory.artist_affinity(source)
-            values,recent,warnings=self.catalog.collect(source,intent,affinity,alive,progress)
-            if not alive():raise InterruptedError('cancelled')
-            resolved=next((v.get('_requested_artist') for v in values if v.get('_requested_artist')),None)
-            if resolved:intent=replace(intent,artists=(resolved,),mode='artist')
-            self.memory.import_recent(source,recent)
-            profile=self.memory.profile(source);affinity=self.memory.artist_affinity(source)
-            continuing_artist=bool(intent.mode=='artist' and previous and previous.mode=='artist' and intent.artists==previous.artists)
-            exclude=previous_played if intent.mode not in ('artist','lookup') or continuing_artist else set()
-            selected=rank(values,source,intent,profile,affinity,exclude,seed=str(generation)+prompt)
-            if not selected and exclude:
-                current=self.music.book.current(source) or {}
-                selected=rank(values,source,intent,profile,affinity,{current.get('uri','')},seed=str(generation)+prompt)
+            # Late catalogue results remain in the single-flight cache. Keep
+            # waiting in this worker, with cancellation, rather than asking the
+            # listener to retype the wish or rerunning the language model.
+            for attempt in range(3):
+                values,recent,warnings=self.catalog.collect(source,intent,affinity,alive,progress)
+                if not alive():raise InterruptedError('cancelled')
+                resolved=next((v.get('_requested_artist') for v in values if v.get('_requested_artist')),None)
+                if resolved:intent=replace(intent,artists=(resolved,),mode='artist')
+                self.memory.import_recent(source,recent)
+                profile=self.memory.profile(source);affinity=self.memory.artist_affinity(source)
+                continuing_artist=bool(intent.mode=='artist' and previous and previous.mode=='artist' and intent.artists==previous.artists)
+                exclude=previous_played if intent.mode not in ('artist','lookup') or continuing_artist else set()
+                selected=rank(values,source,intent,profile,affinity,exclude,seed=str(generation)+prompt)
+                if not selected and exclude:
+                    current=self.music.book.current(source) or {}
+                    selected=rank(values,source,intent,profile,affinity,{current.get('uri','')},seed=str(generation)+prompt)
+                if selected or 'pending' not in warnings:break
             return intent,engine,selected,warnings
         future=self.pool.submit(build)
         future.add_done_callback(lambda result:GLib.idle_add(self.built,generation,source,result,priority=GLib.PRIORITY_DEFAULT))

@@ -47,6 +47,14 @@ class UnderstandingTests(unittest.TestCase):
             self.assertEqual(i.target_kind,'track');self.assertEqual(i.query,name)
             self.assertEqual(i.genres,());self.assertEqual(i.mood,'any')
 
+    def test_reported_similar_daftpunk_keeps_the_complete_name_without_punk_genre(self):
+        for prompt in ('что-то похожее на daft punk','как Daft Punk','similar to daft punk'):
+            i=local_intent(prompt)
+            self.assertEqual(i.mode,'similar');self.assertEqual(i.genres,())
+            self.assertEqual(i.artists[0].casefold(),'daft punk');self.assertTrue(quick_wish(prompt))
+        i=local_intent('похожее на Daft Punk, но без вокала')
+        self.assertTrue(i.instrumental);self.assertEqual(i.genres,())
+
     def test_familiar_abstract_wishes_never_load_a_language_model(self):
         cases={
             'что-нибудь потеплее для вечера':('warm',),
@@ -102,6 +110,23 @@ class UnderstandingTests(unittest.TestCase):
 
 
 class RecommendationTests(unittest.TestCase):
+    def test_similar_uses_real_source_relationships_instead_of_a_name_search(self):
+        calls=[]
+        def request(method,**kw):
+            calls.append((method,kw))
+            return {'items':[song(i,artist='Related '+str(i//4),genres=['Electronic'],_dj_related='Daft Punk') for i in range(24)]}
+        host=SimpleNamespace(apple_mode='native',apple_web=SimpleNamespace(request=request))
+        c=DJCatalog(SimpleNamespace(host=host,repository=SimpleNamespace(load=lambda *_a,**_k:self.fail('Literal name search'))))
+        c.personal=lambda *_:self.fail('Unrelated personal enrichment')
+        try:
+            i=local_intent('что-то похожее на daft punk')
+            values,_,_=c.collect('apple-music',i,{})
+            result=rank(values+[song(999,_personal=True)],'apple-music',i,{}, {})
+            self.assertEqual(len(result),14)
+            self.assertTrue(all(v['_dj_related']=='Daft Punk' for v in result))
+            self.assertEqual(calls,[('artistSection',{'section':'dj-similar','name':'daft punk'})])
+        finally:c.close()
+
     def test_a_song_title_and_artist_name_are_not_genre_evidence(self):
         values=[song(1,title='Jazz'),song(2,artist='Jazztronik'),
                 song(3,genres=['Jazz']),song(4,_context='Лучший джаз для вечера')]

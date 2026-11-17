@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.33.2 — 2026-11-17 · related artists
+
+- Fix “something like daft punk”: protect the complete case-insensitive name from genre matching, parse outside qualifiers separately and skip unnecessary inference.
+- Fetch tracks through Apple Music's source-owned similar-artist relationships with bounded parallel views. Other connections may use explicitly linked Inspired by collections; unrelated personal shelves cannot fill the result. Show the recommendation's provenance.
+- Await late cached results within the same wish, without resubmission or another model call. Check the live catalogue, adapter boundaries and late-result completion in GTK.
+
 ## 0.33.1 — 2026-11-17 · Ember DJ understanding
 
 - Separate genres, explicit artists and recording titles before catalogue lookup. Protect names such as Metallica, Jazztronik, Pop Smoke and Happy Mondays; add R&B, drum and bass and atomic subgenres.

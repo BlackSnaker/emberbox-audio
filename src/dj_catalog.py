@@ -135,6 +135,18 @@ class DJCatalog:
         else:result=self.music.repository.load(source,'search',term=term[:200])
         return {'items':[dict(v,_search_query=term) for v in (result.get('items') or result.get('tracks') or []) if isinstance(v,dict)]}
 
+    def similar(self,source,intent,deadline):
+        name=intent.artists[0] if intent.artists else intent.query
+        if source=='apple-music' and getattr(self.host,'apple_mode','')=='native':
+            try:
+                data=self.host.apple_web.request('artistSection',section='dj-similar',name=name)
+                if data.get('items'):return data
+            except Exception:
+                if time.monotonic()>=deadline:raise
+        # Other connections can use a source-curated "inspired by" collection.
+        # Plain name hits and unrelated personal shelves are not similarity.
+        return self.themed(source,name+' inspired',intent,deadline)
+
     def themed(self,source,query,intent,deadline=None):
         """Try a concise fallback only when the detailed wish has no matches."""
         deadline=deadline or time.monotonic()+self.BUDGET
@@ -173,7 +185,12 @@ class DJCatalog:
                 mood=intent.mood if intent.mood in MOOD_MATCH and re.search(MOOD_MATCH[intent.mood],context,re.I) else ''
                 genres=tuple(g for g in intent.genres if genre_match(g,context))
                 search=intent.search if context_score(collection,intent,{})>0 else ''
-                tracks.extend(dict(v,_context=context,_dj_mood=mood,_dj_genres=genres,_dj_search=search)
+                related=''
+                if intent.mode=='similar' and intent.artists:
+                    anchor=intent.artists[0]
+                    if (normalized(anchor) in normalized(context) and
+                            re.search(r'inspired|influenc|similar|похож|в духе',context,re.I)):related=anchor
+                tracks.extend(dict(v,_context=context,_dj_mood=mood,_dj_genres=genres,_dj_search=search,_dj_related=related)
                     for v in (data.get('tracks') or data.get('items') or [])[:60] if isinstance(v,dict))
             except Exception:continue
         if tracks:return {'items':tracks[:120]}
@@ -191,6 +208,7 @@ class DJCatalog:
         elif not requested and not intent.search and intent.genres and intent.mood in MOOD_MATCH:
             query+=' '+MOOD_QUERY[intent.mood]
         def search():
+            if intent.mode=='similar':return self.similar(source,intent,deadline)
             if source=='youtube':return self.youtube(query,lambda:not self.closed)
             if intent.mode=='theme' or intent.search or not requested and (intent.mood in MOOD_MATCH or intent.mood=='discover' or intent.genres):
                 return self.themed(source,query,intent,deadline)
@@ -200,7 +218,7 @@ class DJCatalog:
         key=(source,'specific' if specific else 'search',query,intent.mode,intent.target_kind,intent.mood,intent.genres,intent.avoid,intent.instrumental)
         search_future=self.cache.get(key,lambda:self.guarded(source,lambda:self.specific(source,intent) if specific else search()),ttl=180)
         taste=tuple((name,round(weight,1)) for name,weight in sorted(affinity.items(),key=lambda p:p[1],reverse=True)[:12])
-        personal_future=None if specific else self.cache.get((source,'personal',intent.mood,intent.genres,intent.search,intent.avoid,intent.instrumental,taste),lambda:self.guarded(source,lambda:self.personal(source,intent,affinity)))
+        personal_future=None if specific or intent.mode=='similar' else self.cache.get((source,'personal',intent.mood,intent.genres,intent.search,intent.avoid,intent.instrumental,taste),lambda:self.guarded(source,lambda:self.personal(source,intent,affinity)))
         pending={f for f in (search_future,personal_future) if f is not None};search_done=False;personal_done=False;first=None
         progress('catalogue')
         while pending and time.monotonic()<deadline:
@@ -268,6 +286,7 @@ def rank(values,source,intent,profile,affinity,exclude=(),limit=14,seed=''):
         if intent.mode=='lookup' and not requested:
             terms=set(normalized(intent.query).split());actual=set((normalized(valid['title'])+' '+artist).split())
             if not terms or len(terms&actual)/len(terms)<.75:continue
+        if intent.mode=='similar' and not any(artist_key(value.get('_dj_related',''))==artist_key(a) for a in intent.artists):continue
         mood_match=intent.mood in MOOD_MATCH and (value.get('_dj_mood')==intent.mood or re.search(MOOD_MATCH[intent.mood],style))
         if not direct and intent.genres and not any(genre_match(g,style) for g in intent.genres):continue
         # Favourite tracks from a cached personal feed cannot overrule a new
@@ -297,7 +316,7 @@ def rank(values,source,intent,profile,affinity,exclude=(),limit=14,seed=''):
         if artist and intent.artists and any(normalized(a) in artist or artist in normalized(a) for a in intent.artists):score+=14
         jitter=int(hashlib.sha256((seed+valid['uri']).encode()).hexdigest()[:8],16)/0xffffffff
         score+=jitter*(3 if intent.mood=='discover' else 1)
-        reason='requested-artist' if requested else 'requested-track' if intent.mode=='lookup' else 'personal' if value.get('_personal') else 'artist' if affinity.get(valid['artist'].casefold(),0)>0 else 'catalogue'
+        reason='requested-artist' if requested else 'requested-track' if intent.mode=='lookup' else 'similar' if intent.mode=='similar' else 'personal' if value.get('_personal') else 'artist' if affinity.get(valid['artist'].casefold(),0)>0 else 'catalogue'
         if intent.instrumental is True:reason='instrumental'
         elif mood_match:reason='mood'
         pool.append((score,dict(value,_reason=reason)))

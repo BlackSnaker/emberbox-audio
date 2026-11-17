@@ -50,6 +50,7 @@ not promise correct interpretation of every possible sentence.
 | “Metallica”, “Jazztronik”, “Pop Smoke” | Exact catalogue artist resolution; name fragments are not genre evidence. |
 | “Artist Jazz”, “группа Кино” | An explicit artist marker takes priority over style vocabulary. |
 | “Song Happy”, “track Relax” | Recording search, without first resolving a namesake artist. |
+| “Something like daft punk” | The complete name anchors the mix; punk does not become a requested genre. Apple Music supplies real tracks by related acts. |
 | “Warm evening jazz”, “русский рок девяностых” | Genre and context together; an empty detailed search gets one shorter alternative retaining the main direction. |
 | “A little warmer”, “without jazz”, “now rock” | Refine the direction and remove excluded genres from search conditions. |
 
@@ -59,6 +60,12 @@ Favourite metal tracks do not enter an explicit jazz request because of likes.
 Discovery lowers the priority of familiar recordings and acts. YouTube has
 less genre metadata, so video titles also provide hints. Empty matches are
 not replaced with unrelated favourites.
+
+Apple Music uses [the catalogue's own similar-artist relationships](https://developer.apple.com/documentation/applemusicapi/fetch-a-view-on-this-resource-by-name-4kow5):
+one exact name lookup, a related-artist view and up to four short parallel
+top-song views. Other connections can use explicitly source-curated “Inspired by”
+collections. Late results are awaited within the same wish without rerunning
+the model; the bounded wait is cancelled when a new wish arrives.
 
 The interaction takes inspiration from the combination of genre, mood, artist
 and activity requests [described by Spotify](https://newsroom.spotify.com/2025-10-15/dj-spanish-text-requests-update/).

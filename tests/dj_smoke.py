@@ -56,6 +56,17 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         release.set();slow[0]=False;wait(lambda:not s.busy and len(v.rows)>0);wait(lambda:not stage.music.loading)
         assert plays and s.session and any(i['uri']=='spotify:track:Manual' for _,i in stage.music.book.upcoming('spotify'))
         assert s.prompt=='Relaxing music';shot(stage,'dj-1920')
+        # A late cache result finishes the SAME wish without asking the user
+        # to submit it again or running the interpreter for a second time.
+        pending_calls=[]
+        def delayed(*_a,**_kw):
+            pending_calls.append(1)
+            return ([],[],['pending']) if len(pending_calls)==1 else (tracks,[],[])
+        s.catalog.collect=delayed
+        v.entry.set_text('Relaxing music');v.entry.emit('activate')
+        wait(lambda:not s.busy and len(pending_calls)==2)
+        assert s.phase=='playing' and s.items
+        s.catalog.collect=collect
         # Keyboard and microphone send into the same request pipeline.
         with patch.object(s,'ask') as ask:
             s.voice.transcript('Хочу спокойную музыку');ask.assert_called_once_with('Хочу спокойную музыку')

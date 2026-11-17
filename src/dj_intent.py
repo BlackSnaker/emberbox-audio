@@ -209,6 +209,17 @@ def local_intent(prompt,previous=None):
         detail=_basic_intent(qualifier)
         return replace(detail,query=name,mode='artist' if kind=='artist' else 'lookup',
             artists=(name,) if kind=='artist' else (),target_kind=kind,search='',caption='')
+    similar=re.search(r'(?:как|в стиле|похож[а-я]* на|like|similar to)\s+(.{2,80}?)(?=,|\s+(?:но|только|без|but|without)\b|$)',value,re.I)
+    if similar:
+        name=similar[1].strip()
+        genre_only=any(re.fullmatch(pattern,name,re.I) for pattern in GENRES.values())
+        scene=bool(re.match(r'^(?:в|на|будто|словно|я)\b',name,re.I) or describe(name)[0])
+        if not genre_only and not scene:
+            # Mask the COMPLETE name before parsing qualifiers: the word
+            # "punk" inside "daft punk" must not become a requested genre.
+            qualifier=value[:similar.start()]+value[similar.end():]
+            detail=_basic_intent(qualifier)
+            return replace(detail,query=name,mode='similar',artists=(name,),target_kind='artist')
     literal=re.sub(REQUEST_PREFIX,'',value,flags=re.I).strip(' ,.!?')
     words=re.findall(r"[\w'-]+",literal)
     # "Pop Smoke" is a name even though its first word is also a genre.

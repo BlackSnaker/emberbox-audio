@@ -171,7 +171,7 @@ async function emberboxAppleCommand(request) {
       isCompilation:a.isCompilation===true,isSingle:a.isSingle===true};
   }
   async function api(path, query = {}) {
-    const catalog=/^\/v1\/catalog\/[a-z]{2}\/(search|songs\/\d{1,20}(\/artists)?|albums\/\d{1,20}(\/tracks)?|artists\/\d{1,20}(\/albums|\/view\/(top-songs|latest-release|full-albums|singles|featured-albums|compilation-albums|appears-on-albums))?)$/;
+    const catalog=/^\/v1\/catalog\/[a-z]{2}\/(search|songs\/\d{1,20}(\/artists)?|albums\/\d{1,20}(\/tracks)?|artists\/\d{1,20}(\/albums|\/view\/(top-songs|similar-artists|latest-release|full-albums|singles|featured-albums|compilation-albums|appears-on-albums))?)$/;
     const dj=path==='/v1/me/recommendations'||path==='/v1/me/recent/played/tracks'||
       /^\/v1\/catalog\/[a-z]{2}\/playlists\/[\w.-]{1,200}\/tracks$/.test(path);
     if (!path.startsWith('/v1/me/library/') && !catalog.test(path) && !dj) throw Error('Unsupported library request');
@@ -284,6 +284,32 @@ async function emberboxAppleCommand(request) {
     return {artist:artistItem(resource),sections};
   }
   if(request.method==='artistSection') {
+    if(params.section==='dj-similar') {
+      // Source-owned similarity, not a title search for words in an act's name.
+      // https://developer.apple.com/documentation/applemusicapi/fetch-a-view-on-this-resource-by-name-4kow5
+      const sf=storefront(),deadline=Date.now()+4500;
+      const name=String(params.name||'').trim().slice(0,100);
+      if(!name)return {items:[]};
+      const key=s=>String(s).normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim().replace(/^the\s+/,'');
+      const search=await artistApi(`/v1/catalog/${sf}/search`,{term:name,types:'artists',limit:12},deadline);
+      const choices=(search.results?.artists?.data||[]).filter(a=>a.type==='artists'&&/^\d{1,20}$/.test(String(a.id))&&key(a.attributes?.name)===key(name));
+      if(choices.length!==1)return {items:[]};
+      const anchor=choices[0];
+      const related=await artistApi(`/v1/catalog/${sf}/artists/${anchor.id}/view/similar-artists`,{limit:8},deadline);
+      const seen=new Set([String(anchor.id)]);
+      const artists=(related.data||[]).filter(a=>{
+        if(a.type!=='artists'||!/^\d{1,20}$/.test(String(a.id))||!a.attributes?.name||seen.has(String(a.id)))return false;
+        seen.add(String(a.id));return true;
+      }).slice(0,4);
+      const blocks=await Promise.all(artists.map(async artist=>{
+        try {
+          const songs=await artistApi(`/v1/catalog/${sf}/artists/${artist.id}/view/top-songs`,{limit:8},deadline);
+          return (songs.data||[]).filter(s=>s.type==='songs'&&/^\d{1,20}$/.test(String(s.id))&&s.attributes?.playParams)
+            .slice(0,8).map(s=>({...item(s),_dj_related:anchor.attributes.name,_dj_related_artist:artist.id}));
+        } catch{return [];}
+      }));
+      return {artist:artistItem(anchor),items:blocks.flat(),related:artists.map(artistItem)};
+    }
     if(params.section==='discography') {
       // Curated views are previews, not the artist's complete release list.
       // Read the albums relationship directly and follow its actual next page.

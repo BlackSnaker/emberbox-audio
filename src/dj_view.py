@@ -59,6 +59,7 @@ PHASES={'welcome':('Mood, a style, a few words. Then music.','Настроени
  'empty':('Let us try a different direction','Попробуем другое направление'),
  'error':('A small pause. We can try again.','Небольшая пауза. Можно попробовать ещё раз.')}
 REASONS={'requested-artist':('From the requested artist’s catalogue','Из каталога выбранного исполнителя'),
+ 'similar':('Related by the music service','Похожий исполнитель по данным сервиса'),
  'requested-track':('Matches your track request','По твоему запросу'),
  'personal':('From your personal picks','Из твоих личных подборок'),
  'artist':('An artist you return to','Исполнитель, к которому ты возвращаешься'),

@@ -3,7 +3,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('nod
 const requests=[],transport=[],deadlines=[];
 let collaboration=false,missingRelationship=false,latestOnly=false,mismatchArtist=false,hangProfile=false,quickTimers=false,missingAlbum=false;
 const viewBehavior=new Map();
-let catalogueNext,failCatalogue=false;
+let catalogueNext,failCatalogue=false,djMode=false;
 const artist=id=>({id:String(id),type:'artists',attributes:{name:'Emberbox Sessions '+id,
   artwork:{url:'https://example.invalid/{w}x{h}.jpg'},genreNames:['Alternative'],
   editorialNotes:{standard:'<p>Original fixture biography &amp; story.</p>'},
@@ -28,7 +28,8 @@ const viewData={
 };
 const music={isAuthorized:true,bitrate:256,storefrontId:'us',api:{music:async(path,query)=>{
   requests.push({path,query});let response;
-  if(path.endsWith('/search'))response={results:{artists:{data:[artist(100),artist(101)]}}};
+  if(path.endsWith('/search'))response={results:{artists:{data:djMode?
+    [{...artist(100),attributes:{...artist(100).attributes,name:'Daft Punk',genreNames:['Electronic']}},artist(101)]:[artist(100),artist(101)]}}};
   else if(/\/songs\/[^/]+\/catalog$/.test(path)||/\/songs\/\d+$/.test(path))response={data:[song(123)]};
   else if(/\/artists\/\d+\/albums$/.test(path)){
     if(failCatalogue)throw Error('Fixture network error');
@@ -43,6 +44,11 @@ const music={isAuthorized:true,bitrate:256,storefrontId:'us',api:{music:async(pa
   }
   else if(path.includes('/view/')){
     const view=path.split('/').at(-1),behavior=viewBehavior.get(view);
+    if(djMode&&view==='similar-artists')return {data:{data:[artist(100),...Array.from({length:8},(_,i)=>artist(200+i)),artist('../account')]}};
+    if(djMode&&view==='top-songs'){
+      const base=Number(path.split('/').at(-3))*1000;
+      return {data:{data:Array.from({length:8},(_,i)=>song(base+i))}};
+    }
     if(behavior==='error')throw Error('Fixture optional view unavailable');
     if(behavior==='hang')return new Promise(()=>{});
     response={data:behavior===undefined?viewData[view]:behavior,next:query.offset?null:path+'?offset=24'};
@@ -171,6 +177,17 @@ const section=(result,id)=>result.sections.find(s=>s.id===id);
     await assert.rejects(call('artist',{id}));await assert.rejects(call('release',{id}));
   }
   await assert.rejects(call('artistSection',{id:'100',section:'account'}));
+  djMode=true;
+  const beforeDJ=requests.length;
+  result=await call('artistSection',{name:'daft punk',section:'dj-similar'});
+  assert.equal(result.artist.name,'Daft Punk');assert.equal(result.related.length,4);
+  assert.equal(result.items.length,32);assert(result.items.every(s=>s._dj_related==='Daft Punk'));
+  assert.equal(new Set(result.items.map(s=>s.id)).size,32);
+  assert.equal(requests.length-beforeDJ,6,'One artist search, one relation and four bounded song views');
+  assert.equal(requests[beforeDJ+1].path,'/v1/catalog/us/artists/100/view/similar-artists');
+  assert(!JSON.stringify(result).includes('NEVER_EXPORT'));
+  assert.equal((await call('artistSection',{name:'Unknown act',section:'dj-similar'})).items.length,0);
+  djMode=false;
   assert.deepEqual(transport,[],'Browsing must never change playback');
   music.isAuthorized=false;await assert.rejects(call('artist',{id:'100'}),/Sign in/);
   console.log('PASS exact artists, rich bounded overview, missing-view fallback, partial failures/timeouts, strict categories, paging and unchanged transport');
