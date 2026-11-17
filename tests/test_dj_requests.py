@@ -43,8 +43,8 @@ class RequestTests(unittest.TestCase):
             self.assertEqual(local_intent(name),Intent(query=name,mode='lookup'))
         for title in ('Что - нибудь погрустнее','Что-нибудь','Happy','А — Студио'):
             with self.subTest(title=title):
-                self.assertEqual(local_intent('Найди трек «'+title+'»'),Intent(query=title,mode='lookup'))
-        self.assertEqual(local_intent('песню под названием Что-нибудь'),Intent(query='Что-нибудь',mode='lookup'))
+                self.assertEqual(local_intent('Найди трек «'+title+'»'),Intent(query=title,mode='lookup',target_kind='track'))
+        self.assertEqual(local_intent('песню под названием Что-нибудь'),Intent(query='Что-нибудь',mode='lookup',target_kind='track'))
         intent=local_intent('Beatles, что - нибудь погрустнее')
         self.assertEqual(intent.query,'Beatles');self.assertEqual(intent.mood,'melancholy')
     def test_reported_sentence_loads_sad_playlists_not_literal_song_hits(self):

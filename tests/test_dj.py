@@ -34,7 +34,7 @@ class IntentTests(unittest.TestCase):
     def test_bad_model_output_and_constraints(self):
         fallback=local_intent('Без вокала, без металла')
         i=decode({'kind':'mix','query':'soft piano'},'Без вокала, без металла',None,fallback)
-        self.assertTrue(i.instrumental);self.assertIn('metal',i.avoid);self.assertEqual(i.mood,'any')
+        self.assertTrue(i.instrumental);self.assertIn('metal',i.avoid);self.assertEqual(i.mood,'relax')
         with self.assertRaises(ValueError):decode([], '',None,fallback)
     def test_small_model_cannot_invent_artist_or_style(self):
         fallback=local_intent('Хочу расслабляющую музыку без вокала')

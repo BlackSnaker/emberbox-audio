@@ -167,8 +167,9 @@ A Grunesphism DJ tab inside Ember: **type a wish and press Enter**, or use
 the microphone. Personal picks, listening and feedback shape the next music
 block. Local AI, recognition and speech; a soft entrance, a metal microphone
 dial and live tubes. [Open and prepare your DJ →](docs/DJ.md)
-Free-form moods and scenes use a local model; follow-ups can refine the previous
-set. Direct commands remain immediate.
+Genres, artists and recording titles are separated before search. Familiar
+scenes work without loading a model; local AI helps with more complex wishes.
+Taste personalizes matches within the request, and follow-ups refine the current set.
 
 
 ## A place in the music

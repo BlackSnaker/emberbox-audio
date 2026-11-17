@@ -139,7 +139,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
             return {'message':{'content':json.dumps({'kind':'mix','query':'vintage jazz lounge'})}}
         with patch('dj_brain.ready',return_value=False),patch.object(s.brain,'models',return_value=['fixture']),patch.object(s.brain,'generate',side_effect=generation),patch.object(stage.music.repository,'load',side_effect=load),patch.object(s.catalog,'personal',return_value={'tracks':[]}):
             s.memory.settings['ai']=True
-            v.entry.set_text('Хочу будто оказаться в старом джазовом баре');v.entry.emit('activate')
+            v.entry.set_text('Хочу джаз с ощущением заброшенной обсерватории');v.entry.emit('activate')
             wait(lambda:not s.busy and s.intents['spotify'].search=='vintage jazz lounge')
             assert s.engine=='ai' and len(s.items)==14 and queries[-1]=='vintage jazz lounge'
             assert s.intents['spotify'].caption in v.understanding.get_text()

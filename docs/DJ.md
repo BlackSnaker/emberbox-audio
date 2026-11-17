@@ -26,10 +26,10 @@ entrance extend Emberbox's Grunesphism materials.
   when capture is actually active.
 - Music gently ducks while listening or speaking. The dial and saved volume
   stay unchanged. Voice replies can be disabled.
-- Common mood/genre wishes and direct track searches use a lightweight local parser.
-  **Free-form wishes · local AI** handles imagery such as “an old jazz bar”,
-  “a noir movie” or “music that makes me jump around the room”. A short request
-  can still need inference; a single mood keyword is not enough to bypass it.
+- Genres, names and familiar scenes use a lightweight local parser: a warm
+  evening, weightless sound, night driving, goosebumps or an old jazz bar.
+  **Free-form wishes · local AI** handles less familiar descriptions. A short
+  request can still need inference; one recognized word does not cover a whole sentence.
   New preferences enable this mode; existing choices are preserved.
 - First use: **⚙ → Prepare voice** and **Prepare local AI**. Ember's own model
   is preferred. Setup shows progress and cancellation,
@@ -41,6 +41,28 @@ visible alongside a localized description of the chosen sound. An unavailable
 model or invalid interpretation leads to a request for a musical detail/setup;
 current music continues. Free-form understanding remains experimental and does
 not promise correct interpretation of every possible sentence.
+
+## Genre, artist or atmosphere
+
+| Wish | Selection |
+| --- | --- |
+| “Jazz”, “drum and bass”, “R&B”, “post punk” | Genre collections, without resolving the style as an artist. |
+| “Metallica”, “Jazztronik”, “Pop Smoke” | Exact catalogue artist resolution; name fragments are not genre evidence. |
+| “Artist Jazz”, “группа Кино” | An explicit artist marker takes priority over style vocabulary. |
+| “Song Happy”, “track Relax” | Recording search, without first resolving a namesake artist. |
+| “Warm evening jazz”, “русский рок девяностых” | Genre and context together; an empty detailed search gets one shorter alternative retaining the main direction. |
+| “A little warmer”, “without jazz”, “now rock” | Refine the direction and remove excluded genres from search conditions. |
+
+Request relevance comes before personal taste. A song called “Jazz” is not
+genre evidence: available source genres and actual collection descriptions are.
+Favourite metal tracks do not enter an explicit jazz request because of likes.
+Discovery lowers the priority of familiar recordings and acts. YouTube has
+less genre metadata, so video titles also provide hints. Empty matches are
+not replaced with unrelated favourites.
+
+The interaction takes inspiration from the combination of genre, mood, artist
+and activity requests [described by Spotify](https://newsroom.spotify.com/2025-10-15/dj-spanish-text-requests-update/).
+Ember uses its own algorithm and the connected service's available catalogue data.
 
 ## Real music, shaped by your taste
 

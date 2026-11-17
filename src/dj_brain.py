@@ -118,7 +118,7 @@ class LocalBrain:
             if ready('brain'):
                 url,token=self.native(alive)
                 data=self.generate(url+'/v1/chat/completions',{'messages':messages,'stream':False,
-                    'response_format':{'type':'json_object','schema':SCHEMA},'max_tokens':48,'temperature':0},alive,
+                    'response_format':{'type':'json_object','schema':SCHEMA},'max_tokens':96,'temperature':0},alive,
                     budget=min(10,12-(time.monotonic()-started)),token=token)
                 content=data.get('choices',[{}])[0].get('message',{}).get('content','')
             else:
@@ -128,7 +128,7 @@ class LocalBrain:
                 chosen=model if model in models else next((m for m in models if m.startswith(('qwen3.5:2b','qwen3:1.7b'))),models[0])
                 data=self.generate('http://127.0.0.1:11434/api/chat',{'model':chosen,'messages':messages,
                     'stream':False,'format':SCHEMA,'keep_alive':'30s','think':False,
-                    'options':{'num_ctx':1536,'num_predict':48,'num_thread':2,'temperature':0}},alive,
+                    'options':{'num_ctx':1536,'num_predict':96,'num_thread':2,'temperature':0}},alive,
                     budget=min(10,12-(time.monotonic()-started)))
                 content=data.get('message',{}).get('content','')
             if not alive():raise InterruptedError('cancelled')

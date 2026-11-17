@@ -3,15 +3,20 @@ from dataclasses import replace
 import re
 from dj_intent import Intent,clean,wish_text,REQUEST_PREFIX,artist_key,local_intent
 from source_picker import text
+from dj_language import search_words
 
 SCHEMA={'type':'object','properties':{
-    'kind':{'type':'string','enum':['mix','artist','track','similar','clarify']},
+    'kind':{'type':'string','enum':['mix','genre','artist','track','similar','clarify']},
     'query':{'type':'string','maxLength':64}},
     'required':['kind','query'],'additionalProperties':False}
-SYSTEM='''Interpret musical wishes. JSON only: kind (mix,artist,track,similar,clarify), query.
-mix: ONE playlist search of 2-5 English music keywords describing SOUND, not literal scenery. Jumping=energetic dance; noir=dark cinematic jazz; weightless=ethereal ambient.
-artist/track/similar: exact explicitly requested name. clarify: unclear or nonmusical.
-Previous exists only for follow-ups: keep its sound, apply changes and negation. No previous means a fresh wish. No invented names, IDs, explanations or lists.'''
+SYSTEM='''Interpret musical wishes. JSON only: kind (mix,genre,artist,track,similar,clarify), query.
+genre: a musical style, never an artist. "джаз"=jazz; "драм-н-бейс"=drum and bass; "пост-панк"=post punk.
+artist: an explicitly named act. "группа Кино"=Кино; "Metallica"=Metallica; "Pop Smoke"=Pop Smoke. Do not split names into genre/mood words.
+track: an explicitly named recording. "песня Happy"=Happy. Bare ambiguous names can be artist; never infer titles from conversational descriptions.
+similar: explicitly requests music LIKE a named artist, rather than only that artist.
+mix: ONE playlist search of 2-5 English keywords describing SOUND. Abstract wishes are not song titles: "до мурашек"=emotional cinematic; "хочу забыть тяжёлый день"=gentle chill; "чтобы прыгать"=energetic dance; "дождливый вечер"=mellow rainy jazz; "будто парю"=ethereal ambient.
+Combinations retain explicit genres and mood: "джаз повеселее"=upbeat jazz. Never replace an artist with a genre. Never invent artists, recordings, IDs or URLs.
+Previous exists only for follow-ups: keep compatible sound, apply changes and negation, remove conflicting old qualities. A new genre replaces the old genre. No previous means a fresh wish. clarify: unclear or nonmusical. No explanations or lists.'''
 
 CAPTIONS=(
  (r'noir',('Noir atmosphere','Атмосфера нуара')),
@@ -58,7 +63,7 @@ def follows(prompt):
     if re.search(r'с чистого листа|совсем другое|заново|новый сет|new station|start over',value):return False
     return bool(re.search(r'^(?:а\b|но\b|теперь\b|еще\b|в том же|в этом же|так же|то же|все (?:это|так|то)|'
         r'тот же|та же|ту же|того же|такой же|такая же|оставь|сохрани|добавь|убери|поменьше|побольше|больше|меньше|немного|чуть|по\w+ее\b|'
-        r'сделай|пусть|потом|вместо|без\b|с вокалом|same|keep|make|add|less|more|without|with|instead|that)',value) or
+        r'сделай|пусть|потом|вместо|без\b|с вокалом|same|keep|make|add|less|more|(?:a )?little|without|with|instead|that)',value) or
         re.search(r'\b(?:их же|они же|таком же духе|том же духе|этом же духе|то же самое|the same|same artist|by them)\b',value))
 
 
@@ -66,7 +71,8 @@ def context(previous):
     if previous is None:return {}
     return {k:v for k,v in {'query':previous.search or previous.query,'caption':previous.caption,
         'mode':previous.mode,'artists':list(previous.artists),'mood':previous.mood,
-        'instrumental':previous.instrumental,'avoid':list(previous.avoid)}.items() if v not in ('',[],None,'any')}
+        'genres':list(previous.genres),'target_kind':previous.target_kind,
+        'instrumental':previous.instrumental,'avoid':list(previous.avoid)}.items() if v not in ('',[],None,'any','auto')}
 
 
 def clarify(message=None):
@@ -107,6 +113,8 @@ def decode(data,prompt,previous,fallback):
     elif fallback.instrumental is not None and fallback.instrumental!=base.instrumental:instrumental=fallback.instrumental
     avoid=tuple(dict.fromkeys(base.avoid+fallback.avoid))
     if kind in ('artist','track','similar'):
+        if fallback.mode=='mix' and fallback.genres and artist_key(query) in {artist_key(g) for g in fallback.genres}:
+            raise ValueError('A requested genre is not an artist or title')
         norm=lambda s:re.sub(r'[^\w]+',' ',str(s).casefold()).strip()
         grounded=(' '+norm(query)+' ') in (' '+norm(prompt)+' ') or any(artist_key(query)==artist_key(word) for word in re.findall(r'\w+',prompt))
         grounded=grounded or bool(base.query and artist_key(query)==artist_key(base.query)) or any(artist_key(query)==artist_key(a) for a in base.artists)
@@ -116,18 +124,29 @@ def decode(data,prompt,previous,fallback):
             raise ValueError('A conversation is not a literal title')
         return Intent(mood=fallback.mood,genres=fallback.genres,artists=(query,) if kind!='track' else (),
             avoid=avoid,instrumental=instrumental,familiarity=base.familiarity,query=query,
-            mode={'artist':'artist','track':'lookup','similar':'similar'}[kind])
+            mode={'artist':'artist','track':'lookup','similar':'similar'}[kind],
+            target_kind=kind if kind in ('artist','track') else 'auto')
     # Some compact models return several candidate searches. Keep one coherent
     # phrase; combining unrelated alternatives makes catalogue searches empty.
     alternatives=[clean(p,64) for p in re.split(r'[,;|\n]',query) if clean(p)]
     if not alternatives:raise ValueError('No musical search')
-    if base.search:
+    if base.search and not (fallback.genres and fallback.genres!=base.genres):
         words=set(re.findall(r'\w+',base.search.casefold()))
         query=max(alternatives,key=lambda p:len(words.intersection(re.findall(r'\w+',p.casefold()))))
         if re.search(NO_SINGING,value) or re.search(WITH_SINGING,value):query=base.search
         elif len(words.intersection(re.findall(r'\w+',query.casefold())))==0:
             query=base.search+' '+alternatives[0]
     else:query=alternatives[0]
+    # Small local models occasionally ignore the requested search language.
+    # Compile recognized Russian styles/scenes to catalogue vocabulary rather
+    # than forwarding scenery nouns or mixed-script words as track titles.
+    if re.search('[А-Яа-яЁё]',query):
+        mixed=str.maketrans('аеорсухкмт','aeopcyxkmt')
+        query=re.sub(r'\b[^\W\d_]+\b',lambda m:m[0].translate(mixed) if re.search('[a-z]',m[0],re.I) else m[0],query)
+        translated=local_intent(query)
+        if translated.search:query=translated.search
+        elif translated.genres:query=' '.join(translated.genres)
+        elif re.search('[А-Яа-яЁё]',query):raise ValueError('Unresolved descriptive search')
     query=' '.join(query.split()[:8])
     if len(query.split())>12:raise ValueError('Search is not concise')
     # The model proposes a sound, while explicit exclusions remain authoritative.
@@ -140,6 +159,9 @@ def decode(data,prompt,previous,fallback):
         return replace(base,mood=fallback.mood,avoid=avoid,instrumental=instrumental)
     inferred=local_intent(query)
     mood=inferred.mood if inferred.mood!='any' else fallback.mood if fallback.mood!='any' else base.mood
-    genres=fallback.genres or base.genres
+    if fallback.mood!='any' and fallback.mood!=base.mood:mood=fallback.mood
+    query=search_words(query,mood,avoid)
+    if not query:raise ValueError('Conflicting musical constraints')
+    genres=tuple(g for g in (fallback.genres or inferred.genres or base.genres) if g not in avoid)
     return Intent(mood=mood,genres=genres,avoid=avoid,instrumental=instrumental,
         familiarity=.2 if mood=='discover' else base.familiarity,search=query,caption=caption_for(query))

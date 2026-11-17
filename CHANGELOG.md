@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.33.1 — 2026-11-17 · Ember DJ understanding
+
+- Separate genres, explicit artists and recording titles before catalogue lookup. Protect names such as Metallica, Jazztronik, Pop Smoke and Happy Mondays; add R&B, drum and bass and atomic subgenres.
+- Interpret familiar scenes with lightweight local rules, retain compatible follow-up context and validate local-model searches. Try one shorter search when a detailed description has no matching candidates.
+- Put source genre/collection evidence ahead of taste. Do not treat recording names as genres or label unrelated playlists with the requested mood. Lower familiar acts in discovery and add intent, relevance and fallback regression coverage.
+
 ## 0.33.0 — 2026-11-16 · Quest native preview
 
 - Add an experimental Android provider host with system WebView, app-private sign-in, protected-media permission UI, a foreground media session and a token-protected localhost bridge. Reuse the desktop website adapters without exporting cookies or DRM material. Verify the embedded Apple Music window and Widevine availability on Quest 3S; full-track subscription playback is still under device verification. Keep the Linux companion as a distinct mode and compile the unsigned Android APK in CI.

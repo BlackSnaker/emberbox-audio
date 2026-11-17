@@ -13,10 +13,11 @@ from dj_reply import summary
 
 class SemanticTests(unittest.TestCase):
     def test_short_or_keyword_containing_descriptions_still_need_semantics(self):
-        for value in ('Дождливый вечер','Тёплое виниловое радио','Хочу спокойную музыку как в зимнем лесу',
-                      'Как в старом джазовом баре','Нужно что-то, от чего хочется прыгать по комнате'):
+        for value in ('Тёплое виниловое радио','Хочу спокойную музыку как в зимнем лесу',
+                      'Нужно что-то, от чего хочется прыгать по комнате'):
             with self.subTest(value=value):self.assertFalse(quick_wish(value))
-        for value in ('Beatles','Найди Let It Happen','Хочу джаз','Спокойную музыку','как Tame Impala','без вокала'):
+        for value in ('Beatles','Найди Let It Happen','Хочу джаз','Спокойную музыку','как Tame Impala','без вокала',
+                      'Дождливый вечер','Как в старом джазовом баре'):
             with self.subTest(value=value):self.assertTrue(quick_wish(value))
     def test_semantics_compiles_a_playlist_search_not_a_literal_title(self):
         prompt='Хочу будто оказаться в старом джазовом баре'
@@ -78,7 +79,7 @@ class SemanticTests(unittest.TestCase):
             with patch('dj_brain.ready',return_value=False),patch.object(b,'models',return_value=[]):
                 i,e=b.interpret('Тёплый свет старого винилового радио')
                 self.assertEqual(e,'needs-model');self.assertEqual(i.action,'clarify');self.assertEqual(i.query,'')
-            i,e=b.interpret('Дождливый вечер',enabled=False)
+            i,e=b.interpret('Мелодии будто из заброшенной обсерватории',enabled=False)
             self.assertEqual(i.action,'clarify');self.assertEqual(e,'disabled')
         finally:b.close()
     def test_same_request_cache_is_bounded_and_context_is_part_of_key(self):
@@ -106,7 +107,7 @@ class SemanticTests(unittest.TestCase):
         b=LocalBrain()
         try:
             with patch('dj_brain.ready',return_value=True),patch.object(b,'native',return_value=('http://127.0.0.1:1','fixture')),patch.object(b,'generate',return_value={'choices':[{'message':{'content':json.dumps({'kind':'mix','query':'vintage jazz'})}}]}):
-                i,e=b.interpret('Старый джазовый бар')
+                i,e=b.interpret('Мелодии будто из заброшенной обсерватории')
                 self.assertEqual(e,'ai');self.assertEqual(i.search,'vintage jazz')
         finally:b.close()
     def test_an_existing_but_loading_process_is_not_treated_as_ready(self):
