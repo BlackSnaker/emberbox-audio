@@ -213,7 +213,10 @@ def local_intent(prompt,previous=None):
     if similar:
         name=similar[1].strip()
         genre_only=any(re.fullmatch(pattern,name,re.I) for pattern in GENRES.values())
-        scene=bool(re.match(r'^(?:в|на|будто|словно|я)\b',name,re.I) or describe(name)[0])
+        rest=mask_vocabulary(name)
+        words,_,uncovered=describe(rest)
+        style_only=not uncovered and (words or rest!=name)
+        scene=bool(style_only or re.match(r'^(?:в|на|будто|словно|я|что|какую|такое)\b',name,re.I) or describe(name)[0])
         if not genre_only and not scene:
             # Mask the COMPLETE name before parsing qualifiers: the word
             # "punk" inside "daft punk" must not become a requested genre.
@@ -234,7 +237,10 @@ def local_intent(prompt,previous=None):
     if result.action!='mix':return result
     if result.mode=='similar':
         genre_only=any(re.fullmatch(pattern,result.query,re.I) for pattern in GENRES.values())
-        if genre_only:result=replace(result,mode='mix',query='',artists=())
+        rest=mask_vocabulary(result.query)
+        words,_,uncovered=describe(rest)
+        style_only=not uncovered and (words or rest!=result.query)
+        if genre_only or style_only:result=replace(result,mode='mix',query='',artists=())
         elif not re.match(r'^(?:в|на|будто|словно|я)\b',result.query,re.I):return result
     # Atomic subgenres must not leave "post" / "deep" behind as a name.
     parents={'dream pop':'pop','post rock':'rock','deep house':'house','post punk':'punk'}

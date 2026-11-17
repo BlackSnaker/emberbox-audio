@@ -54,6 +54,9 @@ class UnderstandingTests(unittest.TestCase):
             self.assertEqual(i.artists[0].casefold(),'daft punk');self.assertTrue(quick_wish(prompt))
         i=local_intent('похожее на Daft Punk, но без вокала')
         self.assertTrue(i.instrumental);self.assertEqual(i.genres,())
+        for prompt in ('что-то похожее на спокойную музыку','something like soft music'):
+            i=local_intent(prompt)
+            self.assertEqual(i.mode,'mix');self.assertEqual(i.artists,());self.assertEqual(i.mood,'relax')
 
     def test_familiar_abstract_wishes_never_load_a_language_model(self):
         cases={
