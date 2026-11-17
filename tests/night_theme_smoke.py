@@ -66,6 +66,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected night
         stage.show_settings();settle(.15)
         popup=host.settings.popover
         wait(lambda:popup.get_mapped(),'Settings popup did not map')
+        host.settings.select_section('appearance');settle(.3)
         assert not host.settings.night_switch.get_active()
         host.settings.night_switch.set_active(True)
         wait(lambda:pixels(stage.background)!=classic and stage.background.get_pixbuf().get_width()>1,

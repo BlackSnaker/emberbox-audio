@@ -121,6 +121,7 @@ try:
     assert app.settings.popover.get_visible()
     assert app.settings.hide_button.get_visible() and app.settings.quit_button.get_visible()
     # Seasonal decoration must never alter card geometry or steal controls.
+    app.settings.select_section('appearance');settle(.25)
     initial_size=app.window.get_size();app.settings.theme_switch.set_active(True);settle(1.5)
     assert app.appearance.christmas and app.winter_surface.top.get_mapped()
     app.settings.snow_switch.set_active(True)
@@ -149,7 +150,7 @@ try:
         winter_shot('winter-widget.png')
         app.change_compact();settle(.65);assert app.window.get_size().width==320
         winter_shot('winter-mini.png')
-        app.change_compact();settle(.65);app.settings_button.clicked();settle(.25)
+        app.change_compact();settle(.65);app.settings_button.clicked();app.settings.select_section('appearance');settle(.25)
         winter_shot('winter-settings.png');app.settings.popover.popdown()
         for label,value in zip((app.title,app.artist,app.album),original):label.set_text(value)
     if not preview:
@@ -178,6 +179,7 @@ try:
     app.change_compact();settle(.65);app.appearance.set_theme('classic');settle(.1)
     assert not mirror.tick and not mirror.painter and not mirror.area.get_visible()
     app.settings_button.clicked();settle(.1)
+    app.settings.select_section('player');settle(.25)
     app.settings.mode_button.clicked()
     settle(.6)
     assert app.compact and app.compact_settings.get_visible()
@@ -189,6 +191,7 @@ try:
     app.compact_settings.clicked()
     settle()
     assert app.settings.popover.get_visible()
+    app.settings.select_section('player');settle(.25)
     app.settings.mode_button.clicked()
     settle(.6)
     assert not app.compact
@@ -487,6 +490,7 @@ try:
         assert stage.call_count==1 and stage.return_value.open.call_count==2
         app.fullscreen=None
     app.show_settings(app.settings_button)
+    app.settings.select_section('system');settle(.25)
     with patch('widget.widget_restart.service_restart',return_value=True) as restart:
         app.settings.restart_button.clicked()
         assert restart.call_count==1

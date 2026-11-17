@@ -393,9 +393,9 @@ def run():
             before_volume=host.sound.volume
             key(stage.window,'Right');key(stage.window,'Down')
             assert host.calls==before_settings and host.sound.volume==before_volume,'Menu navigation leaked into playback shortcuts'
-            scene_button=next(b for b in popup.get_children()[0].get_child().get_child().get_children()
-                              if isinstance(b,Gtk.Button) and b.get_label()==fullscreen.text('Soundstage · speakers / headphones','Звуковая сцена · колонки / наушники'))
-            scene_button.clicked();settle(.85)
+            host.settings.select_section('audio');settle(.3)
+            assert host.settings.scene_button.get_mapped()
+            host.settings.scene_button.clicked();settle(.85)
             assert host.settings.scene_popup.get_mapped()
             deadline=time.monotonic()+3
             while host.settings.scene_control.diagram.tick and time.monotonic()<deadline:settle(.03)
@@ -406,11 +406,13 @@ def run():
             host.source=saved_source;host.apple_web.state={}
             stage.open();wait_transition(stage)
             stage.settings_button.clicked();settle(.15)
+            host.settings.select_section('player');settle(.3)
             host.settings.accounts_button.clicked();settle(.2)
             assert not stage.visible and host.calls[-1]==('accounts',)
             host.calls.pop()
             stage.open();wait_transition(stage)
             stage.settings_button.clicked();settle(.15)
+            host.settings.select_section('player');settle(.3)
             compact=host.compact
             host.settings.mode_button.clicked();settle(.2)
             assert not stage.visible and host.compact!=compact

@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.34.0 — 2026-11-17 · glass control decks
+
+- Rebuild desktop settings and source selection with smoked Liquid Glass, fine prismatic rims and recessed controls in all four themes.
+- Keep Player, Sound, Look and System navigation visible above individually bounded pages. Show four compact theme cards, place connection recovery in System and keep music services one click away in a 2×2 source deck.
+- Fit menus to the monitor independently of the Mini/widget size; bound optional browser sessions, preserve exact source routing and support keyboard dismissal. Use finite frame-clock motion and the system's reduced-motion preference.
+
 ## 0.33.2 — 2026-11-17 · related artists
 
 - Fix “something like daft punk”: protect the complete case-insensitive name from genre matching, parse outside qualifiers separately and skip unnecessary inference.

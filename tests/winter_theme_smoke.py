@@ -16,6 +16,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected fixtu
         stage.prewarm();stage.open();f.wait_transition(stage)
         original=stage.window.get_size();commands=list(host.calls)
         stage.show_settings();f.settle(.2)
+        host.settings.select_section('appearance');f.settle(.3)
         host.settings.theme_switch.set_active(True);host.settings.popover.popdown();f.settle(1.6)
         assert host.appearance.christmas and stage.winter_surface.top.get_mapped()
         assert not stage.winter_surface.tick,'Seasonal entrance must stop after settling'

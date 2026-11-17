@@ -184,8 +184,11 @@ class SceneControl(Gtk.Box):
     def import_sofa(self,*_):
         if self.importing or getattr(self,'import_dialog',None):return
         popover=self.get_ancestor(Gtk.Popover)
+        from glass_menu import GlassPopover
+        if isinstance(self.get_toplevel(),GlassPopover):popover=self.get_toplevel()
         if popover:popover.set_modal(False)
-        chooser=Gtk.FileChooserNative.new(text('Personal head model · SOFA','Личная модель головы · SOFA'),self.get_toplevel(),Gtk.FileChooserAction.OPEN,
+        parent=popover.get_relative_to().get_toplevel() if popover else self.get_toplevel()
+        chooser=Gtk.FileChooserNative.new(text('Personal head model · SOFA','Личная модель головы · SOFA'),parent,Gtk.FileChooserAction.OPEN,
             text('Import','Загрузить'),text('Cancel','Отмена'))
         self.import_dialog=chooser;chooser.set_modal(True)
         file_filter=Gtk.FileFilter();file_filter.set_name('SOFA · ≤32 MB');file_filter.add_pattern('*.sofa');chooser.add_filter(file_filter)

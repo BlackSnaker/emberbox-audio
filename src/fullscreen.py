@@ -576,11 +576,11 @@ class FullscreenPlayer:
         self.lyrics.set_track('','')
         self.motion_lookup.set_track('')
         self.motion.stop()
+        if self.source_picker.popover:self.source_picker.popover.dismiss()
         self.window.unfullscreen();self.window.hide()
         if self.timer:GLib.source_remove(self.timer);self.timer=0
         if self.tick:self.window.remove_tick_callback(self.tick);self.tick=0
         self.frame_time=None
-        if self.source_picker.popover:self.source_picker.popover.popdown()
 
     def dismiss(self):
         if not self.visible:return

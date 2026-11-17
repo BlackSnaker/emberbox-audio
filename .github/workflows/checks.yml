@@ -155,6 +155,11 @@ jobs:
           GDK_BACKEND=x11 LANGUAGE=ru dbus-run-session -- xvfb-run -a -s '-screen 0 1024x600x24' /usr/bin/python3 tests/headphone_smoke.py
       - name: GTK layout and controls
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/gui_smoke.py
+      - name: Liquid Glass menus, Mini anchors and independent source sessions
+        run: |
+          EMBERBOX_LANGUAGE=en GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1024x600x24' /usr/bin/python3 tests/menu_glass_smoke.py
+          EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1024x600x24' /usr/bin/python3 tests/menu_glass_smoke.py
+          GDK_SCALE=2 EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/menu_glass_smoke.py
       - name: Winter theme, persistence and responsive controls
         run: |
           GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/winter_theme_smoke.py

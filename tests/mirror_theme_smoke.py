@@ -43,6 +43,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
     try:
         stage.open();wait(lambda:not stage.reveal.active);stage.show_settings();settle(.2)
         settings=host.settings;calls=list(host.calls);sound_calls=list(host.sound.calls)
+        settings.select_section('appearance');settle(.3)
         wait(lambda:stage.equalizer.frames_ready,limit=60)
         settings.mirror_switch.set_active(True)
         surface=stage.winter_surface.mirror

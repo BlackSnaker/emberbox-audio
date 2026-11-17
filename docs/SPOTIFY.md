@@ -4,7 +4,7 @@
 
 ## Sign in once
 
-1. Open **Settings → Accounts → Sign in to Spotify**.
+1. Open **Settings → Player → Accounts & sign-in → Sign in to Spotify**.
 2. Ember prepares the installed Chromium/Widevine components and opens Spotify's
    official website in its own window. Complete sign-in and any verification there.
 3. Choose **Listen**. Spotify's personal shelves, collections and tracks appear

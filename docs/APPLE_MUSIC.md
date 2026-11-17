@@ -8,7 +8,7 @@ Select **Apple Music · library** in the source menu. Playlists, albums, saved s
 
 ## Connect from the player
 
-Open **Settings → Accounts** and click **Sign in to Apple Music**. Background component checks prepare playback, then the official sign-in window opens. On completion it hides and your library is available in Emberbox. Missing components can be selected in the same panel. [Step-by-step connection](ACCOUNTS.md).
+Open **Settings → Player → Accounts & sign-in** and click **Sign in to Apple Music**. Background component checks prepare playback, then the official sign-in window opens. On completion it hides and your library is available in Emberbox. Missing components can be selected in the same panel. [Step-by-step connection](ACCOUNTS.md).
 
 ## Compatibility and optional manual setup
 

@@ -254,7 +254,7 @@ Large original covers replace enlarged thumbnails. Supported Apple Music catalog
 
 ![Account centre with original artwork and demo data](assets/accounts.png)
 
-**Settings → Accounts** brings Spotify, Apple Music and Yandex Music together: launch official sign-in, see connection status and return to your music. First launch opens this panel automatically. Apple Music includes background component checks and setup without terminal commands. [Connect your music →](docs/ACCOUNTS.md)
+**Settings → Player → Accounts & sign-in** brings Spotify, Apple Music and Yandex Music together: launch official sign-in, see connection status and return to your music. First launch opens this panel automatically. Apple Music includes background component checks and setup without terminal commands. [Connect your music →](docs/ACCOUNTS.md)
 
 ## YouTube, without an account
 
@@ -264,7 +264,7 @@ Select **YouTube · Search & play**, search by title or paste a YouTube/YouTube 
 
 ![Yandex Music interface with original demo artwork and synthetic playback](assets/yandex-music.png)
 
-**Experimental Yandex Music integration:** start **My Wave**, send like/dislike reactions and browse loaded search, collection and queue tracks inside the widget. Connect Yandex ID from **Settings → Accounts**. Full playback requires Yandex Plus. Subscription playback is **awaiting testers**; interface, routing and adapter checks use fixtures. [Setup and tester checklist →](docs/YANDEX_MUSIC.md)
+**Experimental Yandex Music integration:** start **My Wave**, send like/dislike reactions and browse loaded search, collection and queue tracks inside the widget. Connect Yandex ID from **Settings → Player → Accounts & sign-in**. Full playback requires Yandex Plus. Subscription playback is **awaiting testers**; interface, routing and adapter checks use fixtures. [Setup and tester checklist →](docs/YANDEX_MUSIC.md)
 
 ## System requirements
 
@@ -306,7 +306,7 @@ To run from the checkout after dependencies are ready, use `./run.sh`.
 
 Select a source in the header. Apple Music plays through a background web engine, with playlists, albums, songs and catalogue search inside Emberbox. It requires a compatible installed DRM-capable runtime and an Apple Music subscription. [One-time setup →](docs/APPLE_MUSIC.md)
 
-Connect Spotify in **Settings → Accounts** and listen inside Ember. The desktop client remains an optional MPRIS fallback. [Spotify setup →](docs/SPOTIFY.md)
+Connect Spotify in **Settings → Player → Accounts & sign-in** and listen inside Ember. The desktop client remains an optional MPRIS fallback. [Spotify setup →](docs/SPOTIFY.md)
 
 ## Grunesphism / Грунесфизм
 

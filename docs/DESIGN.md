@@ -14,6 +14,22 @@ The Listen key uses a warm machined surface; secondary controls, artist filters 
 
 ## Surfaces and colour
 
+### Desktop glass menus
+
+Settings use a stable four-section deck: **Player · Sound · Look · System**.
+The navigation stays visible while only its current page scrolls. All four
+theme cards fit together, and recovery actions have their own System section.
+Sources are a 2×2 deck with a separate account entry; optional browser sessions
+expand inside a short independent scroll area. The menu's native surface is
+positioned against the monitor, so a Mini anchor cannot clip its controls.
+
+Smoked charcoal holds the text, while thin champagne/cyan rims and a faint
+violet reflection describe the glass edge. Small recesses retain the feel of
+audio equipment. Reflections use static CSS; the small navigation lens reuses
+one retained strip during each finite transition. Opening, closing and page
+changes respect reduced motion. No live desktop capture, continuous blur or
+background animation loop is added.
+
 **Nocturne / «Тёплая ночь»** uses neutral charcoal materials: a near-black
 backdrop, graphite panels and readable warm text. Brass and amber stay in
 controls and lamps; a faint artwork reflection adds depth without tinting the

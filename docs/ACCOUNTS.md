@@ -2,7 +2,7 @@
 
 **English** · [Русский](ACCOUNTS.ru.md)
 
-Open **Settings → Accounts · Spotify / Apple / Yandex**, or **Connect accounts…** in the source selector. New installations open this panel automatically. It is also available from mini mode.
+Open **Settings → Player → Accounts & sign-in**, or **Accounts & sign-in** in the source selector. New installations open this panel automatically. It is also available from mini mode.
 
 ## Spotify
 

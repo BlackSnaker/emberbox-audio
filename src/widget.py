@@ -589,8 +589,8 @@ class Widget:
         self.layout_transition.finish(notify=False)
         self.save_position()
         self.drag_offset=None
-        if self.settings.popover:self.settings.popover.popdown()
-        if self.source_picker.popover:self.source_picker.popover.popdown()
+        self.settings.dismiss_for(self.window)
+        if self.source_picker.popover:self.source_picker.popover.dismiss()
         if self.fullscreen:self.fullscreen.hide()
         self.window.hide()
         return False
