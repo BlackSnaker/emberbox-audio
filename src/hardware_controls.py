@@ -17,6 +17,49 @@ def pixbuf(svg, width, height):
     return loader.get_pixbuf()
 
 
+def knob_size(compact, large):
+    return (88, 94) if large else (38, 42) if compact else (48, 52)
+
+
+@lru_cache(maxsize=6)
+def knob_body(compact, large=False):
+    """Machine the stationary metal once; moving frames only add the pointer."""
+    facets = []
+    for n in range(120):
+        a, b = n*math.tau/120, (n+1)*math.tau/120
+        # Broad opposing specular fans with a quiet, irregular lathe grain.
+        light = .5+.25*math.cos(2*a+.9)+.12*math.cos(a-2.2)
+        rgb = tuple(round(lo+(hi-lo)*light) for lo,hi in ((82,190),(49,149),(28,99)))
+        color = '#%02x%02x%02x' % rgb
+        facets.append(f'<path d="M32 29L{32+math.cos(a)*19.65:.3f} {29+math.sin(a)*19.65:.3f}A19.65 19.65 0 0 1 {32+math.cos(b)*19.65:.3f} {29+math.sin(b)*19.65:.3f}Z" fill="{color}"/>')
+    grain = []
+    for n in range(33):
+        grain.append(f'<circle cx="32" cy="29" r="{3+n*.49:.2f}" fill="none" stroke="#ffe7b6" stroke-opacity="{.025+(n%3)*.009:.3f}" stroke-width=".12"/>')
+    knurl = []
+    for n in range(96):
+        a = n*math.tau/96
+        knurl.append(f'<path d="M{32+math.cos(a)*20.5:.3f} {30+math.sin(a)*20.5:.3f}L{32+math.cos(a)*22:.3f} {30+math.sin(a)*22:.3f}" stroke="#efc082" stroke-opacity=".34" stroke-width=".38"/>')
+    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="64" height="68" viewBox="0 0 64 68">
+      <defs>
+        <linearGradient id="socket" x2=".35" y2="1"><stop stop-color="#080b0d"/><stop offset=".65" stop-color="#1c1c1a"/><stop offset="1" stop-color="#605342"/></linearGradient>
+        <linearGradient id="edge" x2=".8" y2="1"><stop stop-color="#d1ac77"/><stop offset=".25" stop-color="#89613a"/><stop offset=".58" stop-color="#50331e"/><stop offset=".85" stop-color="#8d633b"/><stop offset="1" stop-color="#c29b63"/></linearGradient>
+        <radialGradient id="light" cx=".27" cy=".18" r=".9"><stop stop-color="#fff0d2" stop-opacity=".21"/><stop offset=".4" stop-color="#ffe4b0" stop-opacity=".03"/><stop offset="1" stop-color="#1c1008" stop-opacity=".20"/></radialGradient>
+      </defs>
+      <ellipse cx="33" cy="34.5" rx="24.4" ry="23.6" fill="#030506" opacity=".16"/>
+      <ellipse cx="33" cy="33" rx="23.6" ry="23" fill="#030506" opacity=".22"/>
+      <circle cx="32" cy="29" r="24.3" fill="url(#socket)" stroke="#b4a184" stroke-opacity=".12" stroke-width=".5"/>
+      <circle cx="32" cy="30.6" r="22.6" fill="#382719"/>
+      <circle cx="32" cy="30" r="22.1" fill="url(#edge)"/>
+      {''.join(knurl)}
+      <circle cx="32" cy="29" r="20.5" fill="url(#edge)" stroke="#d4ac72" stroke-opacity=".6" stroke-width=".35"/>
+      {''.join(facets)}
+      {''.join(grain)}
+      <circle cx="32" cy="29" r="19.6" fill="url(#light)" stroke="#3b2718" stroke-opacity=".4" stroke-width=".3"/>
+      <path d="M13 25A19.5 19.5 0 0 1 37 10" fill="none" stroke="#ffe8bf" stroke-opacity=".45" stroke-width=".35"/>
+    </svg>'''
+    return pixbuf(svg, *knob_size(compact, large))
+
+
 @lru_cache(maxsize=512)
 def knob_frame(index, compact, large=False):
     value = index / 200
@@ -24,39 +67,22 @@ def knob_frame(index, compact, large=False):
     ticks = []
     for n in range(19):
         a = math.radians(135 + n * 15)
-        color = '#d79921' if n / 18 <= value else '#686254'
-        ticks.append(f'<path d="M{32 + math.cos(a)*26:.2f} {29 + math.sin(a)*26:.2f}L{32 + math.cos(a)*28:.2f} {29 + math.sin(a)*28:.2f}" stroke="{color}" stroke-width="1" stroke-linecap="round"/>')
-    ridges = []
-    for n in range(48):
-        a = n * math.tau / 48
-        ridges.append(f'<path d="M{32 + math.cos(a)*20:.2f} {29 + math.sin(a)*20:.2f}L{32 + math.cos(a)*22:.2f} {29 + math.sin(a)*22:.2f}" stroke="#e0dcc7" stroke-opacity=".15" stroke-width=".7"/>')
-    svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="64" height="68" viewBox="0 0 64 68">
-      <defs>
-        <linearGradient id="bevel" x1="0" y1="0" x2=".8" y2="1">
-          <stop stop-color="#bcbba6"/><stop offset=".28" stop-color="#747b6a"/>
-          <stop offset=".72" stop-color="#3e463b"/><stop offset="1" stop-color="#1b211b"/>
-        </linearGradient>
-        <radialGradient id="face" cx=".32" cy=".22" r=".85">
-          <stop stop-color="#707764"/><stop offset=".52" stop-color="#454d3f"/>
-          <stop offset="1" stop-color="#292f27"/>
-        </radialGradient>
-      </defs>
+        color = '#efb65d' if n / 18 <= value else '#71604a'
+        ticks.append(f'<path d="M{32+math.cos(a)*27:.2f} {29+math.sin(a)*27:.2f}L{32+math.cos(a)*29:.2f} {29+math.sin(a)*29:.2f}" stroke="{color}" stroke-width=".8" stroke-linecap="round"/>')
+    x1,y1=32+math.cos(angle)*13,29+math.sin(angle)*13
+    x2,y2=32+math.cos(angle)*18.1,29+math.sin(angle)*18.1
+    svg=f'''<svg xmlns="http://www.w3.org/2000/svg" width="64" height="68" viewBox="0 0 64 68">
       {''.join(ticks)}
-      <circle cx="33" cy="32" r="23" fill="#121510" opacity=".22"/>
-      <circle cx="32" cy="29" r="23" fill="#161b16"/>
-      <circle cx="32" cy="29" r="21.8" fill="url(#bevel)" stroke="#a49e85" stroke-opacity=".4" stroke-width=".6"/>
-      {''.join(ridges)}
-      <circle cx="32" cy="29" r="18.4" fill="url(#face)" stroke="#20271e" stroke-width=".8"/>
-      <circle cx="32" cy="29" r="17.3" fill="none" stroke="#d4d0b9" stroke-opacity=".06" stroke-width=".7"/>
-      <circle cx="32" cy="29" r="15.2" fill="none" stroke="#d4d0b9" stroke-opacity=".025" stroke-width=".5"/>
-      <path d="M{32+math.cos(angle)*11:.2f} {29+math.sin(angle)*11:.2f}L{32+math.cos(angle)*17:.2f} {29+math.sin(angle)*17:.2f}"
-        stroke="#11180f" stroke-width="3.4" stroke-linecap="round"/>
-      <path d="M{32+math.cos(angle)*11:.2f} {29+math.sin(angle)*11:.2f}L{32+math.cos(angle)*17:.2f} {29+math.sin(angle)*17:.2f}"
-        stroke="#f5bd51" stroke-width="1.8" stroke-linecap="round"/>
-      <text x="32" y="64" text-anchor="middle" font-family="monospace" font-size="10" fill="#bdae93">{round(value*100)}%</text>
+      <path d="M{x1:.2f} {y1+.3:.2f}L{x2:.2f} {y2+.3:.2f}" stroke="#ffe4b3" stroke-opacity=".5" stroke-width="1.3" stroke-linecap="round"/>
+      <path d="M{x1:.2f} {y1:.2f}L{x2:.2f} {y2:.2f}" stroke="#392518" stroke-width="1.65" stroke-linecap="round"/>
+      <path d="M{x1:.2f} {y1:.2f}L{x2:.2f} {y2:.2f}" stroke="#100e0b" stroke-width=".7" stroke-linecap="round"/>
+      <text x="32" y="64" text-anchor="middle" font-family="monospace" font-size="9" fill="#c4ad89">{round(value*100)}%</text>
     </svg>'''
-    return pixbuf(svg, 88 if large else 38 if compact else 48,
-                  94 if large else 42 if compact else 52)
+    width,height=knob_size(compact,large)
+    result=knob_body(compact,large).copy()
+    overlay=pixbuf(svg,width,height)
+    overlay.composite(result,0,0,width,height,0,0,1,1,GdkPixbuf.InterpType.NEAREST,255)
+    return result
 
 
 @lru_cache(maxsize=256)
