@@ -132,7 +132,12 @@ def label(value, style, wrap=False):
 
 
 @lru_cache(maxsize=4)
-def background(width,height,color,christmas=False,nocturne=False,mirrorball=False):
+def background(width,height,color,christmas=False,nocturne=False,mirrorball=False,velvet=False):
+    if velvet:
+        from velvet_art import cloth
+        w,h,raw=cloth(width,height)
+        image=GdkPixbuf.Pixbuf.new_from_bytes(GLib.Bytes.new(raw),GdkPixbuf.Colorspace.RGB,False,8,w,h,w*3)
+        return image.scale_simple(width,height,GdkPixbuf.InterpType.BILINEAR)
     if mirrorball:
         from mirror_art import room
         return room(width,height)
@@ -410,6 +415,7 @@ class FullscreenPlayer:
         self.pending_page=None;self.page_transition.finish()
         self.glass_navigation.finish()
         edition=text('CHRISTMAS, IN YOUR RHYTHM','РОЖДЕСТВО В ТВОЁМ РИТМЕ') if self.appearance.christmas else (
+            text('VELVET JAZZ · THE LISTENING ROOM','БАРХАТНЫЙ ДЖАЗ · КОМНАТА ПРОСЛУШИВАНИЯ') if self.appearance.velvet else
             text('MIRRORBALL · THE LISTENING ROOM','ЗЕРКАЛЬНЫЙ ЗАЛ · КОМНАТА ПРОСЛУШИВАНИЯ') if self.appearance.mirrorball else
             text('NOCTURNE · THE LISTENING ROOM','ТЁПЛАЯ НОЧЬ · КОМНАТА ПРОСЛУШИВАНИЯ') if self.appearance.nocturne else
             text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'))
@@ -417,7 +423,7 @@ class FullscreenPlayer:
         self.layout_size=None
         # Discard the preceding theme's gradient immediately. Its replacement
         # is baked asynchronously; transitions meanwhile use the selected ink.
-        tone=(12,16,21) if self.appearance.mirrorball else (18,20,20) if self.appearance.nocturne else (18,34,28) if self.appearance.christmas else (23,27,24)
+        tone=(27,13,20) if self.appearance.velvet else (12,16,21) if self.appearance.mirrorball else (18,20,20) if self.appearance.nocturne else (18,34,28) if self.appearance.christmas else (23,27,24)
         ink=GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB,True,8,1,1)
         ink.fill((tone[0]<<24)|(tone[1]<<16)|(tone[2]<<8)|255);self.background.set_from_pixbuf(ink)
         self.bg_key=None;self.paint_background()
@@ -763,11 +769,12 @@ class FullscreenPlayer:
         christmas=bool(self.appearance and self.appearance.christmas)
         nocturne=bool(self.appearance and self.appearance.nocturne)
         mirrorball=bool(self.appearance and self.appearance.mirrorball)
-        key=(width,height,self.palette,christmas,nocturne,mirrorball)
+        velvet=bool(self.appearance and self.appearance.velvet)
+        key=(width,height,self.palette,christmas,nocturne,mirrorball,velvet)
         if key==self.bg_key:return
         self.bg_key=key
         # SVG parsing/rasterisation must not block the first animation frames.
-        future=self.artwork.pool.submit(background,max(1,width),max(1,height),self.palette,christmas,nocturne,mirrorball)
+        future=self.artwork.pool.submit(background,max(1,width),max(1,height),self.palette,christmas,nocturne,mirrorball,velvet)
         def completed(result):
             try:pixels=result.result()
             except Exception:return
@@ -822,6 +829,7 @@ class FullscreenPlayer:
         if self.closed or key is not None and key!=self.art_key:return
         self.cover_change.art_ready(pixbuf,key[0] if key else self.host.art_url or '')
         self.palette=cover_color(pixbuf)
+        if self.winter_surface:self.winter_surface.velvet.set_cover(pixbuf)
         self.paint_background()
 
     def show_sources(self):

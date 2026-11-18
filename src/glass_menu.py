@@ -25,6 +25,8 @@ CSS = b'''
 .ember-glass-menu.nocturne-theme { background-color: rgba(20,24,26,.98); }
 .ember-glass-menu.mirrorball-theme { background-color: rgba(25,30,39,.98); }
 .ember-glass-menu.christmas-theme { background-color: rgba(23,38,31,.98); }
+.ember-glass-menu.velvet-theme { background-color: rgba(37,19,30,.98);
+ border-top-color: rgba(244,211,173,.29); border-left-color: rgba(225,181,176,.20); }
 .ember-glass-menu .menu-body { padding: 16px; }
 .ember-glass-menu .menu-brand { color: #cfab70; font-size: 8px; letter-spacing: 2px; font-weight: bold; }
 .ember-glass-menu .menu-title { color: #f4e9d0; font-size: 19px; font-weight: bold; letter-spacing: -.35px; }
@@ -93,6 +95,9 @@ CSS = b'''
  box-shadow: inset 0 1px rgba(255,246,220,.03);
 }
 .ember-glass-menu button.theme-card.selected { border-color: rgba(231,199,136,.30); background-color: rgba(205,173,105,.065); }
+.ember-glass-menu button.theme-card.theme-default { padding: 4px 8px; border-radius: 11px; min-height: 18px; }
+.ember-glass-menu .theme-default .theme-card-title { font-size: 10px; font-weight: normal; }
+.ember-glass-menu .theme-default .theme-card-light { font-size: 12px; }
 .ember-glass-menu .theme-card-title { color: #e9ddc2; font-size: 12px; font-weight: bold; }
 .ember-glass-menu .theme-card-note { color: #aaa793; font-size: 10px; }
 .ember-glass-menu .theme-card-light { color: #cbb47d; font-size: 17px; }

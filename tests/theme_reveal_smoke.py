@@ -54,7 +54,7 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected fixtu
             settle(.06)
 
         stage.open();transition()
-        for theme in ('nocturne','mirrorball','classic','christmas','mirrorball','nocturne'):
+        for theme in ('nocturne','mirrorball','velvet','classic','christmas','mirrorball','nocturne'):
             assert host.appearance.set_theme(theme);settle(.15)
             before=(len(maps),len(unmaps));native=stage.window.get_window()
             for _ in range(2):

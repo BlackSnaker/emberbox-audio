@@ -222,7 +222,9 @@ class SettingsMenu:
 
     def build_appearance(self, appearance):
         page = self.pages['appearance']
-        page.pack_start(label(text('A different atmosphere', 'Настроение пространства'), 'menu-section-title'), False, False, 0)
+        heading = Gtk.Box(spacing=8)
+        heading.pack_start(label(text('A different atmosphere', 'Настроение пространства'), 'menu-section-title'), True, True, 0)
+        page.pack_start(heading, False, False, 0)
         if not appearance:
             page.pack_start(label(text('Themes are available in the desktop player.', 'Темы доступны в настольном плеере.')), False, False, 0)
             return
@@ -249,8 +251,9 @@ class SettingsMenu:
                            if item.get_active() != (appearance.theme == key) else None)
             setattr(self, attr, switch)
             self.theme_toggles[key] = switch
-        themes = (('classic', text('Ember', 'Эмбер'), text('Amber & brass', 'Янтарь и латунь'), '◉'),
+        themes = (('classic', text('Ember', 'Эмбер'), '', '◉'),
                   ('nocturne', text('Nocturne', 'Тёплая ночь'), text('Charcoal & quiet light', 'Уголь и тихий свет'), '☾'),
+                  ('velvet', text('Velvet Jazz', 'Бархатный джаз'), text('Burgundy & lamplight', 'Бордо и тёплый свет'), '♬'),
                   ('mirrorball', text('Mirror room', 'Зеркальный зал'), text('Prismatic reflections', 'Свет и преломления'), '◇'),
                   ('christmas', text('Winter Glow', 'Рождество'), text('Pine & candlelight', 'Хвоя и свет свечей'), '✦'))
         for index, (key, title, note, symbol) in enumerate(themes):
@@ -260,13 +263,17 @@ class SettingsMenu:
             content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
             top = Gtk.Box(spacing=6)
             top.pack_start(label(symbol, 'theme-card-light', False), False, False, 0)
-            top.pack_start(label(title, 'theme-card-title'), True, True, 0)
+            top.pack_start(label(title, 'theme-card-title', wrap=key!='classic'), True, True, 0)
             content.pack_start(top, False, False, 0)
-            content.pack_start(label(note, 'theme-card-note'), False, False, 0)
+            if note:content.pack_start(label(note, 'theme-card-note'), False, False, 0)
             card.add(content)
             card.get_accessible().set_name(title)
             card.connect('clicked', lambda _b, key=key: save_theme(key))
-            grid.attach(card, index % 2, index // 2, 1, 1)
+            if key == 'classic':
+                card.get_style_context().add_class('theme-default')
+                heading.pack_end(card, False, False, 0)
+            else:
+                grid.attach(card, (index-1) % 2, (index-1) // 2, 1, 1)
             self.theme_cards[key] = card
         page.pack_start(grid, False, False, 0)
         snow = Gtk.Box(spacing=10)

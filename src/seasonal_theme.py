@@ -13,6 +13,7 @@ from source_picker import text
 from winter_art import winter_image
 from night_theme import CSS as NIGHT_CSS,preview as night_preview
 from mirror_theme import CSS as MIRROR_CSS,MirrorSurface
+from velvet_theme import CSS as VELVET_CSS,VelvetSurface
 
 CSS=b'''
 .christmas-theme .card {
@@ -95,14 +96,17 @@ class Appearance:
         try:
             if self.path.stat().st_size<4096:
                 data=json.loads(self.path.read_text())
-                if data.get('theme') in ('classic','christmas','nocturne','mirrorball'):self.theme=data['theme']
+                if data.get('theme') in ('classic','christmas','nocturne','mirrorball','velvet'):self.theme=data['theme']
                 self.snow_enabled=data.get('snow') is True
         except (OSError,ValueError,TypeError,AttributeError):pass
         self.listeners=[];self.surfaces=[];self.closed=False;self._audio_host=None
+        self._cover_widget=None;self._cover_signal=None
         self.pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-winter-art')
         self.provider=Gtk.CssProvider();self.provider.load_from_data(CSS+NIGHT_CSS+MIRROR_CSS)
         self.screen=Gdk.Screen.get_default()
         Gtk.StyleContext.add_provider_for_screen(self.screen,self.provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+15)
+        self.velvet_provider=Gtk.CssProvider();self.velvet_provider.load_from_data(VELVET_CSS)
+        Gtk.StyleContext.add_provider_for_screen(self.screen,self.velvet_provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+22)
 
     @property
     def christmas(self):return self.theme=='christmas'
@@ -114,12 +118,28 @@ class Appearance:
     def mirrorball(self):return self.theme=='mirrorball'
 
     @property
-    def dark(self):return self.theme in ('nocturne','mirrorball')
+    def velvet(self):return self.theme=='velvet'
+
+    @property
+    def dark(self):return self.theme in ('nocturne','mirrorball','velvet')
 
     @property
     def audio_host(self):return self._audio_host() if self._audio_host else None
 
-    def bind_audio(self,host):self._audio_host=weakref.ref(host) if host else None
+    def bind_audio(self,host):
+        self._audio_host=weakref.ref(host) if host else None
+        cover=getattr(host,'cover',None)
+        if cover is self._cover_widget:return
+        if self._cover_widget and self._cover_signal and self._cover_widget.handler_is_connected(self._cover_signal):
+            self._cover_widget.disconnect(self._cover_signal)
+        self._cover_widget=cover;self._cover_signal=None
+        if cover and hasattr(cover,'get_pixbuf'):
+            self._cover_signal=cover.connect('notify::pixbuf',lambda *_:self.cover_changed())
+
+    def cover_changed(self):
+        if self.closed or not self.velvet or not self._cover_widget:return
+        picture=self._cover_widget.get_pixbuf()
+        for surface in tuple(self.surfaces):surface.velvet.set_cover(picture)
 
     def subscribe(self,callback):
         self.listeners.append(callback)
@@ -132,7 +152,7 @@ class Appearance:
         return self.set_theme('christmas' if enabled else 'classic')
 
     def set_theme(self,theme):
-        if self.closed or theme not in ('classic','christmas','nocturne','mirrorball'):return False
+        if self.closed or theme not in ('classic','christmas','nocturne','mirrorball','velvet'):return False
         if theme==self.theme:return True
         return self.save_preferences(theme,self.snow_enabled)
 
@@ -170,7 +190,7 @@ class Appearance:
 
     def apply_classes(self,widget):
         context=widget.get_style_context()
-        for name,enabled in (('christmas-theme',self.christmas),('nocturne-theme',self.dark),('mirrorball-theme',self.mirrorball)):
+        for name,enabled in (('christmas-theme',self.christmas),('nocturne-theme',self.dark),('mirrorball-theme',self.mirrorball),('velvet-theme',self.velvet)):
             context.add_class(name) if enabled else context.remove_class(name)
 
     def close(self):
@@ -178,8 +198,9 @@ class Appearance:
         self.closed=True
         for surface in tuple(self.surfaces):surface.close()
         self.listeners.clear();self.pool.shutdown(wait=False,cancel_futures=True)
-        self._audio_host=None
+        self.bind_audio(None)
         Gtk.StyleContext.remove_provider_for_screen(self.screen,self.provider)
+        Gtk.StyleContext.remove_provider_for_screen(self.screen,self.velvet_provider)
 
 
 class WinterSurface:
@@ -194,6 +215,7 @@ class WinterSurface:
         from winter_snow import WinterSnow
         self.snow=WinterSnow(window,overlay,stage)
         self.mirror=MirrorSurface(appearance,window,overlay,stage)
+        self.velvet=VelvetSurface(appearance,window,overlay,stage)
         self.size_signal=window.connect('size-allocate',lambda *_:self.render())
         self.unmap_signal=window.connect('unmap',lambda *_:self.settle())
         self.destroy_signal=window.connect('destroy',lambda *_:self.close())
@@ -205,6 +227,7 @@ class WinterSurface:
         self.generation+=1;self.key=None;self.settle()
         self.snow.set_enabled(enabled and self.appearance.snow_enabled)
         self.mirror.set_enabled(self.appearance.mirrorball)
+        self.velvet.set_enabled(self.appearance.velvet)
         if enabled:
             self.render()
             if animate and self.window.get_mapped() and self.window.get_settings().get_property('gtk-enable-animations'):
@@ -251,7 +274,7 @@ class WinterSurface:
 
     def close(self):
         if self.closed:return
-        self.closed=True;self.settle();self.snow.close();self.mirror.close();self.generation+=1
+        self.closed=True;self.settle();self.snow.close();self.mirror.close();self.velvet.close();self.generation+=1
         for signal in (self.size_signal,self.unmap_signal,self.destroy_signal):
             if self.window.handler_is_connected(signal):self.window.disconnect(signal)
         for image in (self.top,self.corner):image.destroy()

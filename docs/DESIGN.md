@@ -14,6 +14,22 @@ The Listen key uses a warm machined surface; secondary controls, artist filters 
 
 ## Surfaces and colour
 
+### Velvet Jazz
+
+Velvet Jazz evokes a quiet jazz room: deep burgundy cloth, warm wine shadows,
+champagne brass and a faint tungsten pool. The material uses broad irregular
+folds and low-contrast directional nap prepared once at a bounded resolution.
+The cover and artist photographs keep their original colours.
+
+Two diffused light pools use actual cover swatches. A 3.2-second quintic fade
+starts from the currently visible colour, so rapid skips cannot snap back to
+an earlier palette. The light is composed into one retained 360×216 canvas;
+widget children remain live above it. There is no desktop readback, live blur,
+beat-driven pulse or permanent animation loop. Frame callbacks stop when the
+colour settles, the window hides or reduced motion is selected. Fullscreen
+and lyrics transitions retain the wine material. Select **Settings → Look →
+Velvet Jazz**; the preference persists across restarts.
+
 ### Desktop glass menus
 
 Settings use a stable four-section deck: **Player · Sound · Look · System**.
@@ -37,7 +53,7 @@ whole screen. Select it in desktop, Mini or fullscreen settings.
 
 Backdrop pixels are prepared outside GTK and cached; materials are static.
 Nocturne stops Christmas decorations and snow while retaining their preferences
-for Winter Glow. Three-theme selection does not change the source or audio settings.
+for Winter Glow. Theme selection does not change the source or audio settings.
 
 ![Nocturne with original demonstration artwork](../assets/nocturne.en.png)
 

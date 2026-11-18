@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.35.0 — 2026-11-18 · Velvet Jazz
+
+- Add Velvet Jazz: deep burgundy cloth, subdued wine reflections, warm brass and soft tungsten light across the desktop widget, Mini and fullscreen room. Preserve artwork pixels and readable warm text.
+- Let two restrained pools of light follow the actual cover palette, with a smooth 3.2-second transition that retargets from its visible colour. Retain a small light canvas and cached cloth; stop animation after settling, on hide or in reduced motion.
+- Keep the four atmosphere cards together, with Classic in the appearance heading. Persist the new theme, style glass menus and verify theme/lyrics/fullscreen transitions, Mini child input, colour changes and transport isolation in English and Russian.
+
 ## 0.34.0 — 2026-11-17 · glass control decks
 
 - Rebuild desktop settings and source selection with smoked Liquid Glass, fine prismatic rims and recessed controls in all four themes.

@@ -272,7 +272,7 @@ try:
         menu.show(host.anchor, False, 'Apple Music')
         menu.select_section('appearance')
         settle(.3)
-        for theme in ('classic', 'christmas', 'mirrorball', 'nocturne'):
+        for theme in ('classic', 'christmas', 'mirrorball', 'velvet', 'nocturne'):
             assert_reachable(menu.theme_cards[theme], menu.popover)
             menu.theme_cards[theme].clicked()
             assert host.appearance.theme == theme, 'The visible theme card did not apply the actual preference'

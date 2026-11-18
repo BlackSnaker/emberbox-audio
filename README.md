@@ -41,12 +41,21 @@ Tune each pair yourself or let Ember adapt the blend and bass handover.
 ![EmberFlow transition desk](assets/screenshots/flow-editor.en.png)
 
 
+## Velvet Jazz · After hours
+
+Deep burgundy velvet, subdued brass and the warmth of a small jazz room.
+The cover casts two soft pools of light; their colours drift gently into the
+next song, then settle. **Settings → Look → Velvet Jazz** works in the widget,
+Mini and fullscreen.
+
+![Velvet Jazz with original Emberbox Sessions demonstration artwork](assets/velvet-jazz.en.png)
+
 ## Nocturne · A quieter room
 
 Charcoal surfaces, quiet reflected artwork light and subdued brass. The music
 and artwork take centre stage, with amber lamps against a deep dark backdrop.
 
-Select **Settings → Nocturne**. Your choice persists across desktop, Mini and
+Select **Settings → Look → Nocturne**. Your choice persists across desktop, Mini and
 fullscreen. Christmas decorations and snow remain part of Winter Glow.
 
 ![Nocturne fixture interface with original Emberbox Sessions artwork](assets/nocturne.en.png)

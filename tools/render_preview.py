@@ -24,6 +24,7 @@ parser.add_argument('--accounts', action='store_true')
 parser.add_argument('--fullscreen', action='store_true')
 parser.add_argument('--language', choices=('en','ru'), default='en')
 parser.add_argument('--source', choices=('spotify', 'apple-music', 'youtube','yandex-music'), default='spotify')
+parser.add_argument('--theme', choices=('classic','nocturne','mirrorball','christmas','velvet'), default='classic')
 args = parser.parse_args()
 os.environ['EMBERBOX_LANGUAGE']=args.language
 args.output.mkdir(parents=True, exist_ok=True)
@@ -109,6 +110,7 @@ else:
         def close(self): pass
     widget.AppleWeb = DemoAppleWeb
     widget.YandexWeb = DemoAppleWeb
+    widget.SpotifyWeb = DemoAppleWeb
     from sources import Session
     class DemoMonitor:
         def __init__(self, connection, changed): self.changed=changed
@@ -126,6 +128,7 @@ else:
     widget.STATE = Path(temporary.name) / 'state.json'
     widget.STATE.write_text(json.dumps({'x': 40, 'y': 30, 'expanded': False, 'compact': False, 'source': args.source}))
     app = widget.Widget()
+    app.appearance.set_theme(args.theme)
     app.panel.open = lambda: None
     if args.accounts:
         app.accounts.refresh = lambda:None
@@ -263,9 +266,17 @@ def capture_settings():
 
 
 GLib.timeout_add(35, measure)
-if args.settings and not VIDEO:
-    GLib.timeout_add(1700, show_settings)
-else:
-    GLib.timeout_add(1700, lambda: (GLib.timeout_add(60, frame), False)[1])
+def begin_preview():
+    # Presentation captures wait for the real lamp atlas, rather than showing
+    # an empty equalizer and its initial preparation notice. Runtime remains
+    # asynchronous; this wait belongs only to the isolated preview fixture.
+    if not VIDEO and not app.equalizer.frames_ready and time.monotonic()-started<30:
+        return True
+    if args.settings and not VIDEO:
+        GLib.timeout_add(1000, show_settings)
+    else:
+        GLib.timeout_add(1000, lambda: (GLib.timeout_add(60, frame), False)[1])
+    return False
+GLib.timeout_add(100, begin_preview)
 Gtk.main()
 print(args.output)
