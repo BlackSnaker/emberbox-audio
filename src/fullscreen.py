@@ -220,7 +220,7 @@ class FullscreenPlayer:
         toolbar=Gtk.Box(spacing=8);self.toolbar=toolbar;self.header_layout.pack_start(toolbar,False,False,0)
         wordmark=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3);self.wordmark=wordmark
         wordmark.pack_start(label('EMBER','stage-brand'),False,False,0)
-        self.edition_label=label(text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'),'stage-overline')
+        self.edition_label=label(text('CLASSIC','КЛАССИКА'),'stage-overline')
         self.edition_label.set_line_wrap(True);self.edition_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
         self.edition_label.set_width_chars(1);self.edition_label.set_max_width_chars(72)
         wordmark.pack_start(self.edition_label,False,False,0)
@@ -414,11 +414,11 @@ class FullscreenPlayer:
         self.applied_theme=self.appearance.theme
         self.pending_page=None;self.page_transition.finish()
         self.glass_navigation.finish()
-        edition=text('CHRISTMAS, IN YOUR RHYTHM','РОЖДЕСТВО В ТВОЁМ РИТМЕ') if self.appearance.christmas else (
-            text('VELVET JAZZ · THE LISTENING ROOM','БАРХАТНЫЙ ДЖАЗ · КОМНАТА ПРОСЛУШИВАНИЯ') if self.appearance.velvet else
-            text('MIRRORBALL · THE LISTENING ROOM','ЗЕРКАЛЬНЫЙ ЗАЛ · КОМНАТА ПРОСЛУШИВАНИЯ') if self.appearance.mirrorball else
-            text('NOCTURNE · THE LISTENING ROOM','ТЁПЛАЯ НОЧЬ · КОМНАТА ПРОСЛУШИВАНИЯ') if self.appearance.nocturne else
-            text('THE LISTENING ROOM','КОМНАТА ПРОСЛУШИВАНИЯ'))
+        edition=text('WINTER GLOW','ТЁПЛОЕ РОЖДЕСТВО') if self.appearance.christmas else (
+            text('VELVET JAZZ','БАРХАТНЫЙ ДЖАЗ') if self.appearance.velvet else
+            text('MIRRORBALL','ЗЕРКАЛЬНЫЙ ЗАЛ') if self.appearance.mirrorball else
+            text('NOCTURNE','ТЁПЛАЯ НОЧЬ') if self.appearance.nocturne else
+            text('CLASSIC','КЛАССИКА'))
         self.edition_label.set_text(edition)
         self.layout_size=None
         # Discard the preceding theme's gradient immediately. Its replacement
