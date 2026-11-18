@@ -433,13 +433,22 @@ try:
     assert app.window.get_size().width==320 and app.compact_source.get_label()=='A⌄'
     app.select_source('spotify')
     assert not app.apple_web.enabled
+    # API-backed Yandex is connected only after account/status succeeds;
+    # unlike the old browser bridge, an empty session is disconnected.
+    app.yandex_web.connected=False
     app.accounts.connect('yandex-music')
     assert app.yandex_web.calls[-1]==('show',{})
+    assert app.accounts.pending['yandex-music']
     assert app.source=='spotify'
     app.yandex_web.state={'ready':True,'authorized':True,'subscribed':True,'title':'Wave fixture',
         'artist':'Fixture artist','duration':180,'position':2,'playing':True,'canNext':True,'wave':True}
+    app.yandex_web.connected=True
     app.on_yandex_changed()
     assert app.yandex_web.calls[-1]==('hide',{})
+    assert not app.accounts.pending['yandex-music']
+    app.accounts.connect('yandex-music')
+    assert app.yandex_web.calls[-1]==('show',{})
+    assert not app.accounts.pending['yandex-music'],'Reopening a connected account must not start another sign-in'
     app.select_source('yandex-music');settle()
     assert app.native_web() is app.yandex_web and app.yandex_web.enabled
     assert not app.apple_web.enabled and not app.youtube.enabled
@@ -465,12 +474,15 @@ try:
     assert ('play',{'id':'123'}) in app.yandex_web.calls
     assert app.music.book.current('yandex-music')['id']=='123'
     assert [v['id'] for _,v in app.music.book.upcoming('yandex-music')]==['456']
-    app.yandex_panel.render([{'id':'/playlists/fixture','kind':'playlist','title':'Evening','image':''}])
-    app.yandex_panel.track_buttons[0].clicked();settle()
-    assert ('tracks',{'id':'/playlists/fixture'}) in app.yandex_web.calls
-    assert app.yandex_panel.back.get_visible()
-    app.yandex_panel.back.clicked();settle()
-    assert app.yandex_panel.category=='collection' and not app.yandex_panel.back.get_visible()
+    # Personal picks and owned playlists now have separate return destinations.
+    for category in ('personal','collection'):
+        app.yandex_panel.browse(category);settle()
+        app.yandex_panel.render([{'id':'99:1000','kind':'playlist','title':'Evening','image':''}])
+        app.yandex_panel.track_buttons[0].clicked();settle()
+        assert ('tracks',{'id':'99:1000'}) in app.yandex_web.calls
+        assert app.yandex_panel.back.get_visible()
+        app.yandex_panel.back.clicked();settle()
+        assert app.yandex_panel.category==category and not app.yandex_panel.back.get_visible()
     app.toggle_compact(None);settle(.6)
     assert app.window.get_size().width==320 and app.compact_source.get_label()=='Я⌄'
     app.toggle_compact(None);settle(.6)
