@@ -16,6 +16,7 @@ from cover_sources import AppleMotion, apple_page
 from motion_artwork import MotionCover
 from motion_surface import MotionSurface
 from music_library import MusicService
+from yandex_panel import wave_description,playlist_wave_context
 from listening_library import LibraryView,QueueView,CSS as LIBRARY_CSS
 from quality_badge import QualityBadge,CSS as QUALITY_CSS
 from karaoke import KaraokeView,CSS as KARAOKE_CSS
@@ -354,6 +355,18 @@ class FullscreenPlayer:
         footer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10);self.footer=footer
         self.playing_caption=label('','stage-library-note',True);self.playing_caption.set_width_chars(1)
         self.playing_caption.set_no_show_all(True);footer.pack_start(self.playing_caption,False,False,0)
+        self.yandex_controls=Gtk.Box(spacing=12);self.yandex_controls.set_no_show_all(True)
+        self.yandex_wave_status=label('','stage-library-note',True)
+        self.yandex_wave_status.set_ellipsize(Pango.EllipsizeMode.END)
+        self.yandex_controls.pack_start(self.yandex_wave_status,True,True,0)
+        self.track_wave_button=self.button('≈ '+text('Wave from current track','Волна по текущему треку'),self.track_wave,'stage-tab')
+        self.yandex_controls.pack_end(self.track_wave_button,False,False,0)
+        self.playlist_wave_button=self.button('≈ '+text('Playlist wave','Волна по плейлисту'),self.playlist_wave,'stage-tab')
+        self.yandex_controls.pack_end(self.playlist_wave_button,False,False,0)
+        self.personal_wave_button=self.button('≈ '+text('My Wave','Моя волна'),lambda:self.music.start_yandex_wave(),'stage-tab')
+        self.yandex_controls.pack_end(self.personal_wave_button,False,False,0)
+        for child in self.yandex_controls.get_children():child.show()
+        footer.pack_start(self.yandex_controls,False,False,0)
         progress=Gtk.Box(spacing=14)
         self.elapsed=label('0:00','stage-time');progress.pack_start(self.elapsed,False,False,0)
         self.progress=Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL,0,1,.1)
@@ -859,6 +872,35 @@ class FullscreenPlayer:
         if self.mashup_active():self.mashups.client.toggle_mute()
         else:self.host.sound.toggle_mute()
 
+    def playlist_context(self):
+        selected=self.library_view.selected if self.page=='library' and self.library_view.source=='yandex-music' else None
+        return playlist_wave_context(self.host.yandex_web.state,selected)
+
+    def playlist_wave(self):
+        if self.host.source=='yandex-music' and not self.mashup_active():
+            context=self.playlist_context()
+            if context:self.music.start_yandex_wave(playlist=context)
+
+    def track_wave(self):
+        if self.host.source=='yandex-music' and not self.mashup_active():
+            self.music.start_yandex_wave(recording=dict(self.host.yandex_web.state))
+
+    def update_yandex_controls(self,mashup=False):
+        visible=self.host.source=='yandex-music' and not mashup
+        self.yandex_controls.set_visible(visible)
+        if not visible:return
+        state=self.host.yandex_web.state
+        value=wave_description(state) or (text('Playlist playback','Воспроизведение плейлиста') if state.get('playlistId') else text('Yandex Music','Яндекс Музыка'))
+        self.yandex_wave_status.set_text(value)
+        self.yandex_wave_status.set_tooltip_text(value)
+        self.track_wave_button.set_sensitive(bool(state.get('authorized') and state.get('ready') and state.get('id')))
+        self.track_wave_button.set_tooltip_text(str(state.get('title') or ''))
+        ready=bool(state.get('authorized') and state.get('ready'))
+        context=self.playlist_context()
+        self.personal_wave_button.set_sensitive(ready)
+        self.playlist_wave_button.set_sensitive(bool(ready and context))
+        self.playlist_wave_button.set_tooltip_text(str((context or {}).get('title') or (context or {}).get('id') or text('Open a playlist first','Сначала открой плейлист')))
+
     def action(self,action):
         if self.mashup_active():
             client=self.mashups.client
@@ -937,11 +979,14 @@ class FullscreenPlayer:
             if button.get_label()!=value:
                 button.set_label(value)
                 button.get_child().show()
+        self.update_yandex_controls(mashup)
         self.play_button.set_sensitive(mashup or h.play.get_sensitive())
         self.previous_button.set_sensitive(mashup or h.previous.get_sensitive());self.next_button.set_sensitive(mashup or h.next.get_sensitive())
         if not mashup and self.music.book.active==h.source:
             index=self.music.book.indices[h.source]
-            self.next_button.set_sensitive(index+1<len(self.music.book.queues[h.source]))
+            current=self.music.book.current(h.source) or {}
+            self.next_button.set_sensitive(index+1<len(self.music.book.queues[h.source]) or
+                                           h.source=='yandex-music' and bool(current.get('playlistId')))
             self.previous_button.set_sensitive(bool(self.music.book.current(h.source)))
         delayed=mashup or self.page=='karaoke' and self.karaoke.audio.active and self.karaoke.audio.engine=='ai'
         if not delayed:

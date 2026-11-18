@@ -545,6 +545,7 @@ class Widget:
         self.apple_panel.play_tracks=lambda item,items:self.play_list_track('apple-music',item,items)
         self.yandex_panel.play_tracks=lambda item,items:self.play_list_track('yandex-music',item,items)
         self.yandex_panel.before_play=self.music.stop
+        self.yandex_web.queue_provider=lambda:self.music.queue_snapshot('yandex-music')
         self.window.show_all()
         self.panel.show_home()
         self.apple_panel.show_home()
@@ -989,8 +990,14 @@ class Widget:
         self.time.set_text(f'{stamp(self.position)}  /  {stamp(self.length)}')
         self.progress.set_fraction(max(0.,min(1.,self.position/self.length)) if self.length else 0.)
         self.progress_event.set_sensitive(bool(authorized and self.length and state.get('canSeek',True)))
-        self.previous.set_sensitive(bool(authorized and state.get('canPrevious') and state.get('title')))
-        self.next.set_sensitive(bool(authorized and state.get('canNext') and state.get('title')))
+        can_previous=state.get('canPrevious');can_next=state.get('canNext')
+        if self.source=='yandex-music' and self.music.book.active==self.source:
+            book=self.music.book;index=book.indices[self.source]
+            current=book.current(self.source) or {}
+            can_previous=index>0 or self.position>0
+            can_next=index+1<len(book.queues[self.source]) or bool(current.get('playlistId'))
+        self.previous.set_sensitive(bool(authorized and can_previous and state.get('title')))
+        self.next.set_sensitive(bool(authorized and can_next and state.get('title')))
         self.play.set_sensitive(True)
         self.play.set_label('Ⅱ' if self.playing else '▶')
         self.set_art(state.get('image') or None)
@@ -1080,6 +1087,12 @@ class Widget:
     def on_music_changed(self):
         self.update_loading()
         panel={'spotify':self.panel,'apple-music':self.apple_panel,'youtube':self.youtube_panel,'yandex-music':self.yandex_panel}[self.source]
+        if self.source=='yandex-music' and panel.category=='queue':
+            book=self.music.book
+            key=(book.active,book.indices['yandex-music'],book.revision)
+            if key!=getattr(panel,'queue_revision',None):
+                panel.queue_revision=key
+                panel.browse('queue')
         if self.music.error:panel.notice.set_text(self.music.error)
         elif self.music_message and panel.notice.get_text()==self.music_message:panel.notice.set_text('')
         self.music_message=self.music.error

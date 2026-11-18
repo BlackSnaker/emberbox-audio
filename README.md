@@ -278,8 +278,8 @@ Select **YouTube · Search & play**, search by title or paste a YouTube/YouTube 
 ## System requirements
 
 **Linux desktop · X11 or Wayland + XWayland · PipeWire · Python ≥ 3.10 · GTK 3.**
-The currently tested target is **x86_64**; built-in Apple/Yandex DRM uses Linux
-x64 Widevine. Windows and macOS are unsupported.
+The currently tested target is **x86_64**; built-in Apple Music DRM uses Linux
+x64 Widevine. Yandex Music uses direct API/libmpv playback and device-code sign-in. Windows and macOS are unsupported.
 
 | Resource | Playback and fullscreen | Local AI karaoke |
 | --- | --- | --- |

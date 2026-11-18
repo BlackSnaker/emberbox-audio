@@ -74,11 +74,10 @@ class GuiSessionTests(unittest.TestCase):
         self.assert_gui_environment(command)
         self.assertEqual(command[-3:], ['/fixture/app', 'a b', '$(not-a-shell)'])
 
-    def test_apple_and_yandex_engines_get_the_same_current_display(self):
+    def test_apple_engine_gets_the_current_display(self):
         import apple_web
-        import yandex_web
         config = {'runtime': '/fixture/engine', 'cdm_module': '/fixture/cdm'}
-        for module, cls in ((apple_web, apple_web.AppleWeb), (yandex_web, yandex_web.YandexWeb)):
+        for module, cls in ((apple_web, apple_web.AppleWeb),):
             with self.subTest(engine=module.__name__):
                 app = cls.__new__(cls)
                 app.start_lock = threading.Lock()
