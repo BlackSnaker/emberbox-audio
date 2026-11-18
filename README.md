@@ -6,6 +6,43 @@
   <p><a href="#get-started">Get started</a> · <a href="#system-requirements">System requirements</a> · <a href="docs/DESIGN.md">Grunesphism</a> · <a href="README.ru.md">Русский</a> · <a href="https://github.com/BlackSnaker/emberbox-video">Emberbox Video</a></p>
 </div>
 
+<a id="your-music-together"></a>
+
+## 18 November 2026 · Four sources. Your sound.
+
+![Spotify, Apple Music, YouTube and Yandex Music in Ember's warm glass — promotional illustration](assets/updates/2026-11-18-music-services.png)
+
+[Читать по-русски →](README.ru.md#your-music-together)
+
+Your favourite music lives in different places. Now they share a space:
+**Spotify, Apple Music, YouTube and Yandex Music — inside Ember.**
+Familiar collections, new discoveries and songs worth returning to, surrounded
+by the same warm light: reactive tubes, soft glass and tactile controls.
+
+| Source | What awaits |
+| :--- | :--- |
+| **[Spotify](docs/SPOTIFY.md)** | Sign in and play inside Ember, without a separate Spotify desktop client. |
+| **[Apple Music](docs/APPLE_MUSIC.md)** | Your library, search, albums and artists in the player interface. |
+| **[YouTube](docs/YOUTUBE.md)** | Search by title or paste a video link; no account is needed to start listening. |
+| **[Yandex Music](docs/YANDEX_MUSIC.md)** | New API connection: device-code sign-in, personal and owned playlists, My Wave, and waves seeded by a track or playlist. |
+
+**Choose your source in the player header, including Mini.**
+Connect accounts through **Settings → Player → Accounts & sign-in**.
+Ember favourites bring tracks from different sources together;
+account saving is supported for connected Spotify, Apple Music and Yandex accounts.
+
+Each service keeps its own terms: full Apple Music songs require a subscription,
+Yandex requires Yandex Plus, and Spotify features depend on your plan.
+Music availability varies by region. Yandex integration is experimental:
+interface and API checks use fixtures; playback with Plus still needs
+verification on users' accounts.
+
+Thank you to **[Boria138](https://github.com/Boria138)** for the new Yandex Music
+connection in [PR #1](https://github.com/BlackSnaker/emberbox-audio/pull/1).
+
+*The illustration is an artistic interpretation of Ember, not an interface
+screenshot. Ember is an independent project, unaffiliated with these services.*
+
 ## Mirrorball · A room made of light
 
 > **Ember Quest · early port:** [Meta Quest 3S room, setup and feature matrix](quest/README.md). Includes a Linux companion and an experimental native service sign-in host; on-device subscription playback is under verification.
@@ -273,7 +310,7 @@ Select **YouTube · Search & play**, search by title or paste a YouTube/YouTube 
 
 ![Yandex Music interface with original demo artwork and synthetic playback](assets/yandex-music.png)
 
-**Experimental Yandex Music integration:** start **My Wave**, send like/dislike reactions and browse loaded search, collection and queue tracks inside the widget. Connect Yandex ID from **Settings → Player → Accounts & sign-in**. Full playback requires Yandex Plus. Subscription playback is **awaiting testers**; interface, routing and adapter checks use fixtures. [Setup and tester checklist →](docs/YANDEX_MUSIC.md)
+**Experimental Yandex Music API integration:** sign in by device code, open personal and owned playlists, search tracks and start **My Wave**, a track wave or a playlist wave inside the player. The token is stored in the desktop keyring; no separate Yandex client is needed. Connect from **Settings → Player → Accounts & sign-in**. Full playback requires Yandex Plus. Subscription playback is **awaiting testers**; interface, routing and API checks use fixtures. [Setup and tester checklist →](docs/YANDEX_MUSIC.md)
 
 ## System requirements
 
