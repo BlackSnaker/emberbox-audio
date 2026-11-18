@@ -402,7 +402,7 @@ class LibraryView(Gtk.Box):
     def render_favorites(self):
         clear(self.content);self.favorite_tables=[];self.track_table=None;self.song_buttons=[];self.playback_key=None
         self.source_badge.set_text(text('EMBER FAVOURITES','ИЗБРАННОЕ EMBER'))
-        self.context.hide();self.hero_image.hide();self.wave_button.hide()
+        self.context.hide();self.hero_image.hide()
         self.title.set_text(text('Favourites, together.','Любимое — рядом.'))
         self.subtitle.set_text(text(f'{len(self.items)} saved tracks · All sources',f'Сохранено треков: {len(self.items)} · Все источники'))
         for source,name in NAMES.items():
