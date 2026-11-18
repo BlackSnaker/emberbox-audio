@@ -67,16 +67,30 @@ class Adapters(unittest.TestCase):
             r.load('spotify','search','Song');client.search.assert_called_once_with('Song')
             r.play(dict(song(),source='spotify'),lambda:False);client.play.assert_not_called()
             r.play(dict(song(),source='spotify'),lambda:True);client.play.assert_called_once_with('spotify:track:A')
-    def test_yandex_queue_relocates_exact_track_before_play(self):
+    def test_yandex_queue_plays_exact_api_id_without_search(self):
         h=host();h.source='yandex-music';r=MusicRepository(h)
         item={'source':'yandex-music','id':'123','title':'Evening','artist':'Artist'}
-        h.yandex_web.request.return_value={'items':[{'id':'999','title':'Other version'}]}
-        with self.assertRaises(RuntimeError):r.play(item,lambda:True)
-        self.assertEqual(h.yandex_web.request.call_count,1)
-        h.yandex_web.request.reset_mock();h.yandex_web.request.return_value={'items':[{'id':'123'}]}
+        r.play(item,lambda:False)
+        h.yandex_web.request.assert_not_called()
         r.play(item,lambda:True)
-        self.assertEqual(h.yandex_web.request.call_args_list[0].args,('search',))
-        h.yandex_web.request.assert_called_with('play',id='123')
+        h.yandex_web.request.assert_called_once_with('play',id='123')
+
+
+class QueueSnapshot(unittest.TestCase):
+    def test_current_and_upcoming_keep_playlist_order_without_history(self):
+        service=MusicService.__new__(MusicService)
+        values=[{'id':'1','title':'I Will Run'}, {'id':'2','title':'Avalon Dust'},
+                {'id':'3','title':'London Bridge Is Falling Down My Fair Lady'}]
+        service.book=SimpleNamespace(active='yandex-music',queues={'yandex-music':values},
+                                     indices={'yandex-music':1})
+        result=service.queue_snapshot('yandex-music')
+        self.assertEqual([v['id'] for v in result],['2','3'])
+        result[0]['title']='Changed'
+        self.assertEqual(values[1]['title'],'Avalon Dust')
+        service.book.indices['yandex-music']=2
+        self.assertEqual([v['id'] for v in service.queue_snapshot('yandex-music')],['3'])
+        service.book.active=None
+        self.assertIsNone(service.queue_snapshot('yandex-music'))
 
 
 class Playback(unittest.TestCase):
@@ -85,6 +99,33 @@ class Playback(unittest.TestCase):
         self.host=host();self.service=MusicService(self.host,Path(self.folder.name)/'queue.json')
         self.addCleanup(self.service.close)
         self.calls=[];self.service.repository.play=lambda item,alive:self.calls.append(item['id']) if alive() else None
+    def test_next_and_natural_playlist_end_start_its_wave(self):
+        s=self.service;h=self.host;h.source='yandex-music';h.yandex_web.state={}
+        s.source_changed()
+        values=[{'uri':'yandex:track:12','title':'First','playlistId':'99:1000'},
+                {'uri':'yandex:track:13','title':'Last','playlistId':'99:1000'}]
+        s.book.replace('yandex-music',values)
+        s.start(0);self.assertTrue(drain(lambda:not s.loading))
+        s.step(1);self.assertTrue(drain(lambda:not s.loading))
+        self.assertEqual(s.book.indices['yandex-music'],1)
+        h.yandex_web.action.assert_not_called()
+        s.step(1)
+        h.yandex_web.action.assert_called_once_with('wave',id='99:1000')
+        self.assertIsNone(s.book.active)
+        s.book.active='yandex-music';h.yandex_web.action.reset_mock()
+        with patch.object(s.watch,'observe',return_value='next'):
+            s.poll()
+        h.yandex_web.action.assert_called_once_with('wave',id='99:1000')
+        self.assertIsNone(s.book.active)
+
+    def test_next_after_search_track_does_not_invent_playlist_wave(self):
+        s=self.service;h=self.host;h.source='yandex-music';h.yandex_web.state={}
+        s.source_changed()
+        s.book.replace('yandex-music',[{'uri':'yandex:track:12','title':'Search result'}])
+        s.start(0);self.assertTrue(drain(lambda:not s.loading))
+        s.step(1)
+        self.assertNotIn('wave',[call.args[0] for call in h.yandex_web.action.call_args_list])
+
     def test_hover_is_debounced_and_selection_cancels_it(self):
         s=self.service;h=self.host;h.source='apple-music';s.source_changed()
         first={'uri':'apple:songs:123','title':'First','artist':'Artist'}

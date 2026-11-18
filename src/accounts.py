@@ -103,6 +103,7 @@ class Accounts:
         if is_yandex:ready=ready and bool(service.state.get('ready'))
         preparing = self.preparing and self.preparing_source==source
         error = self.error if not self.error_source or self.error_source==source else ''
+        if is_yandex and service and service.error:error=service.error
         errors = {
             'NEEDS_ENGINE':text('Choose a compatible playback engine below.','Выбери совместимый движок воспроизведения ниже.'),
             'NEEDS_DRM':text('Choose an installed Widevine module below.','Выбери установленный модуль Widevine ниже.'),
@@ -114,19 +115,19 @@ class Accounts:
                 text('Signed in · connecting player','Вход выполнен · подключаю плеер') if is_yandex and signed_in else
                 text('Preparing…','Подготавливаю…') if preparing else
                 text('Finish sign-in','Заверши вход') if self.pending[source] else text('Not connected','Не подключён'),
-                'description':errors.get(error) or (text('Sign-in succeeded. Waiting for the site player; open its window if this persists.',
+                'description':errors.get(error) or (error if is_yandex else '') or (text('Sign-in succeeded. Waiting for the site player; open its window if this persists.',
                     'Вход выполнен. Ожидаю плеер сайта; если это не проходит, открой его окно.') if is_yandex and signed_in and not ready else
                     text('Your library, search and music are ready inside Emberbox.',
                     'Медиатека, поиск и музыка доступны внутри Emberbox.') if ready else
-                    text('Sign in with Yandex ID to listen to My Wave. A Yandex Plus subscription is required.',
-                         'Войди в Яндекс ID, чтобы слушать Мою волну. Нужна подписка Яндекс Плюс.') if is_yandex else
+                    text('Sign in by code at ya.ru/device. Your password stays on Yandex; the token is saved in your desktop keyring. Yandex Plus is required.',
+                         'Войди по коду на ya.ru/device. Пароль остаётся у Яндекса; токен хранится в системной связке ключей. Нужен Яндекс Плюс.') if is_yandex else
                     text('Sign in to Spotify inside Ember. No desktop client needed; playback follows your account plan.', 'Войди в Spotify прямо в Ember. Отдельный клиент не нужен; воспроизведение зависит от тарифного плана.') if source=='spotify' else
                     text('Sign in to your Apple Account. Your library will appear here. A subscription is needed for full songs.',
                          'Войди в Apple Account — медиатека появится здесь. Для полных треков нужна подписка.')),
                 'button':text('Yandex Music account','Аккаунт Яндекс Музыки') if is_yandex and ready else
                 text(name+' account','Аккаунт '+name) if ready else
                 text('Retry connection','Повторить подключение') if error else text('Sign in to Yandex Music','Войти в Яндекс Музыку') if is_yandex else text('Sign in to '+name,'Войти в '+name),
-                'details':bool(error)}
+                'details':bool(error) and not is_yandex}
 
     def connect(self,source):
         if self.closed:
@@ -143,6 +144,12 @@ class Accounts:
             return
         service=self.spotify_web if source=='spotify' else self.yandex if source=='yandex-music' else self.apple
         if not service:return
+        if source=='yandex-music':
+            self.pending[source] = not service.connected
+            self.waiting_since = time.monotonic()
+            service.action('show')
+            self.changed()
+            return
         if service.connected:
             self.pending[source] = not bool(service.state.get('authorized'))
             self.waiting_since = time.monotonic()
@@ -153,7 +160,7 @@ class Accounts:
         self.preparing_source = self.error_source = source
         self.error = ''
         self.changed()
-        self.pool.submit(spotify_web.prepare if source=='spotify' else yandex_web.prepare if source=='yandex-music' else apple_setup.prepare,self.runtime,self.module).add_done_callback(
+        self.pool.submit(spotify_web.prepare if source=='spotify' else apple_setup.prepare,self.runtime,self.module).add_done_callback(
             lambda item:GLib.idle_add(self._prepared,item,source))
 
     def _prepared(self,future,source='apple-music'):

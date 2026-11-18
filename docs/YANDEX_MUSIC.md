@@ -1,52 +1,44 @@
-# Yandex Music · My Wave
+# Yandex Music · direct API
 
 **English** · [Русский](YANDEX_MUSIC.ru.md)
 
-> Experimental integration for subscription testers. The official website loads in the native engine and the anonymous connection has been checked. My Wave subscription playback has **not yet been verified with a real Yandex Plus account**. Automated checks use fixtures.
+Yandex Music now uses its API and local libmpv playback, without an embedded website, Electron or Widevine. Full tracks and My Wave require Yandex Plus and service availability in your region. This is not a guaranteed public API; Yandex may change it.
 
-## Connect inside Emberbox
+## Connect
 
-1. Open **Settings → Accounts → Yandex Music → Sign in**.
-2. Sign in with Yandex ID in the **Emberbox Audio · Yandex Music** window. Passwords and confirmation codes stay on Yandex's website.
-3. Return to Emberbox, choose **Yandex Music** in the source menu and open **My Wave**.
-4. Press **Play My Wave**. **Like / Less like this** send reactions through the website's player controls, so Yandex can adapt its recommendations.
+1. Install `libmpv`, the Python package `python-mpv`, and `secret-tool` (`libsecret-tools` on Debian/Ubuntu and openSUSE; `libsecret` on Arch/Fedora). Your desktop must provide an unlocked Secret Service, such as GNOME Keyring or compatible KWallet.
+2. Open **Settings → Player → Accounts and sign-in → Yandex Music → Sign in**. The app displays a one-time code and opens `https://ya.ru/device` in your browser. If it does not open, click the link in the dialog or open the address manually.
+3. Enter the code on Yandex's website and approve access. Passwords and confirmation codes are entered only on Yandex. The app receives its token automatically; no manual token copying is needed. Closing the dialog cancels waiting. Reopen sign-in to obtain a new code if it expires.
+4. Select Yandex Music as the source, open a playlist, search for a track or start **My Wave**.
 
-A Yandex Plus subscription and service availability in your region are required. See [Yandex's sign-in and subscription guide](https://yandex.ru/support/music/ru/registration-and-login).
+The token is validated through `account/status` before saving. It is stored only in the desktop keyring (`application=emberbox`, `service=yandex-music`), not in JSON, process arguments or a browser profile. Connection fails if the keyring is unavailable: there is no plaintext fallback. Reopen the account card to replace the token. Remove it using your keyring manager, and revoke access in Yandex account settings when necessary.
 
-## What is integrated
+## Features
 
-- A fourth source in full and compact modes, with separate application volume/mute and selected-process PipeWire spectrum.
-- An in-widget My Wave start button and reactions, metadata/artwork, seeking, previous/next and standard **Ember** desktop media controls.
-- Search, playlist cards with in-widget track drill-down, and currently loaded queue tracks. Lists are limited to 50 loaded rows; paginated/virtualized content is not a complete library export.
-- An independent background engine, session profile and private local socket. Changing sources pauses the previous source and does not start the new one automatically.
+- Track search, your own playlists and their tracks, and a local queue.
+- Direct full-length MP3 streams at the highest available bitrate, pause, seek, covers and metadata. Previews never replace full recordings.
+- My Wave through Rotor sessions, batch replenishment, playback/skip events, likes and dislikes.
+- Artist pages, popular tracks, albums and album tracks. Guest releases are not exposed by this connection.
+- Switching sources pauses Yandex. A slow stream request cannot start audio after you leave the source.
 
-## Playback components
+The My Wave panel shows every returned row with scrolling, without a 50-row cutoff; the shared library uses the same API client. The queue is local, not the official application's queue.
 
-The account panel can discover and check an installed compatible Electron/Chromium engine and a public Widevine module. If Apple Music is already configured, Emberbox reuses its current runtime/module paths while preserving Yandex’s **separate** existing profile. Apple credentials and sessions are not copied. Runtime binaries are not bundled or downloaded by Emberbox.
+## Migrating from the website engine
 
-If detection fails, use the engine and Widevine chooser in the Yandex account card. The required capabilities and installed-runtime limitations are the same as [Apple Music](APPLE_MUSIC.md).
+The old `emberbox-audio-yandex.service` is stopped on startup. Its `yandex-web-profile/` and `yandex-engine.json` are preserved but no longer used. Apple Music and Spotify sessions are unaffected. Website sign-in cannot be converted to an OAuth token: connect a token separately.
 
-Configuration: `$XDG_CONFIG_HOME/emberbox-audio/yandex-engine.json` (normally `~/.config/emberbox-audio/`). Profile: `yandex-web-profile/`. The background service is `emberbox-audio-yandex.service`.
+## Verification and troubleshooting
 
-## Updating to 0.7.3
+Automated checks cover API contracts with fixtures, MP3 signing, credential-free media requests, keyring storage, feedback and inactive-source playback protection. **Live playback with a subscription has not been verified in the development environment.**
 
-Update the checkout and run `./install.sh`. An older background Yandex adapter is replaced separately, retaining its signed-in profile. The Apple Music playback process is not restarted.
+With Plus, check reconnection after restarting, search, playlists, My Wave transitions, feedback, seeking, source switching and volume. Report the app version, desktop environment, displayed error and failing action. Do not attach tokens, signed stream URLs or keyring contents. Replace an expired token through the account card.
 
-Select Yandex Music: playlists load when opening its panel. Click a playlist to see its tracks, and use **All playlists** to return. Plus and service availability are still required for playback. Account sign-in is now shown separately from player readiness.
+## Personal playlists and playlist-based Wave
 
-If sign-in succeeds but music or lists are still missing, open the official window through its account card and test the same track there. Report your Emberbox version, the widget error and, if present, `$XDG_RUNTIME_DIR/emberbox-yandex-web/electron-status.json`. That file contains engine versions, readiness flags and error categories; it does not record cookies, tokens or track titles. Do not share the browser profile itself.
+The Yandex panel's **For you** tab shows personal playlists supplied by the API for your account, such as the daily playlist and new-release picks. Titles and availability come from Yandex; unready or missing playlists are not invented. Your own playlists remain in **Playlists**.
 
-## Test checklist
+Open any playlist and select **Wave from this playlist** to start a recommendation session seeded by that playlist, rather than simply shuffling its tracks. The top **Play My Wave** button starts the general personal wave.
 
-With an active Plus account, verify:
+A status under the My Wave button identifies **My Wave**, **Wave from playlist**, or **Wave from track — title**, with Playing/Paused state. The recommendation source stays visible across track changes. **Wave from current track** starts a separate wave seeded by the currently selected recording.
 
-- Sign-in completes and survives a widget restart.
-- My Wave starts, advances automatically and updates the cover, progress and tubes.
-- Like, dislike and skips affect the official wave; a track change keeps the interface responsive.
-- Search, collection, queue selection, pause/resume and seeking work with the current website.
-- Switching between Spotify, Apple Music, YouTube and Yandex pauses the previous source and keeps their volumes separate.
-- Desktop media controls show **Ember**, and compact mode keeps the source accessible.
-
-Report the desktop, runtime version and failed action in a GitHub issue. Do not attach cookies, tokens or private browser/profile files.
-
-This adapter uses the official site's current player objects and UI, rather than a guaranteed public Yandex Music API. Website updates may require adapter changes. An unavailable control produces a message in the widget; the account card can reopen the official window.
+The current song is highlighted in playlist rows. Previous uses the managed playlist queue; after several seconds, its first press restarts the recording. Pressing **Next** at the end of a playlist starts its wave; merely finishing the last recording does not. After updating, reopen the playlist and select a track to attach its playlist context to the queue.

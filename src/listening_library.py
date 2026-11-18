@@ -173,13 +173,11 @@ class LibraryView(Gtk.Box):
         foot.pack_start(self.notice,True,True,0)
         self.connect_button=button(text('Accounts','Аккаунты'),accounts)
         self.connect_button.set_no_show_all(True);foot.pack_end(self.connect_button,False,False,0)
-        self.wave_button=button('≈ '+text('My Wave','Моя волна'),self.wave,'stage-add')
-        self.wave_button.set_no_show_all(True);foot.pack_end(self.wave_button,False,False,0)
         self.pack_end(foot,False,False,0)
         self.unsubscribe=service.subscribe(self.service_changed)
         self.favorite_revision=-1;self.favorite_tables=[];self.favorite_limit=200;self.rendered_key=None
         self.unsubscribe_favorites=service.favorites.subscribe(self.favorites_changed)
-        self.show_all();self.context.hide();self.connect_button.hide();self.wave_button.hide();self.sync_tabs()
+        self.show_all();self.context.hide();self.connect_button.hide();self.sync_tabs()
 
     def sync_tabs(self):
         self.updating=True
@@ -194,7 +192,6 @@ class LibraryView(Gtk.Box):
             self.sync_tabs()
             self.next_offset=None;self.render()
         self.source_badge.set_text(NAMES[self.source].upper())
-        self.wave_button.set_visible(self.source=='yandex-music')
         self.load()
 
     def deactivate(self):
@@ -204,7 +201,6 @@ class LibraryView(Gtk.Box):
     def select(self,category):
         if self.updating:return
         self.category=category;self.selected=None;self.sync_tabs()
-        self.wave_button.set_visible(category!='favorites' and self.source=='yandex-music')
         if category=='search':
             self.entry.grab_focus()
             if not self.entry.get_text().strip():
@@ -265,7 +261,7 @@ class LibraryView(Gtk.Box):
         values=[v for v in self.items if not collection(v) and track(v,self.source)]
         if self.is_playlist():
             key=playlist_key(self.source,self.selected)
-            return [dict(v,flow_playlist=key) for v in values]
+            return [dict(v,flow_playlist=key,**({'playlistId':str(self.selected['id'])} if self.source=='yandex-music' and self.selected.get('id') else {})) for v in values]
         return values
 
     def is_playlist(self):
@@ -289,9 +285,6 @@ class LibraryView(Gtk.Box):
         count=self.service.add(items)
         self.notice.set_text(text(f'Added {count} to your queue',f'В очередь добавлено: {count}') if count else
                              text('Queue is full or these tracks cannot be queued.', 'Очередь заполнена или эти треки нельзя добавить.'))
-
-    def wave(self):
-        self.service.stop();self.service.host.start_yandex_wave()
 
     def render(self):
         self.rendered_key=self.key()

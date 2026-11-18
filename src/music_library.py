@@ -59,7 +59,14 @@ class MusicRepository:
                 if category=='search':return player.request('search',term=term)
                 if category=='albums':return {'items':[],'note':text('This connection exposes playlists and tracks. Find an album by title in Search.',
                     'Это подключение показывает плейлисты и треки. Альбом можно найти по названию в Поиске.')}
-                return player.request('browse',category='collection')
+                personal=player.request('browse',category='personal')
+                owned=player.request('browse',category='collection')
+                items=[];seen=set()
+                for value in personal.get('items',[])+owned.get('items',[]):
+                    ident=value.get('id')
+                    if ident and ident not in seen:
+                        seen.add(ident);items.append(value)
+                return {'items':items,'note':personal.get('note','')}
             if source=='youtube':
                 if category=='albums':return {'items':[],'note':text('YouTube videos have no album catalogue here. Search for an artist and album title.',
                     'Здесь у видео YouTube нет каталога альбомов. Введи исполнителя и название альбома в Поиске.')}
@@ -86,13 +93,7 @@ class MusicRepository:
         with self.locks[source]:
             if not alive():return
             if source=='yandex-music':
-                # Website rows are virtualised. Relocate this exact ID rather
-                # than keeping a stale DOM row from a previous search page.
-                result=h.yandex_web.request('search',term=(item['title']+' '+item['artist'])[:200])
-                if not any(str(i.get('id'))==item['id'] for i in result.get('items',[])):
-                    raise RuntimeError(text('This track could not be found again. Refresh the search.',
-                                            'Не удалось снова найти этот трек. Обнови поиск.'))
-                if alive():h.yandex_web.request('play',id=item['id'])
+                if alive():return h.yandex_web.request('play',id=item['id'],**({'playlistId':item['playlistId']} if item.get('playlistId') else {}))
 
 
 def snapshot(host):
@@ -107,6 +108,7 @@ def snapshot(host):
         state['ended']=bool(data.get('ended'))
     elif source=='yandex-music':
         state['id']=str(host.yandex_web.state.get('id') or '')
+        state['ended']=bool(host.yandex_web.state.get('ended'))
     elif source=='youtube' and host.youtube_mode=='native':
         state['id']=str((host.youtube.current or {}).get('id',''));state['ended']=host.youtube.eof
     elif getattr(host,'session',None):
@@ -175,6 +177,27 @@ class MusicService:
     def cancel_browse(self):
         self.browse_generation+=1;self.youtube.cancel();self.youtube_done=None
         if self.browse_future:self.browse_future.cancel()
+
+    def start_yandex_wave(self,*,playlist=None,recording=None):
+        if self.host.source!='yandex-music':return False
+        params={}
+        if playlist is not None:
+            if not playlist.get('id'):return False
+            params={'id':str(playlist['id'])}
+            if playlist.get('title'):params['title']=str(playlist['title'])
+        elif recording is not None:
+            if not recording.get('id'):return False
+            params={'trackId':str(recording['id']),'title':str(recording.get('title') or '')}
+        self.stop(pause_pending=True)
+        self.host.yandex_web.action('wave',**params)
+        return True
+
+    def queue_snapshot(self,source):
+        """Current track and upcoming entries from the queue owning playback."""
+        if self.book.active!=source:return None
+        values=self.book.queues[source]
+        index=max(0,self.book.indices[source])
+        return [dict(value) for value in values[index:]]
 
     def add(self,items):
         count=self.book.add(self.host.source,[dict(item,origin='manual') for item in items]);self.error='';self.changed();return count
@@ -371,6 +394,8 @@ class MusicService:
         self.previous_restart=None
         if 0<=index+direction<len(self.book.queues[source]):self.start(index+direction)
         elif direction<0:self.host.seek_to(0)
+        elif source=='yandex-music' and item and item.get('playlistId'):
+            self.start_yandex_wave(playlist={'id':item['playlistId']})
         else:self.book.active=None;self.pause(source);self.changed()
 
     def pause(self,source):

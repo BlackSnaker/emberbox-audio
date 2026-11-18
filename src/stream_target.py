@@ -50,6 +50,11 @@ def matches(props, target):
     except (ValueError, TypeError):
         pid = 0
     if descendant(pid, target.pid):
+        # Yandex's libmpv now lives in the widget process, alongside YouTube.
+        # Prefer its audio-client name when the server supplies one.
+        name = str(props.get('application.name') or '')
+        if target.player == 'yandex-native' and name:
+            return name == 'Emberbox Yandex Music'
         return True
     # Sandboxed browsers can expose a D-Bus proxy PID. In that case the
     # finest available Pulse/PipeWire boundary is the browser application.
