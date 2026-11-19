@@ -24,12 +24,12 @@ def composition(identity):
 class LiquidState(Light):
     def __init__(self):
         super().__init__()
-        self.values=self.start=self.target=palette((.48,.32,.39,.24,.42,.40))+composition('ember')
+        self.values=self.start=self.target=palette((.48,.32,.39,.24,.42,.40))+composition('ember')+silhouettes('ember')
         self.identity=None
 
     def retarget(self, swatches, identity, animate=True):
         self.identity=identity
-        return self.set(palette(swatches)+composition(identity),animate)
+        return self.set(palette(swatches)+composition(identity)+silhouettes(identity),animate)
 
 
 def cover_swatches(picture):
@@ -58,3 +58,51 @@ def cover_swatches(picture):
         if count>=3 and math.dist(colour,primary)>.22 and score>best:
             secondary=colour;best=score
     return primary+tuple(secondary)+(1.,)
+
+
+class FramePacer:
+    """Vsync-owned 60 Hz deadlines, without drift or a busy timer.
+
+    A missed deadline is dropped rather than replayed in a CPU-heavy burst.
+    Keep fractional time so tiny vsync jitter cannot halve the frame rate.
+    """
+    interval=1/60
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.deadline=None
+
+    def due(self, now):
+        if self.deadline is None:
+            self.deadline=now+self.interval
+            return True
+        if now+.0005<self.deadline:
+            return False
+        self.deadline+=self.interval
+        if self.deadline<now:
+            self.deadline=now+self.interval
+        return True
+
+
+def silhouettes(identity):
+    """Per-lens mask weights interpolate, unlike a jumping integer selector."""
+    seed=hashlib.sha256(('silhouette:'+str(identity)).encode()).digest()
+    return tuple(float(shape==seed[lens]%5) for lens in range(5) for shape in range(5))
+
+
+def lens_masks(size=128):
+    """Five feathered A8 silhouettes, baked once; <=80 KiB combined."""
+    import numpy as np
+    y,x=np.mgrid[-1:1:complex(size),-1:1:complex(size)]
+    r=np.sqrt(x*x+y*y);angle=np.arctan2(y,x)
+    # Match the broad original lens, with soft shoulders instead of outlines.
+    ring=np.interp(r,(0.,.24,.39,.56,.75,1.),(0.,.13,.27,.12,.035,0.))
+    ribbon=.25*np.exp(-((y-.28*np.sin(x*3.8)-x*.12)/.19)**2)*np.exp(-(x/.85)**6)
+    petals=.25*np.exp(-((r-(.55+.13*np.sin(angle*3)))/.13)**2)
+    crescent=.27*np.exp(-((r-.56)/.18)**2)*np.clip(.45+x*.9-y*.2,0,1)
+    veil=.21*np.exp(-((y+.22*np.sin(x*2.7))/.33)**2)*np.exp(-(x/.84)**4)
+    edge=np.clip((1-r)/.16,0,1)
+    return tuple(np.clip(mask*edge*255+.5,0,255).astype('uint8').tobytes()
+                 for mask in (ring,ribbon,petals,crescent,veil))

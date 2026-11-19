@@ -1,12 +1,13 @@
 """Slow Current: low-contrast, sound-shaped liquid interference.
 
-Only a 360x216 retained canvas is repainted. No new audio capture, FFT,
+Only a 180x108 retained canvas is repainted. No new audio capture, FFT,
 network request or beat-triggered flash. Motion stays bounded in silence.
 """
 import math
-from gi.repository import Gdk
+import ctypes as C
+from gi.repository import Gdk, Gtk
 from velvet_theme import VelvetPaint, VelvetSurface
-from psychedelic_art import LiquidState, cover_swatches
+from psychedelic_art import LiquidState, cover_swatches, FramePacer, lens_masks
 
 CSS = b'''
 .psychedelic-theme .card { background-color: #181921;
@@ -28,6 +29,28 @@ window.ember-stage.psychedelic-theme.stage-opening { background-color: transpare
 
 
 class LiquidPaint(VelvetPaint):
+    WIDTH, HEIGHT = 180, 108
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Five immutable alpha silhouettes. Each frame only transforms/tints them;
+        # Cairo never rebuilds masks or evaluates radial gradients during motion.
+        c=self.c
+        c.cairo_mask_surface.restype=None
+        c.cairo_mask_surface.argtypes=[C.c_void_p,C.c_void_p,C.c_double,C.c_double]
+        self.lenses=[]
+        for raw in lens_masks():
+            lens=c.cairo_image_surface_create(2,128,128)
+            c.cairo_surface_flush(lens)
+            C.memmove(c.cairo_image_surface_get_data(lens),raw,len(raw))
+            c.cairo_surface_mark_dirty(lens)
+            self.lenses.append(lens)
+
+    def close(self):
+        if self.closed:return
+        for lens in self.lenses:self.c.cairo_surface_destroy(lens)
+        self.lenses=[]
+        super().close()
+
     def compose(self, _values):
         owner = self.owner()
         key = (round(owner.phase, 5), round(owner.energy, 4), tuple(round(v,5) for v in owner.liquid.values))
@@ -36,6 +59,8 @@ class LiquidPaint(VelvetPaint):
         self.values = key
         c, cr = self.c, self.cr
         c.cairo_set_operator(cr, 0); c.cairo_paint(cr); c.cairo_set_operator(cr, 2)
+        c.cairo_save(cr)
+        c.cairo_scale(cr,self.WIDTH/360,self.HEIGHT/216)
         phase, energy, material = key
         # Broad translucent mineral-colour ribbons. Their centres move by
         # millimetres per frame, never reverse or reset on a new track.
@@ -43,22 +68,33 @@ class LiquidPaint(VelvetPaint):
         for index, colour in enumerate(palette):
             offset, aspect, spread, shoulder = material[15+index*4:19+index*4]
             angle = phase*(.75+offset*.4) + offset*math.tau + index*1.3
-            x = 180 + (100+spread*75)*math.sin(angle*.67+index)
-            y = 108 + (56+spread*40)*math.cos(angle*.51+index*.8)
+            # A continuous blend of drift, eddy and breathing. Independent
+            # rates/offsets per song avoid a short, visibly repeating orbit.
+            tide=.5+.5*math.sin(phase*(.19+spread*.09)+offset*math.tau)
+            eddy=math.sin(angle*(.48+aspect*.32)+index)
+            drift=math.sin(phase*(.31+spread*.23)+index*2.1)
+            x = 180 + (100+spread*75)*(eddy*(1-tide*.55)+drift*tide*.55)
+            y = 108 + (56+spread*40)*math.cos(angle*(.39+offset*.27)+index*.8)
+            y += 12*math.sin(phase*(.22+aspect*.12)+index*1.6)
             c.cairo_save(cr)
             c.cairo_translate(cr, x, y)
-            c.cairo_scale(cr, 140+aspect*80+energy*12, 75+spread*48+17*math.sin(angle*.3))
-            p = c.cairo_pattern_create_radial(0.,0.,0.,0.,0.,1.)
-            for at, alpha in ((0.,.0),(.24,.13),(.34+shoulder*.1,.27),(.56,.12),(.75,.035),(1.,0.)):
-                c.cairo_pattern_add_color_stop_rgba(p, at, *colour, alpha)
-            c.cairo_set_source(cr,p); c.cairo_paint(cr)
-            c.cairo_pattern_destroy(p); c.cairo_restore(cr)
+            width=(140+aspect*80+energy*12)*(.93+shoulder*.14)*(1+.055*math.sin(phase*.37+index))
+            height=75+spread*48+17*math.sin(angle*.3)
+            c.cairo_scale(cr,width/64,height/64)
+            # At rest one mask per lens; transitions blend cached silhouettes.
+            for shape,weight in enumerate(material[35+index*5:40+index*5]):
+                if weight > .001:
+                    c.cairo_set_source_rgba(cr,*colour,weight)
+                    c.cairo_mask_surface(cr,self.lenses[shape],-64.,-64.)
+            c.cairo_restore(cr)
+        c.cairo_restore(cr)
 
 
 class PsychedelicSurface(VelvetSurface):
     painter_type = LiquidPaint
 
     def __init__(self, *args, **kwargs):
+        self.pacer = FramePacer()
         self.phase = .8
         self.energy = 0.
         self.liquid = LiquidState()
@@ -67,8 +103,28 @@ class PsychedelicSurface(VelvetSurface):
         self.song = None
         self.song_check = 0.
         super().__init__(*args, **kwargs)
+        self.materials = []
         self.obscured = False
         self.signals.append((self.window,self.window.connect('window-state-event',self.window_state)))
+
+    def set_enabled(self, enabled):
+        for material in self.materials:
+            material.close()
+        self.materials=[]
+        super().set_enabled(enabled)
+        if enabled and self.stage:
+            # Repainting light must not rerasterise the hi-fi's static shadows.
+            # Retain only materials; GTK still draws all live children/controls.
+            from winter_surface_cache import MaterialCache
+            def visit(widget):
+                if ((isinstance(widget,Gtk.Button) and any(widget.get_style_context().has_class(name)
+                        for name in ('stage-quiet','stage-tab','stage-transport'))) or
+                        isinstance(widget,Gtk.Box) and any(widget.get_style_context().has_class(name)
+                        for name in ('stage-console','stage-art-shell','cover-surface','lamp-well','stage-nav','stage-top-nav'))):
+                    self.materials.append(MaterialCache(widget,self))
+                if isinstance(widget,Gtk.Container):
+                    for child in widget.get_children():visit(child)
+            visit(self.overlay)
 
     def song_identity(self):
         host = self.appearance.audio_host
@@ -96,6 +152,7 @@ class PsychedelicSurface(VelvetSurface):
 
     def resume(self):
         self.stop(settle=False)
+        self.pacer.reset()
         if self.closed or not self.enabled or not self.window.get_mapped() or self.suspended or self.obscured:
             return
         if self.window.get_settings().get_property('gtk-enable-animations'):
@@ -128,8 +185,7 @@ class PsychedelicSurface(VelvetSurface):
         # >=0.9s smoothing: music changes flow, never luminance or hue.
         self.energy += (target-self.energy)*-math.expm1(-dt/.9)
         self.phase += dt*(.055+.065*self.energy)
-        if getattr(self, "painted_at", None) is None or now-self.painted_at >= 1/60-.001:
-            self.painted_at = now
+        if self.pacer.due(now):
             self.widget.queue_draw()
         return True
 

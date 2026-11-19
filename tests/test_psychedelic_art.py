@@ -44,3 +44,41 @@ class PsychedelicArtTests(unittest.TestCase):
 
     def test_transitions(self):
         test_song_shapes_and_retargeting()
+
+
+class FramePacingTests(unittest.TestCase):
+    def test_vsync_cadence(self):
+        from psychedelic_art import FramePacer
+        for hz in (60,120,144,165):
+            pacer=FramePacer()
+            count=sum(pacer.due(i/hz + (.0002 if i%2 else -.0002)) for i in range(hz*10))
+            self.assertLessEqual(abs(count-600),1,(hz,count))
+
+    def test_no_catchup_burst(self):
+        from psychedelic_art import FramePacer
+        pacer=FramePacer()
+        self.assertTrue(pacer.due(0.))
+        self.assertTrue(pacer.due(5.))
+        self.assertFalse(pacer.due(5.0001))
+        pacer.reset()
+        self.assertTrue(pacer.due(5.0002))
+
+class SilhouetteTests(unittest.TestCase):
+    def test_distinct_cached_masks(self):
+        from psychedelic_art import lens_masks,silhouettes
+        masks=lens_masks()
+        self.assertEqual(len(set(masks)),5)
+        self.assertTrue(all(len(mask)==128*128 and 0<max(mask)<100 for mask in masks))
+        weights=silhouettes('a')
+        self.assertNotEqual(weights,silhouettes('b'))
+        self.assertTrue(all(sum(weights[i:i+5])==1 for i in range(0,25,5)))
+
+    def test_masks_blend_continuously(self):
+        from psychedelic_art import LiquidState
+        state=LiquidState()
+        state.retarget((.5,.3,.2,.4,.2,.1),'new song')
+        visible=state.values
+        state.advance(.4)
+        self.assertNotEqual(state.values,visible)
+        for i in range(35,60,5):
+            self.assertAlmostEqual(sum(state.values[i:i+5]),1.)

@@ -29,6 +29,10 @@ with patch.object(fullscreen,'LyricsClient',f.FixtureLyrics),patch.object(fullsc
         surface=stage.winter_surface.psychedelic
         assert surface.enabled and surface.tick and surface.draws>3 and not surface.failed
         assert stage.window.get_style_context().has_class('psychedelic-theme')
+        assert surface.materials and any(item.builds for item in surface.materials)
+        material_builds=sum(item.builds for item in surface.materials)
+        settle(.15)
+        assert sum(item.builds for item in surface.materials)==material_builds, 'Static materials were rebuilt per frame'
         phase=surface.phase;settle(.15);assert surface.phase>phase
         # Inject only a meter reading, without opening an audio capture.
         host.meter=SimpleNamespace(rms_level=1.,last_sample=time.monotonic(),levels=(.3,)*9)
@@ -74,7 +78,7 @@ with patch.object(fullscreen,'LyricsClient',f.FixtureLyrics),patch.object(fullsc
             shot(host.settings.popover,'settings-services.png')
             host.settings.popover.dismiss();stage.window.resize(1920,1080);settle(.3)
             shot(stage.window,'fullscreen.png')
-        host.appearance.set_theme('classic');assert not surface.tick and surface.painter is None
+        host.appearance.set_theme('classic');assert not surface.tick and surface.painter is None and not surface.materials
         host.appearance.set_theme('psychedelic');settle(.1)
         stage.window.hide();assert not surface.tick
         # Exercise the actual card material/child propagation at both sizes.

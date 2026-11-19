@@ -84,13 +84,14 @@ window.ember-stage.velvet-theme.stage-opening { background-color: transparent; }
 
 class VelvetPaint:
     """One small retained light canvas; widget children are drawn live, above it."""
+    WIDTH, HEIGHT = 360, 216
     def __init__(self, surface, widget, card=False):
         from winter_surface_cache import MaterialCache
         self.owner = weakref.ref(surface)
         self.widget, self.card = widget, card
         self.c, self.g, self.pointer = bindings()
         self.ptr = self.pointer(widget.__gpointer__, None)
-        self.canvas = self.c.cairo_image_surface_create(0, 360, 216)
+        self.canvas = self.c.cairo_image_surface_create(0, self.WIDTH, self.HEIGHT)
         self.cr = self.c.cairo_create(self.canvas)
         self.values = None
         self.closed = False
@@ -150,7 +151,7 @@ class VelvetPaint:
                 rounded(c, cr, 0., 0., w, h, 18. if w <= 340 else 22.)
                 c.cairo_clip(cr)
             self.compose(owner.light.values)
-            c.cairo_scale(cr, w/360, h/216)
+            c.cairo_scale(cr, w/self.WIDTH, h/self.HEIGHT)
             c.cairo_set_source_surface(cr, self.canvas, 0., 0.)
             c.cairo_pattern_set_filter(c.cairo_get_source(cr), 1)
             c.cairo_paint(cr)
