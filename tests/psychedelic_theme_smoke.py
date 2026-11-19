@@ -36,10 +36,26 @@ with patch.object(fullscreen,'LyricsClient',f.FixtureLyrics),patch.object(fullsc
         assert 0 < surface.energy < .25, surface.energy
         host.playing=False;before=surface.energy;settle(.15)
         assert 0 < surface.energy < before
+        # Cover updates retarget from the visible frame, never flash a new hue.
+        picture=GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB,False,8,48,48)
+        picture.fill(0xd94b36ff)
+        visible=surface.liquid.values
+        host.cover.set_from_pixbuf(picture)
+        assert surface.liquid.values==visible
+        assert all(abs(a-b)<1e-6 for a,b in zip(surface.liquid.target[:3],(217/255,75/255,54/255))), surface.liquid.target[:3]
+        settle(.2);assert surface.liquid.values!=visible
+        old_geometry=surface.liquid.target[15:]
+        old_colour=surface.liquid.target[:15]
+        title=host.title.get_text();host.title.set_text('Another song on the same album')
+        settle(.6)
+        assert surface.liquid.target[:15]==old_colour
+        assert surface.liquid.target[15:]!=old_geometry
+        host.title.set_text(title);host.cover.set_from_pixbuf(f.cover)
         surface.set_suspended(True);assert not surface.tick
         surface.set_suspended(False);assert surface.tick
         prefs=stage.window.get_settings();old=prefs.get_property('gtk-enable-animations')
         prefs.set_property('gtk-enable-animations',False);assert not surface.tick
+        assert surface.liquid.values==surface.liquid.target
         prefs.set_property('gtk-enable-animations',old);assert surface.tick
         for key in MARKS:
             image=service_icon(key,30);assert image.get_pixbuf().get_width()==30

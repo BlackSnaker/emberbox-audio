@@ -848,7 +848,9 @@ class FullscreenPlayer:
         if self.closed or key is not None and key!=self.art_key:return
         self.cover_change.art_ready(pixbuf,key[0] if key else self.host.art_url or '')
         self.palette=cover_color(pixbuf)
-        if self.winter_surface:self.winter_surface.velvet.set_cover(pixbuf)
+        if self.winter_surface:
+            self.winter_surface.velvet.set_cover(pixbuf)
+            self.winter_surface.psychedelic.set_cover(pixbuf)
         self.paint_background()
 
     def show_sources(self):

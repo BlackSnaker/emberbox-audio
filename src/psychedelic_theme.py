@@ -6,6 +6,7 @@ network request or beat-triggered flash. Motion stays bounded in silence.
 import math
 from gi.repository import Gdk
 from velvet_theme import VelvetPaint, VelvetSurface
+from psychedelic_art import LiquidState, cover_swatches
 
 CSS = b'''
 .psychedelic-theme .card { background-color: #181921;
@@ -29,25 +30,26 @@ window.ember-stage.psychedelic-theme.stage-opening { background-color: transpare
 class LiquidPaint(VelvetPaint):
     def compose(self, _values):
         owner = self.owner()
-        key = (round(owner.phase, 5), round(owner.energy, 4))
+        key = (round(owner.phase, 5), round(owner.energy, 4), tuple(round(v,5) for v in owner.liquid.values))
         if self.values == key:
             return
         self.values = key
         c, cr = self.c, self.cr
         c.cairo_set_operator(cr, 0); c.cairo_paint(cr); c.cairo_set_operator(cr, 2)
-        phase, energy = key
+        phase, energy, material = key
         # Broad translucent mineral-colour ribbons. Their centres move by
         # millimetres per frame, never reverse or reset on a new track.
-        palette = ((.63,.30,.38),(.22,.51,.49),(.66,.47,.27),(.39,.34,.62))
+        palette = tuple(material[i:i+3] for i in range(0,15,3))
         for index, colour in enumerate(palette):
-            angle = phase + index*1.7
-            x = 180 + 156*math.sin(angle*.67+index)
-            y = 108 + 88*math.cos(angle*.51+index*.8)
+            offset, aspect, spread, shoulder = material[15+index*4:19+index*4]
+            angle = phase*(.75+offset*.4) + offset*math.tau + index*1.3
+            x = 180 + (100+spread*75)*math.sin(angle*.67+index)
+            y = 108 + (56+spread*40)*math.cos(angle*.51+index*.8)
             c.cairo_save(cr)
             c.cairo_translate(cr, x, y)
-            c.cairo_scale(cr, 190+energy*12, 108+17*math.sin(angle*.3))
+            c.cairo_scale(cr, 140+aspect*80+energy*12, 75+spread*48+17*math.sin(angle*.3))
             p = c.cairo_pattern_create_radial(0.,0.,0.,0.,0.,1.)
-            for at, alpha in ((0.,.0),(.24,.13),(.40,.27),(.56,.12),(.75,.035),(1.,0.)):
+            for at, alpha in ((0.,.0),(.24,.13),(.34+shoulder*.1,.27),(.56,.12),(.75,.035),(1.,0.)):
                 c.cairo_pattern_add_color_stop_rgba(p, at, *colour, alpha)
             c.cairo_set_source(cr,p); c.cairo_paint(cr)
             c.cairo_pattern_destroy(p); c.cairo_restore(cr)
@@ -59,15 +61,38 @@ class PsychedelicSurface(VelvetSurface):
     def __init__(self, *args, **kwargs):
         self.phase = .8
         self.energy = 0.
+        self.liquid = LiquidState()
+        self.cover_swatches = None
+        self.cover_stamp = None
+        self.song = None
+        self.song_check = 0.
         super().__init__(*args, **kwargs)
         self.obscured = False
         self.signals.append((self.window,self.window.connect('window-state-event',self.window_state)))
 
+    def song_identity(self):
+        host = self.appearance.audio_host
+        def text(value):
+            return value.get_text() if hasattr(value,'get_text') else str(value or '')
+        return tuple(text(getattr(host,name,'')) for name in ('source','title','artist','album'))
+
     def set_cover(self, picture, animate=True):
-        # No colour reset or image processing at a track boundary.
-        if self.enabled and not self.closed:
-            self.widget.queue_draw()
-            self.resume()
+        if not self.enabled or self.closed or picture is None:
+            return
+        from gi.repository import GdkPixbuf
+        import hashlib
+        small=picture.scale_simple(24,24,GdkPixbuf.InterpType.BILINEAR)
+        self.cover_stamp=hashlib.sha256(small.get_pixels()).hexdigest()
+        self.cover_swatches=cover_swatches(small)
+        if not self.cover_swatches[6]:
+            # Preserve genuinely black artwork instead of neutral amber fallback.
+            raw=small.get_pixels();rgb=tuple(v/255 for v in raw[:3])
+            self.cover_swatches=rgb+rgb+(1.,)
+        self.song=self.song_identity()
+        motion=animate and self.window.get_mapped() and self.window.get_settings().get_property('gtk-enable-animations')
+        self.liquid.retarget(self.cover_swatches,(self.cover_stamp,self.song),motion)
+        self.widget.queue_draw()
+        self.resume()
 
     def resume(self):
         self.stop(settle=False)
@@ -75,12 +100,22 @@ class PsychedelicSurface(VelvetSurface):
             return
         if self.window.get_settings().get_property('gtk-enable-animations'):
             self.tick = self.widget.add_tick_callback(self.advance)
+        if not self.window.get_settings().get_property('gtk-enable-animations'):
+            self.liquid.settle()
         self.widget.queue_draw()
 
     def advance(self, _widget, clock):
         now = clock.get_frame_time()/1e6
         dt = max(0.,min(.05,now-self.last)) if self.last is not None else 0.
         self.last = now
+        self.song_check += dt
+        if self.song_check >= .5:
+            self.song_check = 0.
+            identity = self.song_identity()
+            if identity != self.song and self.cover_swatches:
+                self.song = identity
+                self.liquid.retarget(self.cover_swatches,(self.cover_stamp,self.song))
+        self.liquid.advance(dt)
         host = self.appearance.audio_host
         meter = getattr(host,'meter',None)
         target = 0.

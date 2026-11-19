@@ -22,7 +22,7 @@ opening. All demo media and music are original. [Film and production sources →
 
 ### Slow Current
 
-**Settings → Look → Slow Current.** Soft psychedelic plum, teal and amber light flows across a dark room. Existing audio-meter energy gently shapes motion, without beat flashes or abrupt brightness changes. Hidden windows stop the animation; system reduced motion keeps the background still.
+**Settings → Look → Slow Current.** Soft psychedelic light takes its colours from the artwork plus three neighbouring hues. Each song has its own liquid composition, even within one album; palette and shapes morph continuously from the visible frame. Existing audio-meter energy gently shapes motion, without beat flashes or abrupt brightness changes. Hidden windows stop the animation; system reduced motion keeps the background still.
 
 <a id="your-music-together"></a>
 

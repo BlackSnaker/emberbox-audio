@@ -141,9 +141,11 @@ class Appearance:
             self._cover_signal=cover.connect('notify::pixbuf',lambda *_:self.cover_changed())
 
     def cover_changed(self):
-        if self.closed or not self.velvet or not self._cover_widget:return
+        if self.closed or not (self.velvet or self.psychedelic) or not self._cover_widget:return
         picture=self._cover_widget.get_pixbuf()
-        for surface in tuple(self.surfaces):surface.velvet.set_cover(picture)
+        for surface in tuple(self.surfaces):
+            surface.velvet.set_cover(picture)
+            surface.psychedelic.set_cover(picture)
 
     def subscribe(self,callback):
         self.listeners.append(callback)
