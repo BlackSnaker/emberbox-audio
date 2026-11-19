@@ -133,7 +133,11 @@ def label(value, style, wrap=False):
 
 
 @lru_cache(maxsize=4)
-def background(width,height,color,christmas=False,nocturne=False,mirrorball=False,velvet=False):
+def background(width,height,color,christmas=False,nocturne=False,mirrorball=False,velvet=False,psychedelic=False):
+    if psychedelic:
+        pixels=GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB,False,8,1,1)
+        pixels.fill(0x12141bff)
+        return pixels.scale_simple(width,height,GdkPixbuf.InterpType.BILINEAR)
     if velvet:
         from velvet_art import cloth
         w,h,raw=cloth(width,height)
@@ -428,6 +432,7 @@ class FullscreenPlayer:
         self.pending_page=None;self.page_transition.finish()
         self.glass_navigation.finish()
         edition=text('WINTER GLOW','ТЁПЛОЕ РОЖДЕСТВО') if self.appearance.christmas else (
+            text('SLOW CURRENT','ТИХОЕ ТЕЧЕНИЕ') if self.appearance.psychedelic else
             text('VELVET JAZZ','БАРХАТНЫЙ ДЖАЗ') if self.appearance.velvet else
             text('MIRRORBALL','ЗЕРКАЛЬНЫЙ ЗАЛ') if self.appearance.mirrorball else
             text('NOCTURNE','ТЁПЛАЯ НОЧЬ') if self.appearance.nocturne else
@@ -436,7 +441,7 @@ class FullscreenPlayer:
         self.layout_size=None
         # Discard the preceding theme's gradient immediately. Its replacement
         # is baked asynchronously; transitions meanwhile use the selected ink.
-        tone=(27,13,20) if self.appearance.velvet else (12,16,21) if self.appearance.mirrorball else (18,20,20) if self.appearance.nocturne else (18,34,28) if self.appearance.christmas else (23,27,24)
+        tone=(18,20,27) if self.appearance.psychedelic else (27,13,20) if self.appearance.velvet else (12,16,21) if self.appearance.mirrorball else (18,20,20) if self.appearance.nocturne else (18,34,28) if self.appearance.christmas else (23,27,24)
         ink=GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB,True,8,1,1)
         ink.fill((tone[0]<<24)|(tone[1]<<16)|(tone[2]<<8)|255);self.background.set_from_pixbuf(ink)
         self.bg_key=None;self.paint_background()
@@ -576,7 +581,7 @@ class FullscreenPlayer:
 
     def suspend_desktop_visuals(self,suspended):
         surface=getattr(self.host,'winter_surface',None)
-        for component in (getattr(self.host,'frame_health',None),getattr(surface,'snow',None),getattr(surface,'mirror',None)):
+        for component in (getattr(self.host,'frame_health',None),getattr(surface,'snow',None),getattr(surface,'mirror',None),getattr(surface,'psychedelic',None)):
             if component:component.set_suspended(suspended)
 
     def hide(self):
@@ -783,11 +788,12 @@ class FullscreenPlayer:
         nocturne=bool(self.appearance and self.appearance.nocturne)
         mirrorball=bool(self.appearance and self.appearance.mirrorball)
         velvet=bool(self.appearance and self.appearance.velvet)
-        key=(width,height,self.palette,christmas,nocturne,mirrorball,velvet)
+        psychedelic=bool(self.appearance and self.appearance.psychedelic)
+        key=(width,height,self.palette,christmas,nocturne,mirrorball,velvet,psychedelic)
         if key==self.bg_key:return
         self.bg_key=key
         # SVG parsing/rasterisation must not block the first animation frames.
-        future=self.artwork.pool.submit(background,max(1,width),max(1,height),self.palette,christmas,nocturne,mirrorball,velvet)
+        future=self.artwork.pool.submit(background,max(1,width),max(1,height),self.palette,christmas,nocturne,mirrorball,velvet,psychedelic)
         def completed(result):
             try:pixels=result.result()
             except Exception:return

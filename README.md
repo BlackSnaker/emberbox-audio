@@ -20,6 +20,10 @@ Mini. A short tour of Ember, with warm glass, live tubes and an original score.
 *English titles over the real GTK demo interface in Russian, with a conceptual
 opening. All demo media and music are original. [Film and production sources →](assets/promo/README.md)*
 
+### Slow Current
+
+**Settings → Look → Slow Current.** Soft psychedelic plum, teal and amber light flows across a dark room. Existing audio-meter energy gently shapes motion, without beat flashes or abrupt brightness changes. Hidden windows stop the animation; system reduced motion keeps the background still.
+
 <a id="your-music-together"></a>
 
 ## 18 November 2026 · Four sources. Your sound.

@@ -63,7 +63,8 @@ class SourcePicker:
             if source==key:style.add_class('selected')
             content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=6)
             top=Gtk.Box(spacing=6)
-            lamp=label(symbol,'source-symbol')
+            from service_icons import service_icon
+            lamp=service_icon(key,32)
             top.pack_start(lamp,True,True,0)
             indicator=Gtk.Label(label='●' if source==key else '')
             indicator.get_style_context().add_class('source-status')

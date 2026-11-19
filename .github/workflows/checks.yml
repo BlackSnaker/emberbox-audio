@@ -176,6 +176,7 @@ jobs:
         run: |
           EMBERBOX_LANGUAGE=en GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/velvet_theme_smoke.py
           EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/velvet_theme_smoke.py
+          EMBERBOX_LANGUAGE=ru GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1920x1080x24' /usr/bin/python3 tests/psychedelic_theme_smoke.py
       - name: Favourites and finite heart motion
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/favorites_smoke.py
       - name: Mirrorball glass, theme selection and bounded optical motion

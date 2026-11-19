@@ -164,6 +164,20 @@ class SettingsMenu:
         if self.accounts:
             self.accounts_button = action('player', text('Accounts & sign-in', 'Аккаунты и вход'), desktop_action(self.accounts),
                                           'avatar-default-symbolic', 'Spotify · Apple Music · YouTube · '+text('Yandex', 'Яндекс'))
+        # Small tactile badges keep all four sources recognisable even in Mini.
+        from service_icons import service_icon
+        services = Gtk.Grid(column_spacing=12,row_spacing=8)
+        services.set_column_homogeneous(True)
+        services.set_halign(Gtk.Align.CENTER)
+        for index, (source, name) in enumerate((('spotify','Spotify'), ('apple-music','Apple Music'),
+                             ('youtube','YouTube'), ('yandex-music',text('Yandex Music','Яндекс Музыка')))):
+            badge = Gtk.Box(spacing=7)
+            badge.pack_start(service_icon(source,30),False,False,0)
+            caption = Gtk.Label(label=name)
+            caption.get_style_context().add_class('caption')
+            badge.pack_start(caption,False,False,0)
+            services.attach(badge,index%2,index//2,1,1)
+        self.pages['player'].pack_start(services,False,False,4)
         self.mode_button = action('player', text('Full player', 'Обычный режим') if compact else text('Compact player', 'Компактный режим'),
                                   desktop_action(self.compact), 'view-dual-symbolic')
 
@@ -253,6 +267,7 @@ class SettingsMenu:
             self.theme_toggles[key] = switch
         themes = (('classic', text('Ember', 'Эмбер'), '', '◉'),
                   ('nocturne', text('Nocturne', 'Тёплая ночь'), text('Charcoal & quiet light', 'Уголь и тихий свет'), '☾'),
+                  ('psychedelic', text('Slow Current', 'Тихое течение'), text('Liquid colour · follows sound', 'Текучий цвет · в ритме звука'), '≈'),
                   ('velvet', text('Velvet Jazz', 'Бархатный джаз'), text('Burgundy & lamplight', 'Бордо и тёплый свет'), '♬'),
                   ('mirrorball', text('Mirror room', 'Зеркальный зал'), text('Prismatic reflections', 'Свет и преломления'), '◇'),
                   ('christmas', text('Winter Glow', 'Рождество'), text('Pine & candlelight', 'Хвоя и свет свечей'), '✦'))

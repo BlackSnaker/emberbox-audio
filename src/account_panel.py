@@ -41,7 +41,8 @@ class AccountPanel(Gtk.Box):
         card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8)
         card.get_style_context().add_class('account-card')
         row = Gtk.Box(spacing=8)
-        dot = label('●',{'spotify':'account-spotify','apple-music':'account-apple','yandex-music':'account-yandex'}[source])
+        from service_icons import service_icon
+        dot = service_icon(source, 32)
         row.pack_start(dot,False,False,0)
         row.pack_start(label(title,'account-title'),True,True,0)
         spinner = Gtk.Spinner();spinner.set_no_show_all(True);row.pack_start(spinner,False,False,0)

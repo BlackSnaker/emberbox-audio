@@ -179,6 +179,7 @@ class VelvetPaint:
 
 
 class VelvetSurface:
+    painter_type = VelvetPaint
     def __init__(self, appearance, window, overlay, stage=False):
         self.appearance, self.window, self.overlay, self.stage = appearance, window, overlay, stage
         self.enabled = self.closed = self.failed = self.suspended = False
@@ -218,7 +219,7 @@ class VelvetSurface:
             return
         self.failed = False
         if not self.painter:
-            self.painter = VelvetPaint(self, self.widget, card=not self.stage)
+            self.painter = self.painter_type(self, self.widget, card=not self.stage)
         if self.area:
             self.area.show()
         host = self.appearance.audio_host

@@ -24,7 +24,7 @@ parser.add_argument('--accounts', action='store_true')
 parser.add_argument('--fullscreen', action='store_true')
 parser.add_argument('--language', choices=('en','ru'), default='en')
 parser.add_argument('--source', choices=('spotify', 'apple-music', 'youtube','yandex-music'), default='spotify')
-parser.add_argument('--theme', choices=('classic','nocturne','mirrorball','christmas','velvet'), default='classic')
+parser.add_argument('--theme', choices=('classic','nocturne','mirrorball','christmas','velvet','psychedelic'), default='classic')
 args = parser.parse_args()
 os.environ['EMBERBOX_LANGUAGE']=args.language
 args.output.mkdir(parents=True, exist_ok=True)
