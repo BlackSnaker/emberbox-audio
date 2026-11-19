@@ -109,3 +109,21 @@ class SparsePaletteTests(unittest.TestCase):
         h,s,v=colorsys.rgb_to_hsv(*rgb)
         for offset,i in zip((-.055,.035,.075),(6,9,12)):
             self.assertEqual(result[i:i+3],colorsys.hsv_to_rgb((h+offset)%1.,s*.92,v))
+
+
+class AudioEnvelopeTests(unittest.TestCase):
+    def test_attack_is_soft_at_fixed_frame_steps(self):
+        from types import SimpleNamespace
+        from mirror_optics import Optics
+        optics=Optics()
+        rhythm=SimpleNamespace(fresh=True,key=None,
+            meter=SimpleNamespace(rms_level=1.,levels=(.3,)*9),
+            timing=SimpleNamespace(bpm=None,accent=0.))
+        values=[]
+        for _ in range(6):
+            optics.advance(1/60,rhythm);values.append(optics.values[1])
+        self.assertTrue(all(a<b for a,b in zip(values,values[1:])))
+        self.assertTrue(0<values[-1]<.25,values)
+        rhythm.fresh=False
+        optics.advance(1/60,rhythm)
+        self.assertTrue(0<optics.values[1]<values[-1])
