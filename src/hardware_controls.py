@@ -69,13 +69,16 @@ def knob_frame(index, compact, large=False):
         a = math.radians(135 + n * 15)
         color = '#efb65d' if n / 18 <= value else '#71604a'
         ticks.append(f'<path d="M{32+math.cos(a)*27:.2f} {29+math.sin(a)*27:.2f}L{32+math.cos(a)*29:.2f} {29+math.sin(a)*29:.2f}" stroke="{color}" stroke-width=".8" stroke-linecap="round"/>')
-    x1,y1=32+math.cos(angle)*13,29+math.sin(angle)*13
-    x2,y2=32+math.cos(angle)*18.1,29+math.sin(angle)*18.1
+    # Small dials need a longer, wider engraving in actual screen pixels.
+    inner = 9.5 if compact and not large else 10.5 if not large else 11.3
+    width = 3.2 if compact and not large else 2.8 if not large else 2.2
+    x1,y1=32+math.cos(angle)*inner,29+math.sin(angle)*inner
+    x2,y2=32+math.cos(angle)*18.3,29+math.sin(angle)*18.3
     svg=f'''<svg xmlns="http://www.w3.org/2000/svg" width="64" height="68" viewBox="0 0 64 68">
       {''.join(ticks)}
-      <path d="M{x1:.2f} {y1+.3:.2f}L{x2:.2f} {y2+.3:.2f}" stroke="#ffe4b3" stroke-opacity=".5" stroke-width="1.3" stroke-linecap="round"/>
-      <path d="M{x1:.2f} {y1:.2f}L{x2:.2f} {y2:.2f}" stroke="#392518" stroke-width="1.65" stroke-linecap="round"/>
-      <path d="M{x1:.2f} {y1:.2f}L{x2:.2f} {y2:.2f}" stroke="#100e0b" stroke-width=".7" stroke-linecap="round"/>
+      <path d="M{x1:.2f} {y1+.5:.2f}L{x2:.2f} {y2+.5:.2f}" stroke="#ffe4b3" stroke-opacity=".6" stroke-width="{width+.6}" stroke-linecap="round"/>
+      <path d="M{x1:.2f} {y1:.2f}L{x2:.2f} {y2:.2f}" stroke="#392518" stroke-width="{width}" stroke-linecap="round"/>
+      <path d="M{x1:.2f} {y1:.2f}L{x2:.2f} {y2:.2f}" stroke="#100e0b" stroke-width="{width*.65}" stroke-linecap="round"/>
       <text x="32" y="64" text-anchor="middle" font-family="monospace" font-size="9" fill="#c4ad89">{round(value*100)}%</text>
     </svg>'''
     width,height=knob_size(compact,large)
