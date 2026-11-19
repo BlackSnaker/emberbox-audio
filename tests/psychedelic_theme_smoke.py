@@ -40,6 +40,25 @@ with patch.object(fullscreen,'LyricsClient',f.FixtureLyrics),patch.object(fullsc
         assert 0 < surface.energy < .25, surface.energy
         host.playing=False;before=surface.energy;settle(.15)
         assert 0 < surface.energy < before
+        # Shared measured rhythm drives soft geometric accents; no new meter.
+        requests=[]
+        host.meter.request_rhythm=lambda consumer,key:requests.append((consumer,key))
+        host.playing=True;host.meter.rms_level=.6
+        host.meter.levels=(.8,.7,.6,.3,.2,.1,.4,.5,.6)
+        origin=time.monotonic();pulses=[];phase=surface.phase
+        for _ in range(24):
+            now=time.monotonic()
+            host.meter.last_sample=now;host.meter.beat_grid_at=now
+            host.meter.beat_grid=dict(bpm=120.,period=.5,phase=origin,confidence=.95)
+            settle(.05);pulses.append(surface.optics.values[0])
+        assert surface.rhythm.timing.bpm==120.
+        assert max(pulses)-min(pulses)>.05, pulses
+        assert surface.optics.values[2]>.3, 'Bass must affect silhouette dimensions'
+        assert surface.phase>phase and requests
+        surface.set_suspended(True)
+        assert requests[-1][1] is None and not surface.tick
+        surface.set_suspended(False)
+        host.playing=False;settle(.1)
         # Cover updates retarget from the visible frame, never flash a new hue.
         picture=GdkPixbuf.Pixbuf.new(GdkPixbuf.Colorspace.RGB,False,8,48,48)
         picture.fill(0xd94b36ff)

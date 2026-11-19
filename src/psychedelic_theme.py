@@ -8,6 +8,9 @@ import ctypes as C
 from gi.repository import Gdk, Gtk
 from velvet_theme import VelvetPaint, VelvetSurface
 from psychedelic_art import LiquidState, cover_swatches, FramePacer, lens_masks
+from mirror_rhythm import SongRhythm
+from mirror_optics import Optics
+import time
 
 CSS = b'''
 .psychedelic-theme .card { background-color: #181921;
@@ -53,7 +56,8 @@ class LiquidPaint(VelvetPaint):
 
     def compose(self, _values):
         owner = self.owner()
-        key = (round(owner.phase, 5), round(owner.energy, 4), tuple(round(v,5) for v in owner.liquid.values))
+        key = (round(owner.phase, 5), round(owner.energy, 4), tuple(round(v,5) for v in owner.liquid.values),
+               tuple(round(v,4) for v in owner.optics.values[:4]))
         if self.values == key:
             return
         self.values = key
@@ -61,7 +65,8 @@ class LiquidPaint(VelvetPaint):
         c.cairo_set_operator(cr, 0); c.cairo_paint(cr); c.cairo_set_operator(cr, 2)
         c.cairo_save(cr)
         c.cairo_scale(cr,self.WIDTH/360,self.HEIGHT/216)
-        phase, energy, material = key
+        phase, energy, material, response = key
+        beat, _, bass, air = response
         # Broad translucent mineral-colour ribbons. Their centres move by
         # millimetres per frame, never reverse or reset on a new track.
         palette = tuple(material[i:i+3] for i in range(0,15,3))
@@ -76,10 +81,16 @@ class LiquidPaint(VelvetPaint):
             x = 180 + (100+spread*75)*(eddy*(1-tide*.55)+drift*tide*.55)
             y = 108 + (56+spread*40)*math.cos(angle*(.39+offset*.27)+index*.8)
             y += 12*math.sin(phase*(.22+aspect*.12)+index*1.6)
+            # Measured accents move matter, never brightness or hue. The
+            # same beat nudges each silhouette in its own gentle direction.
+            x += 5*beat*math.sin(offset*math.tau)
+            y += 3*air*math.cos(index+phase*.3)
             c.cairo_save(cr)
             c.cairo_translate(cr, x, y)
             width=(140+aspect*80+energy*12)*(.93+shoulder*.14)*(1+.055*math.sin(phase*.37+index))
             height=75+spread*48+17*math.sin(angle*.3)
+            width *= 1+.045*bass+.025*beat
+            height *= 1+.035*bass+.02*beat
             c.cairo_scale(cr,width/64,height/64)
             # At rest one mask per lens; transitions blend cached silhouettes.
             for shape,weight in enumerate(material[35+index*5:40+index*5]):
@@ -94,6 +105,8 @@ class PsychedelicSurface(VelvetSurface):
     painter_type = LiquidPaint
 
     def __init__(self, *args, **kwargs):
+        self.rhythm = SongRhythm('slow-current-'+str(id(self)))
+        self.optics = Optics()
         self.pacer = FramePacer()
         self.phase = .8
         self.energy = 0.
@@ -174,20 +187,19 @@ class PsychedelicSurface(VelvetSurface):
                 self.liquid.retarget(self.cover_swatches,(self.cover_stamp,self.song))
         self.liquid.advance(dt)
         host = self.appearance.audio_host
-        meter = getattr(host,'meter',None)
-        target = 0.
-        if host and getattr(host,'playing',False) and not getattr(getattr(host,'sound',None),'muted',False):
-            import time
-            if 0 <= time.monotonic()-getattr(meter,'last_sample',0) < .35:
-                try: target = float(meter.rms_level)
-                except (AttributeError,TypeError,ValueError): pass
-                target = max(0.,min(1.,target)) if math.isfinite(target) else 0.
-        # >=0.9s smoothing: music changes flow, never luminance or hue.
-        self.energy += (target-self.energy)*-math.expm1(-dt/.9)
-        self.phase += dt*(.055+.065*self.energy)
+        speed = self.rhythm.advance(host,time.monotonic(),dt)
+        self.optics.advance(dt,self.rhythm)
+        _, self.energy, _, _ = self.optics.values[:4]
+        # Tempo changes velocity smoothly; the pattern's phase never resets.
+        # Shared beat analysis runs in the existing meter, not in this tick.
+        self.phase += dt*(.035+.04*self.energy+.035*speed)
         if self.pacer.due(now):
             self.widget.queue_draw()
         return True
+
+    def stop(self, settle=True):
+        self.rhythm.release()
+        super().stop(settle)
 
     def set_suspended(self, value):
         self.suspended = bool(value)
