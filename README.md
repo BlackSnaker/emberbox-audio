@@ -6,6 +6,20 @@
   <p><a href="#get-started">Get started</a> · <a href="#system-requirements">System requirements</a> · <a href="docs/DESIGN.md">Grunesphism</a> · <a href="README.ru.md">Русский</a> · <a href="https://github.com/BlackSnaker/emberbox-video">Emberbox Video</a></p>
 </div>
 
+<a id="watch-ember"></a>
+
+## Meet Ember in 40 seconds
+
+https://github.com/user-attachments/assets/40772485-fefd-4deb-b82c-d5439d3a96ba
+
+Choose a source, connect an account, find music, go fullscreen and switch to
+Mini. A short tour of Ember, with warm glass, live tubes and an original score.
+
+[Get started](#get-started) · [Connect your music](docs/ACCOUNTS.md) · [Download MP4](assets/promo/ember-introduction.en.mp4) · [Русская версия](README.ru.md#watch-ember)
+
+*English titles over the real GTK demo interface in Russian, with a conceptual
+opening. All demo media and music are original. [Film and production sources →](assets/promo/README.md)*
+
 <a id="your-music-together"></a>
 
 ## 18 November 2026 · Four sources. Your sound.
