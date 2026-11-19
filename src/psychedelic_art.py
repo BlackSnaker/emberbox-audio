@@ -5,13 +5,34 @@ import math
 from velvet_art import Light
 
 
-def palette(swatches):
-    """Two original swatches plus three neighbouring hues, never complements."""
+def palette(swatches, identity='ember'):
+    """Preserve artwork pigments; enrich scarce hues with quiet analogues."""
     primary, secondary = tuple(swatches[:3]), tuple(swatches[3:6])
-    h, s, v = colorsys.rgb_to_hsv(*primary)
-    # Neutral artwork stays neutral: no artificial rainbow on monochrome art.
-    neighbours = tuple(colorsys.hsv_to_rgb((h+offset)%1., s*.92, v)
-                       for offset in (-.055, .035, .075))
+    hsv = tuple(colorsys.rgb_to_hsv(*rgb) for rgb in (primary, secondary))
+    chromatic = [item for item in hsv if item[1] > .15 and item[2] > .08]
+    rich = (len(chromatic) == 2 and
+            abs((chromatic[0][0]-chromatic[1][0]+.5)%1.-.5) > .10)
+    if rich:
+        h, s, v = hsv[0]
+        neighbours = tuple(colorsys.hsv_to_rgb((h+offset)%1., s*.92, v)
+                           for offset in (-.055, .035, .075))
+    else:
+        if chromatic:
+            h, s, v = max(chromatic, key=lambda item:item[1]*item[2])
+            s = max(.26, min(.50, s*.65))
+        else:
+            # Warm/cool monochrome retains its temperature. Truly neutral
+            # art gets a subdued, stable harmony, rather than random RGB.
+            warmth = sum(rgb[0]-rgb[2] for rgb in (primary,secondary))/2
+            seed = hashlib.sha256(str(identity).encode('utf-8')).digest()
+            h = .09 if warmth > .025 else .62 if warmth < -.025 else (.08,.34,.57,.73)[seed[0]%4]
+            h += (seed[1]/255-.5)*.025
+            s, v = .32, max(hsv[0][2],hsv[1][2])
+        # Black art still has visible coloured ribbons; white art gains soft
+        # pigment, not an extra white glare. Original swatches stay untouched.
+        v = max(.46,min(.68,v*.78+.16))
+        neighbours = tuple(colorsys.hsv_to_rgb((h+offset)%1., s*factor, v*value)
+                           for offset,factor,value in ((-.075,.92,.93),(.035,1.,1.),(.105,.86,.96)))
     return primary+secondary+tuple(channel for colour in neighbours for channel in colour)
 
 
@@ -29,7 +50,7 @@ class LiquidState(Light):
 
     def retarget(self, swatches, identity, animate=True):
         self.identity=identity
-        return self.set(palette(swatches)+composition(identity)+silhouettes(identity),animate)
+        return self.set(palette(swatches,identity)+composition(identity)+silhouettes(identity),animate)
 
 
 def cover_swatches(picture):

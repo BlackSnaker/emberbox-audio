@@ -14,9 +14,9 @@ def test_cover_hues():
         for i in (6,9,12):
             nh,ns,nv=colorsys.rgb_to_hsv(*result[i:i+3])
             assert all(0<=value<=1 for value in result[i:i+3])
-            assert abs(nv-v)<1e-8
-            if s:assert abs((nh-h+.5)%1-.5)<=.076
-            else:assert ns==0
+            if s>.15 and v>.08:
+                assert abs(nv-v)<1e-8
+                assert abs((nh-h+.5)%1-.5)<=.076
 
 
 def test_song_shapes_and_retargeting():
@@ -82,3 +82,30 @@ class SilhouetteTests(unittest.TestCase):
         self.assertNotEqual(state.values,visible)
         for i in range(35,60,5):
             self.assertAlmostEqual(sum(state.values[i:i+5]),1.)
+
+
+class SparsePaletteTests(unittest.TestCase):
+    def test_monochrome_has_visible_muted_harmony(self):
+        for rgb in ((0.,)*3,(.03,)*3,(.5,)*3,(1.,)*3):
+            result=palette(rgb+rgb,'neutral cover')
+            self.assertEqual(result[:6],rgb+rgb)
+            shades=[colorsys.rgb_to_hsv(*result[i:i+3]) for i in (6,9,12)]
+            self.assertTrue(all(.20<s<.51 and .4<v<.7 for h,s,v in shades))
+            self.assertLess(max(h for h,s,v in shades)-min(h for h,s,v in shades),.20)
+            self.assertEqual(result,palette(rgb+rgb,'neutral cover'))
+
+    def test_single_hue_keeps_related_colour(self):
+        for rgb in ((.8,.1,.15),(.1,.55,.8),(.1,.5,.2)):
+            h=colorsys.rgb_to_hsv(*rgb)[0]
+            result=palette(rgb+rgb)
+            for i in (6,9,12):
+                nh,ns,nv=colorsys.rgb_to_hsv(*result[i:i+3])
+                self.assertLess(abs((nh-h+.5)%1-.5),.106)
+
+    def test_rich_cover_keeps_original_neighbours(self):
+        rgb=(.8,.1,.15);other=(.1,.5,.6)
+        result=palette(rgb+other)
+        self.assertEqual(result[:6],rgb+other)
+        h,s,v=colorsys.rgb_to_hsv(*rgb)
+        for offset,i in zip((-.055,.035,.075),(6,9,12)):
+            self.assertEqual(result[i:i+3],colorsys.hsv_to_rgb((h+offset)%1.,s*.92,v))
