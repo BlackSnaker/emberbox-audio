@@ -39,11 +39,22 @@ def knob_body(compact, large=False):
     for n in range(96):
         a = n*math.tau/96
         knurl.append(f'<path d="M{32+math.cos(a)*20.5:.3f} {30+math.sin(a)*20.5:.3f}L{32+math.cos(a)*22:.3f} {30+math.sin(a)*22:.3f}" stroke="#efc082" stroke-opacity=".34" stroke-width=".38"/>')
+    texture = []
+    for n in range(180):
+        # Fixed golden-angle grain: no random flicker or work during rotation.
+        a = n*2.399963229728653
+        r = 8.8*math.sqrt((n+.5)/180)
+        x,y = 32+math.cos(a)*r,29+math.sin(a)*r
+        fade = (1-(r/9.4)**2)*.24
+        color = '#ffe2ae' if n%3 else '#2e1c10'
+        length = .18+(n%5)*.07
+        texture.append(f'<path d="M{x:.3f} {y:.3f}l{length:.3f} {length*.24:.3f}" stroke="{color}" stroke-opacity="{fade:.3f}" stroke-width=".25" stroke-linecap="round"/>')
     svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="64" height="68" viewBox="0 0 64 68">
       <defs>
         <linearGradient id="socket" x2=".35" y2="1"><stop stop-color="#080b0d"/><stop offset=".65" stop-color="#1c1c1a"/><stop offset="1" stop-color="#605342"/></linearGradient>
         <linearGradient id="edge" x2=".8" y2="1"><stop stop-color="#d1ac77"/><stop offset=".25" stop-color="#89613a"/><stop offset=".58" stop-color="#50331e"/><stop offset=".85" stop-color="#8d633b"/><stop offset="1" stop-color="#c29b63"/></linearGradient>
         <radialGradient id="light" cx=".27" cy=".18" r=".9"><stop stop-color="#fff0d2" stop-opacity=".21"/><stop offset=".4" stop-color="#ffe4b0" stop-opacity=".03"/><stop offset="1" stop-color="#1c1008" stop-opacity=".20"/></radialGradient>
+        <radialGradient id="satin"><stop stop-color="#6b4c30" stop-opacity=".27"/><stop offset=".65" stop-color="#78583a" stop-opacity=".18"/><stop offset="1" stop-color="#78583a" stop-opacity="0"/></radialGradient>
       </defs>
       <ellipse cx="33" cy="34.5" rx="24.4" ry="23.6" fill="#030506" opacity=".16"/>
       <ellipse cx="33" cy="33" rx="23.6" ry="23" fill="#030506" opacity=".22"/>
@@ -54,6 +65,8 @@ def knob_body(compact, large=False):
       <circle cx="32" cy="29" r="20.5" fill="url(#edge)" stroke="#d4ac72" stroke-opacity=".6" stroke-width=".35"/>
       {''.join(facets)}
       {''.join(grain)}
+      <circle cx="32" cy="29" r="10.2" fill="url(#satin)"/>
+      {''.join(texture)}
       <circle cx="32" cy="29" r="19.6" fill="url(#light)" stroke="#3b2718" stroke-opacity=".4" stroke-width=".3"/>
       <path d="M13 25A19.5 19.5 0 0 1 37 10" fill="none" stroke="#ffe8bf" stroke-opacity=".45" stroke-width=".35"/>
     </svg>'''
