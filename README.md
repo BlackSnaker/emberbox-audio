@@ -6,6 +6,24 @@
   <p><a href="#get-started">Get started</a> · <a href="#system-requirements">System requirements</a> · <a href="docs/DESIGN.md">Grunesphism</a> · <a href="README.ru.md">Русский</a> · <a href="https://github.com/BlackSnaker/emberbox-video">Emberbox Video</a></p>
 </div>
 
+<a id="release-candidate"></a>
+
+## November 20, 2026 · Ember is getting ready for 1.0
+
+![Ember release candidate — warm glass, bronze and flowing light](assets/updates/2026-11-20-release-candidate.png)
+
+**1.0.0-rc.1 · Pre-release · Final Linux testing candidate**
+
+Ember is entering the final testing stage before its first major release. Music services, glowing tubes, liquid glass, saved playlists and Slow Current now come together in one candidate — ready for a real day of listening.
+
+**Download, extract, install. No repository clone required.** The release provides **tar.gz** and **zip** bundles, a dependency-aware installer and checksums. Inside the extracted folder, run `bash install.sh --autostart`.
+
+[**Download 1.0.0-rc.1 →**](https://github.com/BlackSnaker/emberbox-audio/releases/tag/v1.0.0-rc.1) · [Features and installation](docs/releases/1.0.0-rc.1.md) · [Report an issue](https://github.com/BlackSnaker/emberbox-audio/issues)
+
+This is a **release candidate, not stable 1.0**. Tester feedback will decide whether Ember is ready for launch; another RC may follow if fixes are needed. Please try saved playlists, transitions, installation on GNOME/KDE and long listening sessions.
+
+*The artwork is a conceptual illustration; see the film below for the real interface. Downloads contain source and an installer, not standalone binaries; dependencies and music services need internet access.*
+
 <a id="watch-ember"></a>
 
 ## Meet Ember in 40 seconds

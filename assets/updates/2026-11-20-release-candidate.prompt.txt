@@ -1,0 +1,3 @@
+Created with the built-in imagegen tool for the Ember release-candidate announcement. Conceptual product illustration, not a screenshot.
+
+Prompt: Premium cinematic 16:9 GitHub hero for Ember. Charcoal hi-fi console, amber discharge tubes, dark bronze textured volume knob, liquid glass, subdued teal/wine/gold flowing light. Refined warm ivory type: EMBER / 1.0 · RELEASE CANDIDATE. Calm industrial design, no service logos, real album art, people, gaming hardware or watermark.
