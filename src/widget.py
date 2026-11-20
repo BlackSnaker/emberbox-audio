@@ -277,6 +277,10 @@ class Widget:
         self.window.set_default_size(WIDTH, HEIGHT)
         self.window.set_size_request(WIDTH, HEIGHT)
         self.desktop_mode = desktop_window.configure(self.window)
+        self.always_on_top = saved.get('always_on_top') is True
+        self.apply_window_layer()
+        from window_drag import WindowDrag
+        self.window_drag = WindowDrag(self.window)
         self.window.connect('delete-event', lambda *_args: True)
         self.window.connect('destroy', self.on_destroy)
         self.window.connect('configure-event', self.on_configure)
@@ -310,9 +314,6 @@ class Widget:
         header.add_events(Gdk.EventMask.BUTTON_PRESS_MASK |
                           Gdk.EventMask.BUTTON_RELEASE_MASK |
                           Gdk.EventMask.POINTER_MOTION_MASK)
-        header.connect('button-press-event', self.on_drag)
-        header.connect('motion-notify-event', self.on_drag_motion)
-        header.connect('button-release-event', self.on_drag_end)
         header.set_margin_top(11)
         header.set_margin_start(15)
         header.set_margin_end(15)
@@ -374,9 +375,6 @@ class Widget:
         cover_drag.add_events(Gdk.EventMask.BUTTON_PRESS_MASK |
                               Gdk.EventMask.BUTTON_RELEASE_MASK |
                               Gdk.EventMask.POINTER_MOTION_MASK)
-        cover_drag.connect('button-press-event', self.on_drag)
-        cover_drag.connect('motion-notify-event', self.on_drag_motion)
-        cover_drag.connect('button-release-event', self.on_drag_end)
         cover_drag.add(cover_surface)
         cover_overlay = Gtk.Overlay()
         cover_overlay.add(cover_drag)
@@ -1251,10 +1249,23 @@ class Widget:
         STATE.parent.mkdir(parents=True, exist_ok=True)
         STATE.write_text(json.dumps({'x': x, 'y': y, 'expanded': self.expanded,
                                      'compact': self.compact, 'source': self.source,
+                                     'always_on_top': self.always_on_top,
                                      'apple_browser': self.browser_binding, 'youtube_mode': self.youtube_mode,
                                      'apple_mode': self.apple_mode, 'spotify_mode':self.spotify_mode,
                                      'youtube_browser': self.youtube_binding}) + '\n')
         return False
+
+    def apply_window_layer(self):
+        enabled = self.always_on_top
+        self.window.set_keep_below(not enabled)
+        self.window.set_type_hint(Gdk.WindowTypeHint.NORMAL if enabled or self.desktop_mode == 'normal'
+                                  else Gdk.WindowTypeHint.DESKTOP)
+        self.window.set_keep_above(enabled)
+
+    def set_always_on_top(self, enabled):
+        self.always_on_top = bool(enabled)
+        self.apply_window_layer()
+        self.save_position()
 
     def on_drag(self, _box, event):
         if event.button == 1:

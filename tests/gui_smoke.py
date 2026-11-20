@@ -71,11 +71,20 @@ class DummyAppleWeb:
 widget.AppleWeb=DummyAppleWeb
 widget.YandexWeb=DummyAppleWeb
 widget.SpotifyWeb=DummyAppleWeb
+widget.STATE.parent.mkdir(parents=True,exist_ok=True)
+widget.STATE.write_text(json.dumps({'always_on_top':True}))
 started=time.monotonic();app=widget.Widget()
 assert app.appearance.audio_host is app,'Desktop rhythm must bind before fullscreen/settings are opened'
 print('Desktop construction before background lamps:',round(time.monotonic()-started,3),'s')
 try:
     settle()
+    from gi.repository import Gdk
+    assert app.always_on_top and app.window.get_type_hint()==Gdk.WindowTypeHint.NORMAL
+    app.show_settings(app.settings_button);settle(.1)
+    assert app.settings.top_switch.get_active()
+    app.settings.top_switch.set_active(False)
+    assert not app.always_on_top and json.loads(widget.STATE.read_text())['always_on_top'] is False
+    app.settings.popover.dismiss()
     app.accounts_visible=False;app.expanded=False;app.apply_layout();settle(.3)
     app.startup_pending=False
     native=app.spotify_web;native.connected=False;app.update_loading()

@@ -178,6 +178,16 @@ class SettingsMenu:
             badge.pack_start(caption,False,False,0)
             services.attach(badge,index%2,index//2,1,1)
         self.pages['player'].pack_start(services,False,False,4)
+        if owner and hasattr(owner,'set_always_on_top'):
+            row = Gtk.Box(spacing=12)
+            row.get_style_context().add_class('menu-well')
+            row.pack_start(label(text('Always on top', 'Всегда сверху'), 'menu-section-title'),True,True,0)
+            self.top_switch = Gtk.Switch()
+            self.top_switch.set_active(owner.always_on_top)
+            self.top_switch.get_accessible().set_name(text('Always on top', 'Всегда сверху'))
+            self.top_switch.connect('notify::active',lambda item,_p:owner.set_always_on_top(item.get_active()))
+            row.pack_end(self.top_switch,False,False,0)
+            self.pages['player'].pack_start(row,False,False,0)
         self.mode_button = action('player', text('Full player', 'Обычный режим') if compact else text('Compact player', 'Компактный режим'),
                                   desktop_action(self.compact), 'view-dual-symbolic')
 
