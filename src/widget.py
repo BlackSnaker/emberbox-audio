@@ -280,7 +280,7 @@ class Widget:
         self.always_on_top = saved.get('always_on_top') is True
         self.apply_window_layer()
         from window_drag import WindowDrag
-        self.window_drag = WindowDrag(self.window)
+        self.window_drag = WindowDrag(self.window, self.on_window_moved)
         self.window.connect('delete-event', lambda *_args: True)
         self.window.connect('destroy', self.on_destroy)
         self.window.connect('configure-event', self.on_configure)
@@ -1254,6 +1254,10 @@ class Widget:
                                      'apple_mode': self.apple_mode, 'spotify_mode':self.spotify_mode,
                                      'youtube_browser': self.youtube_binding}) + '\n')
         return False
+
+    def on_window_moved(self):
+        self.fit_window()
+        self.save_position()
 
     def apply_window_layer(self):
         enabled = self.always_on_top

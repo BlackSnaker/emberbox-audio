@@ -15,6 +15,7 @@ scale=Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL,0,100,1);row.add(scale
 window.show_all()
 while Gtk.events_pending():Gtk.main_iteration_do(False)
 drag=WindowDrag(window)
+drag.manual=False
 assert drag.gesture.get_propagation_phase()==Gtk.PropagationPhase.CAPTURE
 class Gesture:
     def __init__(self):self.states=[]

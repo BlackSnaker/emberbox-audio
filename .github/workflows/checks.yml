@@ -121,7 +121,7 @@ jobs:
         run: |
           sudo env GITHUB_ACTIONS=true /usr/bin/python3 tools/ci_apt_mirrors.py
           sudo apt-get update -qq
-          sudo apt-get install -y python3-gi gir1.2-gtk-3.0 python3-numpy python3-scipy python3-pil python3-websocket python3-mpv mpv ffmpeg dbus-x11 xvfb nodejs libgl1 libgl1-mesa-dri libegl1 libegl-mesa0
+          sudo apt-get install -y python3-gi gir1.2-gtk-3.0 python3-numpy python3-scipy python3-pil python3-websocket python3-mpv mpv ffmpeg dbus-x11 xvfb xdotool nodejs libgl1 libgl1-mesa-dri libegl1 libegl-mesa0
       - name: Compile
         run: /usr/bin/python3 -m compileall -q src tools tests
       - name: Regression checks
@@ -156,7 +156,9 @@ jobs:
       - name: GTK layout and controls
         run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/gui_smoke.py
       - name: Window drag gesture and control preservation
-        run: GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/window_drag_smoke.py
+        run: |
+          GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a /usr/bin/python3 tests/window_drag_smoke.py
+          GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1280x800x24' /usr/bin/python3 tests/window_drag_native.py
       - name: Liquid Glass menus, Mini anchors and independent source sessions
         run: |
           EMBERBOX_LANGUAGE=en GDK_BACKEND=x11 dbus-run-session -- xvfb-run -a -s '-screen 0 1024x600x24' /usr/bin/python3 tests/menu_glass_smoke.py
