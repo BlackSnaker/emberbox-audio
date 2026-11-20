@@ -160,7 +160,13 @@ async function emberboxAppleCommand(request) {
   }
   function item(resource) {
     const a = resource.attributes || {};
-    return {id: String(resource.id), kind: String(resource.type), title: String(a.name || 'Untitled'),
+    const catalogId=String(a.playParams?.catalogId||resource.relationships?.catalog?.data?.[0]?.id||'');
+    const mapped=/^\d{1,20}$/.test(catalogId)?catalogId:'';
+    if(resource.type==='library-songs'&&mapped){
+      const ids=window.__emberLibraryCatalog||(window.__emberLibraryCatalog=new Map());
+      ids.set(String(resource.id),mapped);while(ids.size>512)ids.delete(ids.keys().next().value);
+    }
+    return {id: String(resource.id), catalogId:mapped, kind: String(resource.type), title: String(a.name || 'Untitled'),
       subtitle: String(a.artistName || a.curatorName || ''), image: image(a.artwork),
       artist: String(a.artistName || ''), duration_ms: Number(a.durationInMillis || 0),
       uri: `apple:${resource.type}:${resource.id}`, playable: !!a.playParams,

@@ -80,8 +80,26 @@ async function emberboxSpatialSource(params) {
    if(!['songs','library-songs'].includes(params.kind)||!/^\w[\w.-]{0,199}$/.test(String(params.id)))throw Error('INVALID_ARGUMENTS');
    const sf=String(music.storefrontId||music.storefrontCountryCode||'us').toLowerCase();
    if(!/^[a-z]{2}$/.test(sf))throw Error('SPATIAL_SOURCE_UNSUPPORTED');
-   const endpoint=params.kind==='library-songs'?'/v1/me/library/songs/'+encodeURIComponent(params.id)+'/catalog':'/v1/catalog/'+sf+'/songs/'+params.id;
-   const response=await music.api.music(endpoint,{extend:'audioVariants,extendedAssetUrls'}),resource=(response?.data?.data||response?.data||[])[0];
+   // Library IDs are not catalogue IDs. Prefer the exact mapping already
+   // delivered with a saved playlist, without another relationship request.
+   async function lookup(endpoint){
+    let timer;
+    try{
+     const response=await Promise.race([Promise.resolve().then(()=>music.api.music(endpoint,{extend:'audioVariants,extendedAssetUrls'})),
+      new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('SPATIAL_NETWORK')),4500);})]);
+     check();return (response?.data?.data||response?.data||[])[0];
+    }finally{clearTimeout(timer);}
+   }
+   let resource;
+   if(params.kind==='library-songs'){
+    let catalogId=window.__emberLibraryCatalog?.get(String(params.id));
+    if(!/^\d{1,20}$/.test(String(catalogId||''))){
+     const library=await lookup('/v1/me/library/songs/'+encodeURIComponent(params.id));
+     catalogId=library?.attributes?.playParams?.catalogId||library?.relationships?.catalog?.data?.[0]?.id;
+    }
+    if(/^\d{1,20}$/.test(String(catalogId||'')))resource=await lookup('/v1/catalog/'+sf+'/songs/'+catalogId);
+    else resource=await lookup('/v1/me/library/songs/'+encodeURIComponent(params.id)+'/catalog');
+   }else resource=await lookup('/v1/catalog/'+sf+'/songs/'+params.id);
    check();if(!resource?.attributes?.playParams)throw Error('SPATIAL_SOURCE_UNSUPPORTED');
    const a=resource.attributes,clone=Object.create(current||null);
    for(const [key,value] of Object.entries({id:resource.id,catalogId:resource.id,type:'song',attributes:a,playParams:a.playParams,isLibrary:false,isLibraryItem:false,isSong:true,isMusicVideo:false}))Object.defineProperty(clone,key,{value});

@@ -15,6 +15,17 @@ class QueueState(unittest.TestCase):
     def setUp(self):
         self.folder=tempfile.TemporaryDirectory();self.addCleanup(self.folder.cleanup)
         self.book=QueueBook(Path(self.folder.name)/'queue.json')
+    def test_apple_library_catalog_identity_survives_restore(self):
+        from listening_queue import track,matches
+        value={'id':'i.saved','uri':'apple:library-songs:i.saved','title':'Saved song',
+               'artist':'Artist','catalogId':'789'}
+        item=track(value,'apple-music')
+        self.assertEqual(item['id'],'i.saved')
+        self.assertEqual(item['catalogId'],'789')
+        self.assertTrue(matches(item,{'id':'789','catalogId':'789'}))
+        self.assertEqual(track(item,'apple-music')['catalogId'],'789')
+        value['catalogId']='../../private';self.assertNotIn('catalogId',track(value,'apple-music'))
+
     def test_restore_never_autoplays_and_preserves_private_file(self):
         b=self.book;b.add('spotify',[song('A'),song('B')]);b.select('spotify',0)
         restored=QueueBook(b.path)

@@ -88,7 +88,8 @@ class MusicRepository:
             # Catalogue reads never own the transport. A slow artist or
             # discography request must not delay Next or Previous.
             player=h.apple_web if h.apple_mode=='native' else h.apple
-            if alive():return player.request('play',kind=item['kind'],id=item['id'])
+            if alive():return player.request('play',kind='songs' if item.get('catalogId') else item['kind'],
+                                              id=item.get('catalogId') or item['id'])
             return
         with self.locks[source]:
             if not alive():return
@@ -439,6 +440,9 @@ class MusicService:
             pending=self.awaiting_native
             if pending and pending[0]==self.play_generation:
                 state=snapshot(self.host);spatial=self.host.apple_web.state.get('spatial') or {}
+                if spatial.get('error') and spatial.get('phase')!='playing' and not spatial.get('switching'):
+                    self.stop();self.error=text('This track could not be prepared. Try it again.',
+                                               'Не удалось подготовить трек. Попробуй включить его ещё раз.');self.changed();return True
                 if matches(pending[1],state) and not spatial.get('switching') and spatial.get('phase')=='playing':
                     self.awaiting_native=None;self.loading=False;self.changed()
                 elif time.monotonic()-self.started>25:

@@ -142,6 +142,32 @@ const call=params=>context.emberboxSpatialSource(params);
  await call({action:'close',contextId:peaks.contextId});
  assert(context.window.__emberSpatialContexts.has(playerA.contextId)&&context.window.__emberSpatialContexts.has(playerB.contextId));
  await call({action:'close',contextId:playerA.contextId});await call({action:'close',contextId:playerB.contextId});
+ // Saved-playlist IDs resolve through their exact catalogue mapping, never
+ // the library relationship endpoint which may be unavailable or stalled.
+ const savedPlaylistApi=music.api.music,libraryCalls=[];
+ music.api.music=async endpoint=>{
+  libraryCalls.push(endpoint);
+  if(endpoint==='/v1/me/library/songs/i.legacy')return {data:{data:[{attributes:{playParams:{catalogId:'789'}}}]}};
+  assert.equal(endpoint,'/v1/catalog/us/songs/789','Unexpected library relationship round trip');
+  return savedPlaylistApi(endpoint);
+ };
+ context.window.__emberLibraryCatalog=new Map([['i.saved','789']]);
+ const saved=await call({action:'prepare',kind:'library-songs',id:'i.saved',fairplay:true,allowStereo:true});
+ assert.equal(saved.metadata.id,'i.saved');assert.equal(saved.metadata.catalogId,'789');
+ assert.deepEqual(libraryCalls,['/v1/catalog/us/songs/789']);
+ await call({action:'close',contextId:saved.contextId});libraryCalls.length=0;
+ const legacy=await call({action:'prepare',kind:'library-songs',id:'i.legacy',fairplay:true,allowStereo:true});
+ assert.equal(legacy.metadata.catalogId,'789');
+ assert.deepEqual(libraryCalls,['/v1/me/library/songs/i.legacy','/v1/catalog/us/songs/789']);
+ await call({action:'close',contextId:legacy.contextId});
+ music.api.music=savedPlaylistApi;
+ // A hung Apple lookup must fail with a bounded error and free the job.
+ music.api.music=()=>new Promise(()=>{});
+ context.setTimeout=(fn,ms)=>setTimeout(fn,ms===4500?5:ms);
+ await assert.rejects(call({action:'prepare',requestKey:'native-900',kind:'library-songs',id:'i.stalled',fairplay:true}),/SPATIAL_NETWORK/);
+ assert.equal(context.window.__emberSpatialPreparing.size,0);
+ assert.equal(context.window.__emberSpatialContexts.size,0);
+ context.setTimeout=setTimeout;music.api.music=savedPlaylistApi;
  music.isAuthorized=false;await assert.rejects(call({action:'prepare'}),/SIGN_IN_REQUIRED/);
  assert.equal(context.window.__emberSpatialRecent,undefined,'Sign-out must discard recent descriptors');
  console.log('PASS spatial source: enhanced rendition, key rotation, ranges, bounds, stale contexts and private URL/token isolation');

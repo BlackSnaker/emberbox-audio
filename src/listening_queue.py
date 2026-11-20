@@ -25,7 +25,10 @@ def track(value,source):
     if isinstance(context,str) and re.fullmatch('[0-9a-f]{64}',context):result['flow_playlist']=context
     result['source']=source;result['id']=uri.rsplit(':',1)[-1]
     result['origin']=value.get('origin') if value.get('origin') in ('context','dj') else 'manual'
-    if source=='apple-music':result['kind']=uri.split(':')[1]
+    if source=='apple-music':
+        result['kind']=uri.split(':')[1]
+        catalog=str(value.get('catalogId') or '')
+        if re.fullmatch(r'\d{1,20}',catalog):result['catalogId']=catalog
     if source=='youtube':result['url']='https://www.youtube.com/watch?v='+result['id']
     try:result['duration_ms']=max(0,min(86400000,int(value.get('duration_ms') or 0)))
     except (ValueError,TypeError,OverflowError):result['duration_ms']=0
@@ -37,6 +40,7 @@ def matches(item,snapshot):
     if snapshot.get('uri')==item['uri']:return True
     if snapshot.get('id')==item['id']:return True
     if snapshot.get('catalogId')==item['id']:return True
+    if item.get('catalogId') and item['catalogId'] in (snapshot.get('id'),snapshot.get('catalogId')):return True
     clean=lambda s:re.sub(r'[\W_]+','',str(s).casefold())
     title,artist=clean(snapshot.get('title')),clean(snapshot.get('artist'))
     expected=clean(item['artist'])
