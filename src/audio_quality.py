@@ -72,6 +72,9 @@ def describe(state):
 
 def current(host):
     """Read cached state only: no IPC, socket calls, network or audio queries."""
+    podcast = getattr(host, 'podcast_audio', None)
+    if podcast and podcast.enabled:
+        return describe({'audioQuality':podcast.quality if podcast.loaded else {}})
     source=getattr(host,'source','')
     if source=='spotify' and getattr(host,'spotify_mode','')=='native':
         return describe(getattr(getattr(host,'spotify_web',None),'state',{}) or {})

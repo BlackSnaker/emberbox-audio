@@ -30,13 +30,14 @@ def window_button(icon_name, name, callback):
 
 class SettingsMenu:
     def __init__(self, compact, refresh, restart, accounts=None, fullscreen=None, hide=None, quit=None, dj=None,
-                 tour=None):
+                 tour=None, podcasts=None):
         self.compact, self.refresh, self.restart = compact, refresh, restart
         self.accounts, self.fullscreen = accounts, fullscreen
         owner = getattr(fullscreen, '__self__', None)
         self.dj = dj or ((lambda: self.open_dj(owner)) if owner else None)
         self.hide, self.quit = hide, quit
         self.tour = tour
+        self.podcasts = podcasts
         self.popover = None
         self.section = 'player'
         self.selecting = False
@@ -168,6 +169,9 @@ class SettingsMenu:
                                           'avatar-default-symbolic', 'Spotify · Apple Music · YouTube · '+text('Yandex', 'Яндекс'))
         self.mode_button = action('player', text('Full player', 'Обычный режим') if compact else text('Compact player', 'Компактный режим'),
                                   desktop_action(self.compact), 'view-dual-symbolic')
+        if self.podcasts:
+            self.podcasts_button = action('player', text('Podcasts', 'Подкасты'), self.podcasts,
+                                          'audio-input-microphone-symbolic')
         # Small tactile badges keep all four sources recognisable even in Mini.
         from service_icons import service_icon
         services = Gtk.Grid(column_spacing=12,row_spacing=8)

@@ -13,7 +13,7 @@ def track(value,source):
     if source not in SOURCES or not isinstance(value,dict):return None
     result={key:str(value.get(key) or '')[:500] for key in ('id','uri','title','artist','album','image','kind','url')}
     uri=result['uri']
-    valid=(re.fullmatch(r'spotify:track:[A-Za-z0-9]{1,64}',uri) if source=='spotify' else
+    valid=(re.fullmatch(r'spotify:(track|episode):[A-Za-z0-9]{1,64}',uri) if source=='spotify' else
            re.fullmatch(r'apple:(library-songs|songs):[\w.-]{1,200}',uri) if source=='apple-music' else
            re.fullmatch(r'youtube:[A-Za-z0-9_-]{11}',uri) if source=='youtube' else
            re.fullmatch(r'yandex:track:\d{1,20}',uri))
@@ -24,6 +24,8 @@ def track(value,source):
     context=value.get('flow_playlist')
     if isinstance(context,str) and re.fullmatch('[0-9a-f]{64}',context):result['flow_playlist']=context
     result['source']=source;result['id']=uri.rsplit(':',1)[-1]
+    if source=='spotify':
+        result['kind']=uri.split(':')[1]
     result['origin']=value.get('origin') if value.get('origin') in ('context','dj') else 'manual'
     if source=='apple-music':
         result['kind']=uri.split(':')[1]

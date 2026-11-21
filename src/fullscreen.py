@@ -7,6 +7,7 @@ from gi.repository import Gdk, GdkPixbuf, GLib, Gtk, Pango
 from artwork import Artwork
 from cover_tint import cover_color, BASE_COLOR
 from hardware_controls import MuteToggle, VolumeKnob
+from podcast_view import PodcastView, CSS as PODCAST_CSS
 from nixie_spectrum import NixieSpectrum
 from tube_meter import TubeMeter
 from stage_reveal import StageReveal
@@ -15,7 +16,7 @@ from lyrics import LyricsClient, active_line
 from cover_sources import AppleMotion, apple_page
 from motion_artwork import MotionCover
 from motion_surface import MotionSurface
-from music_library import MusicService
+from music_library import MusicService, snapshot
 from yandex_panel import wave_description,playlist_wave_context
 from listening_library import LibraryView,QueueView,CSS as LIBRARY_CSS
 from quality_badge import QualityBadge,CSS as QUALITY_CSS
@@ -208,7 +209,7 @@ class FullscreenPlayer:
         self.window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self.window.connect('delete-event',lambda *_args:(self.dismiss(),True)[1])
         self.window.connect('key-press-event',self.on_key)
-        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS+KARAOKE_CSS+ARTIST_CSS+DJ_CSS+FLOW_CSS+FAVORITE_CSS+MASHUP_CSS)
+        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS+KARAOKE_CSS+ARTIST_CSS+DJ_CSS+FLOW_CSS+FAVORITE_CSS+MASHUP_CSS+PODCAST_CSS)
         Gtk.StyleContext.add_provider_for_screen(self.window.get_screen(),provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+5)
         self.provider=provider
         self.glass_provider=Gtk.CssProvider();self.glass_provider.load_from_data(GLASS_CSS+ARTIST_GLASS_CSS)
@@ -224,11 +225,7 @@ class FullscreenPlayer:
         self.header_layout=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8);header.add(self.header_layout)
         toolbar=Gtk.Box(spacing=8);self.toolbar=toolbar;self.header_layout.pack_start(toolbar,False,False,0)
         wordmark=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3);self.wordmark=wordmark
-        from ember_brand import logo
-        signature = Gtk.Box(spacing=7)
-        signature.pack_start(Gtk.Image.new_from_pixbuf(logo(24)), False, False, 0)
-        signature.pack_start(label('EMBER','stage-brand'), False, False, 0)
-        wordmark.pack_start(signature,False,False,0)
+        wordmark.pack_start(label('EMBER','stage-brand'),False,False,0)
         self.edition_label=label(text('CLASSIC','КЛАССИКА'),'stage-overline')
         self.edition_label.set_line_wrap(True);self.edition_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
         self.edition_label.set_width_chars(1);self.edition_label.set_max_width_chars(72)
@@ -238,7 +235,7 @@ class FullscreenPlayer:
         navigation=Gtk.Box(spacing=2);navigation.get_style_context().add_class('stage-nav')
         navigation.get_style_context().add_class('stage-top-nav')
         navigation.set_halign(Gtk.Align.CENTER);self.page_tabs={}
-        for key,name in [('playing',text('Listening','Слушать')),('library',text('Collection','Коллекция')),('queue',text('Queue','Очередь')),('dj','DJ'),('mashup',text('Mashups','Мешапы')),('karaoke',text('Karaoke','Караоке'))]:
+        for key,name in [('playing',text('Listening','Слушать')),('library',text('Collection','Коллекция')),('queue',text('Queue','Очередь')),('podcasts',text('Podcasts','Подкасты')),('dj','DJ'),('mashup',text('Mashups','Мешапы')),('karaoke',text('Karaoke','Караоке'))]:
             b=Gtk.ToggleButton(label=name);b.get_style_context().add_class('stage-tab');b.set_has_tooltip(False)
             b.connect('clicked',lambda _b,k=key:self.show_page(k) if not self.nav_sync else None)
             navigation.pack_start(b,False,False,0);self.page_tabs[key]=b
@@ -351,6 +348,8 @@ class FullscreenPlayer:
         self.library_view=LibraryView(self.music,self.artwork,self.open_accounts,self.open_artist)
         self.queue_view=QueueView(self.music,self.artwork,self.open_artist)
         self.pages.add_named(self.library_view,'library');self.pages.add_named(self.queue_view,'queue')
+        self.podcasts=PodcastView(self.host,self.artwork,self.open_accounts)
+        self.pages.add_named(self.podcasts,'podcasts')
         self.artist_view=ArtistView(self.music,self.artwork,lambda:self.show_page(self.artist_return),self.open_accounts,self.search_artist)
         self.pages.add_named(self.artist_view,'artist')
         self.dj=DJService(self.music);self.dj_view=DJView(self.dj,self.artwork,self.open_accounts,self.open_artist)
@@ -493,6 +492,7 @@ class FullscreenPlayer:
         elif page=='queue':self.queue_view.activate()
         elif page=='artist':self.artist_view.activate()
         elif page=='dj':self.dj_view.activate()
+        elif page=='podcasts':self.podcasts.activate()
         elif page=='karaoke':self.track=None;self.karaoke.activate()
         elif page=='mashup':self.mashups.activate()
         else:self.track=None
@@ -576,11 +576,17 @@ class FullscreenPlayer:
         if not self.tick:self.tick=self.window.add_tick_callback(self.animate)
 
     def open_dj(self):
+        self.open_tab('dj', self.dj_view.entry)
+
+    def open_podcasts(self):
+        self.open_tab('podcasts', self.podcasts.entry)
+
+    def open_tab(self, page, entry):
         self.open()
         def select():
             if self.closed or not self.visible:return False
             if self.reveal.active:return True
-            self.show_page('dj');self.dj_view.entry.grab_focus();return False
+            self.show_page(page);entry.grab_focus();return False
         GLib.timeout_add(40,select)
 
     def suspend_desktop_visuals(self,suspended):
@@ -701,7 +707,7 @@ class FullscreenPlayer:
         self.cover_change.close()
         self.cover_pause.close()
         self.library_view.close();self.queue_view.close();self.artist_view.close();self.music_unsubscribe()
-        self.karaoke.close();self.dj_view.close();self.dj.close();self.mashups.close()
+        self.karaoke.close();self.dj_view.close();self.dj.close();self.mashups.close();self.podcasts.close()
         if self.owns_music:self.music.close()
         self.lyrics.close()
         self.motion_lookup.close()
@@ -941,6 +947,7 @@ class FullscreenPlayer:
         if key in ('Escape','F11'):self.dismiss();return True
         if key=='Left' and event.state&Gdk.ModifierType.MOD1_MASK and self.page=='artist':self.artist_view.back();return True
         if event.state&Gdk.ModifierType.CONTROL_MASK and key.lower()=='f':
+            if self.page=='podcasts':self.podcasts.entry.grab_focus();return True
             self.show_page('library');self.library_view.select('search');self.library_view.entry.grab_focus();return True
         if isinstance(self.window.get_focus(),(Gtk.Entry,Gtk.TextView)):return False
         focus=self.window.get_focus()
@@ -965,18 +972,21 @@ class FullscreenPlayer:
     def update(self):
         if not self.visible or self.closed:return False
         h=self.host
+        episode = snapshot(h).get('kind') == 'episode'
+        apple_podcast = getattr(getattr(h, 'podcast_audio', None), 'enabled', False)
         self.cover_change.observe()
         width,height=self.window.get_size()
         metadata_changed=False
         title,artist,album=h.title.get_text(),h.artist.get_text(),h.album.get_text()
         for item,value in ((self.title,title),(self.artist,artist),(self.album,album)):
             if item.get_text()!=value:item.set_text(value);metadata_changed=True
-        self.artist_button.set_sensitive(bool(artist and h.length>0))
+        self.artist_button.set_sensitive(bool(artist and h.length>0 and not episode))
         accessible_name=text('Open artist: ','Открыть артиста: ')+artist
         if self.artist_button.get_accessible().get_name()!=accessible_name:
             self.artist_button.get_accessible().set_name(accessible_name)
         self.album_button.set_sensitive(album_ref(h) is not None)
         self.album_button.get_accessible().set_name(text('Open album: ','Открыть альбом: ')+album)
+        self.lyrics_button.set_sensitive(not episode)
         quality_visible=self.quality.get_visible();self.quality.update(h)
         if metadata_changed or quality_visible!=self.quality.get_visible():self.layout_size=None
         if self.layout_size!=(width,height):
@@ -984,13 +994,13 @@ class FullscreenPlayer:
             self.on_size(self.window,SimpleNamespace(width=width,height=height))
         names={'spotify':'Spotify','apple-music':'Apple Music','youtube':'YouTube','yandex-music':text('Yandex Music','Яндекс Музыка')}
         mashup=self.mashup_active();preview=self.mashups.client
-        source_name='ccMixter' if mashup else names.get(h.source,h.source)
+        source_name='ccMixter' if mashup else 'Apple Podcasts' if apple_podcast else names.get(h.source,h.source)
         playing=preview.playing if mashup else h.playing
         for button,value in ((self.source_button,'●  '+source_name+'  ⌄'),(self.play_button,'Ⅱ' if playing else '▶')):
             if button.get_label()!=value:
                 button.set_label(value)
                 button.get_child().show()
-        self.update_yandex_controls(mashup)
+        self.update_yandex_controls(mashup or episode)
         self.play_button.set_sensitive(mashup or h.play.get_sensitive())
         self.previous_button.set_sensitive(mashup or h.previous.get_sensitive());self.next_button.set_sensitive(mashup or h.next.get_sensitive())
         if not mashup and self.music.book.active==h.source:
@@ -1032,7 +1042,7 @@ class FullscreenPlayer:
                                (self.playing_caption,caption)):
                 if item.get_text()!=value:item.set_text(value)
             self.mute.set_state(client.volume,client.muted,True);self.knob.set_state(client.volume,client.muted,True)
-        self.flow_control.set_sensitive(not mashup)
+        self.flow_control.set_sensitive(not mashup and not episode)
         self.load_art()
         if not self.reveal.active and self.page=='playing':
             self.motion_lookup.set_track(self.motion_page() if self.motion.executable else '',h.art_url or '')
@@ -1045,7 +1055,7 @@ class FullscreenPlayer:
         if identity!=self.track and (self.page=='karaoke' or self.lyrics_visible and self.page=='playing') and not self.reveal.active:
             self.track=identity;self.current_line=-2;self.manual_until=0.;self.last_position=None
             # No network activity for the desktop widget or empty player states.
-            valid=bool(h.length>0 and title and artist)
+            valid=bool(h.length>0 and title and artist and not episode)
             self.lyrics.set_track(title if valid else '',artist if valid else '',album if valid else '',h.length/1e6)
         if self.lyrics_visible and self.page=='playing':self.update_line()
         if self.page=='karaoke':self.karaoke.update()

@@ -22,9 +22,11 @@ import widget
 
 def settle(seconds=.3):
     deadline=time.monotonic()+seconds
+    context=GLib.MainContext.default()
     while time.monotonic()<deadline:
-        while GLib.MainContext.default().pending():
-            GLib.MainContext.default().iteration(False)
+        for _ in range(8):
+            if not context.pending():break
+            context.iteration(False)
         time.sleep(.01)
 
 
@@ -537,6 +539,33 @@ try:
     assert prepared is not None,'Prepare the fullscreen scene before the first click'
     prepared.open()
     wait(lambda: not prepared.reveal.active, lambda: 'Fullscreen entrance never finished')
+    podcasts = prepared.podcasts
+    show = {'id':'42','kind':'show','title':'Example show','feed':'https://example.org/feed',
+            'language':'en','categories':['history']}
+    episode = {'id':'43','kind':'episode','title':'Example episode','url':'https://example.org/episode.mp3'}
+    with (patch.object(podcasts.discovery, 'browse', return_value=[show]),
+          patch.object(podcasts.discovery, 'search', return_value=[show]) as search,
+          patch.object(podcasts.catalogue, 'load', return_value=[episode]) as load):
+        prepared.show_page('podcasts', force=True)
+        wait(lambda: podcasts.results == [show] and not prepared.page_transition.active,
+             lambda: 'The podcast wall did not load')
+        assert podcasts.wall.get_mapped() and podcasts.wall.get_children()
+        podcasts.language_menu.set_active_id('en')
+        podcasts.categories['history'].clicked()
+        podcasts.entry.set_text('Example')
+        podcasts.entry.emit('activate')
+        wait(lambda: podcasts.results == [show],
+             lambda: ('Podcast search returned no show', search.call_args_list, podcasts.note.get_text()))
+        search.assert_called_once_with('apple-podcasts', 'Example', 'en', 'history')
+        podcasts.wall.get_children()[0].get_child().clicked()
+        wait(lambda: podcasts.results == [episode], lambda: 'Opening a show returned no episodes')
+        with patch.object(app, 'play_podcast') as play:
+            podcasts.list.get_children()[0].clicked()
+            play.assert_called_once_with('apple-podcasts', episode, [episode])
+        load.assert_called_once_with('apple-podcasts', 'Example', show)
+    podcasts.providers['spotify'].clicked()
+    assert podcasts.provider == 'spotify' and podcasts.sign_in.get_visible()
+    wait(lambda: not prepared.page_transition.active, lambda: 'Podcasts page transition never finished')
     prepared.show_settings()
     app.settings.select_section('system')
     app.settings.tour_button.clicked()

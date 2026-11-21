@@ -239,6 +239,13 @@ class YandexWeb:
             raise YandexError(text('My Wave returned no tracks. Check Yandex Plus.', 'Моя волна не вернула треки. Проверь Яндекс Плюс.'))
 
     def request(self, method, **params):
+        if method in ('podcasts', 'podcastEpisodes'):
+            # Podcast catalogue requests do not hold the transport lock
+            # during network I/O, so pause and seek remain responsive.
+            api = self.api if not self.closed else None
+            if not api:
+                raise YandexError(text('Sign in to Yandex Music in Accounts.', 'Войди в Яндекс Музыку в разделе Аккаунты.'))
+            return self._podcasts(api, method, params)
         with self.lock:
             if self.closed:
                 raise YandexError('Yandex Music is closed.')
@@ -341,7 +348,10 @@ class YandexWeb:
                         self.queue = [track(values[0])]
                         found = 0
                     self.index = found
-                    return self._play(dict(self.queue[self.index], playlistId=params.get('playlistId', '')))
+                    item = self.queue[self.index]
+                    if params.get('episode') is True:
+                        item = dict(item, kind='episode')
+                    return self._play(dict(item, playlistId=params.get('playlistId', '')))
                 action = params.get('action', 'next')
                 if method == '_ended':
                     return self._step(1, 'trackFinished')
@@ -368,6 +378,24 @@ class YandexWeb:
         if event == 'trackFinished':
             self.state.update(playing=False, ended=True)
         return {}
+
+    def _podcasts(self, api, method, params):
+        if method == 'podcastEpisodes':
+            ident = str(params.get('id', ''))
+            if not ident.isdecimal() or len(ident) > 20:
+                raise YandexError('Invalid podcast ID.')
+            show = api.call('albums/' + ident + '/with-tracks') or {}
+            episodes = [value for volume in show.get('volumes', []) for value in volume]
+            return {'items': [dict(track(value), kind='episode', album=show.get('title', ''))
+                              for value in episodes[:200] if value.get('available', True)]}
+        result = api.call('search', text=params.get('term', ''), type='podcast', page=0) or {}
+        shows = (result.get('podcasts') or {}).get('results', [])
+        episodes = (result.get('podcastEpisodes') or {}).get('results', [])
+        if not shows:
+            shows = [value for value in (result.get('albums') or {}).get('results', [])
+                     if value.get('type') == 'podcast' or value.get('genre') == 'podcasts']
+        return {'items': [dict(album(value), kind='show') for value in shows[:100]]
+                + [dict(track(value), kind='episode') for value in episodes[:100] if value.get('available', True)]}
 
     def _catalog(self, method, params):
         ident = str(params.get('id') or '')

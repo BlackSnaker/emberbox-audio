@@ -52,6 +52,8 @@ def artist_ref(host,item=None):
 
 def album_ref(host):
     """Snapshot the recording whose album label was clicked; never name-search."""
+    podcast = getattr(host, 'podcast_audio', None)
+    if podcast and podcast.enabled:return None
     source=host.source
     title=host.album.get_text().strip()
     if source not in ('spotify','apple-music','yandex-music') or not title or not host.length:return None
@@ -60,11 +62,12 @@ def album_ref(host):
     ref.update(name=title[:300],title=title[:300],artist=host.artist.get_text()[:300],kind='album')
     if source in ('apple-music','yandex-music'):
         state=(host.apple_web if source=='apple-music' else host.yandex_web).state
-        if state.get('album')!=title:return None  # The label may contain a connection error.
+        if state.get('kind')=='episode' or state.get('album')!=title:return None
         album_id=str(state.get('albumId') or '')
         if re.fullmatch(r'\d{1,20}',album_id):ref['id']=album_id
     elif source=='spotify' and getattr(host,'spotify_mode','desktop')=='native':
         state=host.spotify_web.state
+        if state.get('kind')=='episode':return None
         if state.get('albumId'):ref['id']=str(state['albumId'])
         else:ref.pop('id',None)
     elif not ref.get('songUri'):

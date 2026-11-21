@@ -390,7 +390,9 @@ To run from the checkout after dependencies are ready, use `./run.sh`.
 
 The optional first-launch tour covers music services, fullscreen controls and EmberFlow. Replay it from **Settings → System → Meet Ember**.
 
-The `main` branch tracks development at **0.36.0**.
+Open **Podcasts** in the fullscreen navigation or in **Settings → Player**. Pick a spoken language and category to fill the cover wall. When a service has few verified matches, clearly labelled Apple Podcasts cards round out the selection. Public Apple episodes play from publisher RSS without an Apple sign-in. Spotify and Yandex Music use their connected accounts.
+
+The `main` branch tracks development at **0.37.0**.
 
 Select a source in the header. Apple Music plays through a background web engine, with playlists, albums, songs and catalogue search inside Emberbox. It requires a compatible installed DRM-capable runtime and an Apple Music subscription. [One-time setup →](docs/APPLE_MUSIC.md)
 

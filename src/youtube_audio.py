@@ -5,13 +5,17 @@ import threading
 from gi.repository import GLib
 from paths import CONFIG_DIR
 from source_picker import text
-from youtube_search import yt_dlp_executable, ytdl_raw_options, mpv_quoted
+from youtube_search import yt_dlp_executable, ytdl_raw_options, mpv_quoted, video_url
 
 STATE = CONFIG_DIR / 'youtube.json'
 CLIENT_NAME = 'Emberbox Audio YouTube'
 
 
 class YouTubeAudio:
+    client_name = CLIENT_NAME
+    source_name = 'YouTube'
+    media_tags = True
+
     def __init__(self, changed, *, persistent=True):
         self.changed = changed
         self.persistent=persistent;self.flow_cancel=None
@@ -32,7 +36,6 @@ class YouTubeAudio:
         try:
             if not persistent:return
             saved = json.loads(STATE.read_text())
-            from youtube_search import video_url
             for item in saved.get('queue', [])[:50]:
                 parsed = video_url(str(item.get('url', '')))
                 if parsed:
@@ -46,6 +49,15 @@ class YouTubeAudio:
         except (OSError, ValueError, TypeError, KeyError):
             pass
 
+    def player_options(self):
+        return dict(ytdl=True,ytdl_format='bestaudio/best',
+                    script_opts='ytdl_hook-ytdl_path='+mpv_quoted(yt_dlp_executable()),
+                    ytdl_raw_options=ytdl_raw_options())
+
+    def media_url(self, item):
+        parsed = video_url(str(item.get('url', '')))
+        return parsed[0] if parsed else ''
+
     def _ensure_player(self):
         if self.mpv:
             return True
@@ -56,29 +68,27 @@ class YouTubeAudio:
                 audio_display='no', force_window=False, input_default_bindings=False,
                 input_vo_keyboard=False, osc=False, terminal=False, osd_level=0,
                 ao='pulse', volume=100, volume_max=100, mute=False,
-                audio_client_name=CLIENT_NAME,
+                audio_client_name=self.client_name,
                 demuxer_max_bytes=16*1024*1024,demuxer_max_back_bytes=1024*1024,
-                ytdl=True, ytdl_format='bestaudio/best',
-                script_opts='ytdl_hook-ytdl_path='+mpv_quoted(yt_dlp_executable()),
-                ytdl_raw_options=ytdl_raw_options())
+                **self.player_options())
             for name in ('time-pos', 'duration', 'pause', 'eof-reached',
                          'paused-for-cache', 'media-title', 'metadata',
                          'audio-codec-name','audio-params','audio-bitrate'):
                 self.mpv.observe_property(name, self._property)
             @self.mpv.event_callback('file-loaded')
             def file_loaded(_event):
-                GLib.idle_add(self._loaded)
+                GLib.idle_add(self._loaded, priority=GLib.PRIORITY_DEFAULT)
             @self.mpv.event_callback('end-file')
             def end_file(event):
                 if event.data and event.data.reason == mpv.MpvEventEndFile.ERROR:
                     GLib.idle_add(self._failure, text(
-                        'This video could not be played. Try another public video.',
-                        'Не удалось включить ролик. Попробуй другой общедоступный ролик.'))
+                        'This audio stream could not be played.',
+                        'Не удалось воспроизвести аудиопоток.'), priority=GLib.PRIORITY_DEFAULT)
             return True
         except (ImportError, OSError, RuntimeError, ValueError) as error:
             self.mpv = None
-            self.error = text('YouTube needs libmpv and python-mpv. See installation notes.',
-                              'Для YouTube нужны libmpv и python-mpv. См. инструкцию установки.')
+            self.error = text('{} needs libmpv and python-mpv. See installation notes.',
+                              'Для {} нужны libmpv и python-mpv. См. инструкцию установки.').format(self.source_name)
             self.failed = True
             self.changed()
             return False
@@ -94,12 +104,11 @@ class YouTubeAudio:
 
     def play(self, item, queue=None, start=0):
         if self.flow_cancel:self.flow_cancel()
-        from youtube_search import video_url
-        parsed = video_url(str(item.get('url', '')))
-        if not parsed:
+        url = self.media_url(item)
+        if not url:
             return
         self.open_request += 1
-        self.current = dict(item, url=parsed[0])
+        self.current = dict(item, url=url)
         if queue is not None:
             self.queue = [dict(entry) for entry in queue][:50]
         if not any(entry.get('id') == item.get('id') for entry in self.queue):
@@ -140,7 +149,7 @@ class YouTubeAudio:
         return False
 
     def _property(self, name, value):
-        GLib.idle_add(self._on_property, name, value)
+        GLib.idle_add(self._on_property, name, value, priority=GLib.PRIORITY_DEFAULT)
 
     def _on_property(self, name, value):
         if self.closed:
@@ -168,9 +177,9 @@ class YouTubeAudio:
                     self.play(self.queue[self.index+1])
                 else:
                     self.paused = True
-        elif name == 'media-title' and value and self.current:
+        elif name == 'media-title' and value and self.current and self.media_tags:
             self.current['title'] = str(value)
-        elif name == 'metadata' and value and self.current:
+        elif name == 'metadata' and value and self.current and self.media_tags:
             metadata = {key.lower(): item for key, item in value.items()}
             channel = metadata.get('uploader') or metadata.get('artist') or metadata.get('channel')
             if channel:
@@ -182,8 +191,7 @@ class YouTubeAudio:
         self.watchdog = 0
         if not self.closed and request == self.open_request and self.loading:
             self.mpv.command_async('stop')
-            self._failure(text('YouTube took too long. Try this track again.',
-                               'YouTube долго отвечает. Попробуй включить трек ещё раз.'))
+            self._failure(text('{} took too long. Try again.', '{} долго отвечает. Попробуй ещё раз.').format(self.source_name))
         return False
 
     def _failure(self, message):

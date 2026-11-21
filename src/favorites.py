@@ -16,7 +16,7 @@ LIMIT=5000
 def current_track(host):
     from music_library import snapshot
     state=snapshot(host);source=host.source
-    if not state.get('valid') or not state.get('title'):return None
+    if not state.get('valid') or not state.get('title') or state.get('kind')=='episode':return None
     ident=state.get('catalogId') or state.get('id','');uri=state.get('uri','')
     if source=='spotify':
         if uri.startswith('https://open.spotify.com/track/'):ident=urlparse(uri).path.split('/')[-1]

@@ -58,8 +58,8 @@ class SpotifyWebTests(unittest.TestCase):
 
     def test_favourites_adapter_upgrade_restores_the_recording_position_and_pause(self):
         app=SpotifyWeb.__new__(SpotifyWeb);app.closed=False;app.enabled=True;app._start_engine=Mock()
-        states=[{'ready':True,'authorized':False,'integrationVersion':2},
-                {'ready':True,'authorized':True,'integrationVersion':2}]
+        states=[{'ready':True,'authorized':False,'integrationVersion':4},
+                {'ready':True,'authorized':True,'integrationVersion':4}]
         def request(method,**params):
             if method=='status':return states.pop(0)
             self.assertFalse(states,'Playback must wait for the signed-in engine')

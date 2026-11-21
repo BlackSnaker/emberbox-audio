@@ -43,8 +43,11 @@ async function emberboxSpotifyCommand(request) {
  const meta=navigator.mediaSession?.metadata;
  const link=(root,type)=>root?.querySelector('a[href^="/'+type+'/"]');
  const identifier=(value,type)=>String(value||'').match(new RegExp('(?:spotify:'+type+':|/'+type+'/)([A-Za-z0-9]{1,64})(?:$|[?#/])'))?.[1]||'';
- const uri=String(item.uri||ps.track_window?.current_track?.uri||''),id=identifier(uri,'track')||identifier(link(footer,'track')?.getAttribute('href'),'track');
- const title=clean(metadata.title||item.name||meta?.title||link(footer,'track')?.textContent);
+ const uri=String(item.uri||ps.track_window?.current_track?.uri||'');
+ const episodeId=identifier(uri,'episode')||(!uri?identifier(link(footer,'episode')?.getAttribute('href'),'episode'):'');
+ const kind=episodeId?'episode':'track';
+ const id=episodeId||identifier(uri,'track')||identifier(link(footer,'track')?.getAttribute('href'),'track');
+ const title=clean(metadata.title||item.name||meta?.title||link(footer,kind)?.textContent);
  const artist=clean(metadata.artist_name||item.artists?.map(a=>a.name).join(', ')||meta?.artist||link(footer,'artist')?.textContent);
  const album=clean(metadata.album_title||item.album?.name||meta?.album);
  const artists=Array.from(footer?.querySelectorAll('a[href*="/artist/"]')||[]).map(a=>({id:identifier(a.getAttribute('href'),'artist'),name:clean(a.textContent)})).filter(a=>a.id).slice(0,12);
@@ -65,7 +68,7 @@ async function emberboxSpotifyCommand(request) {
  const control=id=>document.querySelector('[data-testid="'+id+'"]');
  const enabled=window.__emberboxPlaybackAllowed===true;
  const status={ready:document.readyState==='complete'&&!!document.querySelector('main'),authorized,playing:!!playing,
-  id,uri:id?'spotify:track:'+id:'',title,artist,album,albumId,artists,position,duration,
+  id,kind,uri:id?'spotify:'+kind+':'+id:'',title,artist,album,albumId,artists,position,duration,
   image:image(meta?.artwork?.[0]?.src||metadata.image_xlarge_url||metadata.image_url||footer?.querySelector('img')?.src),
   canNext:!!control('control-button-skip-forward')&&!control('control-button-skip-forward').disabled,
   canPrevious:!!control('control-button-skip-back')&&!control('control-button-skip-back').disabled,
@@ -73,7 +76,7 @@ async function emberboxSpotifyCommand(request) {
  if(request.method==='status')return status;
  if(!authorized)throw Error('SIGN_IN_REQUIRED');
  if(request.method==='favorite') {
-  if(!id||p.uri!=='spotify:track:'+id||typeof p.value!=='boolean')throw Error('INVALID_ARGUMENTS');
+  if(kind!=='track'||!id||p.uri!=='spotify:track:'+id||typeof p.value!=='boolean')throw Error('INVALID_ARGUMENTS');
   const find=()=>document.querySelector('[data-testid="now-playing-widget"] button[data-testid="add-button"], [data-testid="now-playing-widget"] button[data-testid="control-button-heart"], footer button[data-testid="add-button"]');
   return emberboxSetFavorite(find,p.value,async()=>{
    const current=identifier(link(document.querySelector('[data-testid="now-playing-widget"],footer'),'track')?.getAttribute('href'),'track');
@@ -83,7 +86,7 @@ async function emberboxSpotifyCommand(request) {
   });
  }
  const wait=async work=>{for(let n=0;n<70;n++){const v=await work();if(v)return v;await new Promise(resolve=>setTimeout(resolve,150));}throw Error('NOT_READY');};
- function routeValid(route){return typeof route==='string'&&route.length<1200&&/^\/(?:$|collection\/(tracks|albums|playlists)$|(track|album|playlist)\/[A-Za-z0-9]{1,64}$|artist\/[A-Za-z0-9]{1,64}(\/discography\/(all|album|single|compilation))?$|search\/[^/]{1,800}$)/.test(route);}
+ function routeValid(route){return typeof route==='string'&&route.length<1200&&/^\/(?:$|collection\/(tracks|albums|playlists)$|(track|album|playlist|show|episode)\/[A-Za-z0-9]{1,64}$|artist\/[A-Za-z0-9]{1,64}(\/discography\/(all|album|single|compilation))?$|search\/[^/]{1,800}(?:\/podcasts)?$)/.test(route);}
  async function navigate(route){
   if(!routeValid(route))throw Error('INVALID_ARGUMENTS');
   if(location.pathname===route)return;
@@ -104,9 +107,10 @@ async function emberboxSpotifyCommand(request) {
   if(!moved){const e=Error('NOT_READY');e.emberboxRoute=route;throw e;}
   await wait(()=>location.pathname===route);await new Promise(resolve=>setTimeout(resolve,250));
  }
- const pathFor=uri=>{if(!/^spotify:(track|album|playlist):[A-Za-z0-9]{1,64}$/.test(String(uri)))throw Error('INVALID_ARGUMENTS');return '/'+uri.split(':').slice(1).join('/');};
+ const pathFor=uri=>{if(!/^spotify:(track|album|playlist|show|episode):[A-Za-z0-9]{1,64}$/.test(String(uri)))throw Error('INVALID_ARGUMENTS');return '/'+uri.split(':').slice(1).join('/');};
  if(request.method==='play'){
   if(!enabled)return {skipped:true};const uri=String(p.uri||'');const route=pathFor(uri);
+  if(route.startsWith('/show/'))throw Error('INVALID_ARGUMENTS');
   if(player?.play){await player.play({uri},{featureIdentifier:'emberbox-audio'});return {ok:true};}
   await navigate(route);
   const play=await wait(()=>document.querySelector('main button[data-testid="play-button"],main button[data-testid="play-pause-button"]'));
@@ -213,7 +217,38 @@ async function emberboxSpotifyCommand(request) {
   return {title:clean(data.title),items:values,tracks:values,total:data.total,
    next:data.cached&&offset+data.expected<data.total?offset+data.expected:null};
  }
- if(request.method==='tracks')return tracks(p.uri||'spotify:'+String(p.kind||'playlist')+':'+String(p.id||''));
+ function podcastItems(root, types){
+  const seen=new Set(),result=[];
+  for(const a of root?.querySelectorAll('a[href]')||[]){
+   const match=a.getAttribute('href')?.match(/^\/(show|episode)\/([A-Za-z0-9]{1,64})(?:$|\?)/);
+   if(!match||!types.includes(match[1]))continue;
+   const [,kind,id]=match;
+   const row=a.closest('[data-encore-id="card"],[data-testid="episode-card"],[role="listitem"],article,[role="row"]')||a.parentElement;
+   const title=clean(a.textContent||a.getAttribute('aria-label')||row?.querySelector('[data-encore-id="cardTitle"]')?.textContent);
+   if(!title||seen.has(kind+id))continue;
+   seen.add(kind+id);
+   const showId=kind==='episode'?identifier(row?.querySelector('a[href^="/show/"]')?.getAttribute('href'),'show'):'';
+   result.push({kind,id,uri:'spotify:'+kind+':'+id,title,
+    artist:clean(row?.querySelector('[data-encore-id="cardSubtitle"]')?.textContent),
+    image:image(row?.querySelector('img')?.src),showId});
+   if(result.length>=100)break;
+  }
+  return result;
+ }
+ async function podcasts(route,types){
+  await navigate(route);
+  for(let attempt=0;attempt<30;attempt++){
+   const items=podcastItems(document.querySelector('main'),types);
+   if(items.length||document.querySelector('main [data-testid="search-no-results"]'))return {items};
+   await new Promise(resolve=>setTimeout(resolve,150));
+  }
+  return {items:[]};
+ }
+ if(request.method==='tracks'){
+  const uri=p.uri||'spotify:'+String(p.kind||'playlist')+':'+String(p.id||'');
+  if(String(uri).startsWith('spotify:show:'))return podcasts(pathFor(uri),['episode']);
+  return tracks(uri);
+ }
  if(request.method==='browse'){
   const category=p.category||'home';if(!['home','playlists','albums','collection','dj','recent'].includes(category))throw Error('INVALID_ARGUMENTS');
   await navigate(category==='albums'?'/collection/albums':category==='playlists'||category==='collection'?'/collection/playlists':'/');
@@ -238,6 +273,7 @@ async function emberboxSpotifyCommand(request) {
  }
  if(request.method==='search'){
   const term=String(p.term||'').trim();if(!term||term.length>200)throw Error('INVALID_ARGUMENTS');
+  if(p.media==='podcasts')return podcasts('/search/'+encodeURIComponent(term)+'/podcasts',['show','episode']);
   await navigate('/search/'+encodeURIComponent(term));
   let fallback=[];
   for(let attempt=0;attempt<35;attempt++){

@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.37.0 — 2026-11-21 · Podcasts
+
+- Browse Apple Podcasts, Spotify and Yandex Music with a glass cover wall, six spoken languages and category filters.
+- Open shows and play episodes in Ember. Episode rows give long titles room and keep duration and playback aligned.
+- Remove the icon from the fullscreen header.
+
 ## 0.36.0 — 2026-11-21 · First light
 
 - Give Ember a filament logo for the desktop launcher and fullscreen header. The filament warms up briefly over the cover at startup, following the system's animation setting.

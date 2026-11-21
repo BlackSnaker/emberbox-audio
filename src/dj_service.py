@@ -153,6 +153,8 @@ class DJService:
 
     def state(self):
         value=snapshot(self.host);source=self.host.source
+        if value.get('kind')=='episode':
+            return {**value,'valid':False}
         if not value.get('uri') and value.get('id'):
             ident=str(value['id'])
             prefix={'spotify':'spotify:track:','apple-music':'apple:'+('library-songs:' if ident.startswith('i.') else 'songs:'),

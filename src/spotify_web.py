@@ -95,7 +95,7 @@ class SpotifyWeb(AppleWeb):
         if not self.closed:
             try:
                 self.state=self._seek_state(future.result())
-                if self.state.get('ready') and self.state.get('integrationVersion')==1 and not self.upgrade_attempted:
+                if self.state.get('ready') and self.state.get('integrationVersion') in (1,2,3) and not self.upgrade_attempted:
                     self.upgrade_attempted=self.upgrading=True
                     self.pool.submit(self._upgrade_adapter,dict(self.state)).add_done_callback(lambda item:GLib.idle_add(self._adapter_upgraded,item))
             except Exception:self.state={}
@@ -110,7 +110,7 @@ class SpotifyWeb(AppleWeb):
             if self.connected:
                 try:
                     state=self.bridge.request('status')
-                    if state.get('ready') and state.get('integrationVersion',0)>=2 and (not previous.get('authorized') or state.get('authorized')):
+                    if state.get('ready') and state.get('integrationVersion',0)>=4 and (not previous.get('authorized') or state.get('authorized')):
                         self.bridge.request('enable',enabled=self.enabled)
                         if self.enabled and previous.get('uri') and previous.get('authorized'):
                             self.bridge.request('play',uri=previous['uri'])

@@ -94,21 +94,28 @@ class MusicRepository:
         with self.locks[source]:
             if not alive():return
             if source=='yandex-music':
-                if alive():return h.yandex_web.request('play',id=item['id'],**({'playlistId':item['playlistId']} if item.get('playlistId') else {}))
+                options = {'playlistId': item['playlistId']} if item.get('playlistId') else {}
+                if item.get('kind') == 'episode':
+                    options['episode'] = True
+                if alive():return h.yandex_web.request('play',id=item['id'],**options)
 
 
 def snapshot(host):
     source=host.source
     state={'title':host.title.get_text(),'artist':host.artist.get_text(),'playing':host.playing,
            'duration':host.length/1e6,'position':host.position/1e6,'valid':host.length>0,'id':'','uri':''}
-    if source=='spotify' and getattr(host,'spotify_mode','desktop')=='native':
-        data=host.spotify_web.state;state.update(id=str(data.get('id') or ''),uri=str(data.get('uri') or ''),ended=bool(data.get('ended')))
+    podcast = getattr(host, 'podcast_audio', None)
+    if podcast and podcast.enabled:
+        data=podcast.state;state.update(id=data.get('id', ''),uri=data.get('uri', ''),kind='episode',ended=bool(data.get('ended')))
+    elif source=='spotify' and getattr(host,'spotify_mode','desktop')=='native':
+        data=host.spotify_web.state;state.update(id=str(data.get('id') or ''),uri=str(data.get('uri') or ''),kind=data.get('kind'),ended=bool(data.get('ended')))
     elif source=='apple-music' and host.apple_mode=='native':
         data=host.apple_web.state;state['id']=str(data.get('id') or data.get('catalogId') or '')
         state['catalogId']=str(data.get('catalogId') or '')
         state['ended']=bool(data.get('ended'))
     elif source=='yandex-music':
         state['id']=str(host.yandex_web.state.get('id') or '')
+        state['kind']=host.yandex_web.state.get('kind')
         state['ended']=bool(host.yandex_web.state.get('ended'))
     elif source=='youtube' and host.youtube_mode=='native':
         state['id']=str((host.youtube.current or {}).get('id',''));state['ended']=host.youtube.eof
@@ -181,6 +188,7 @@ class MusicService:
 
     def start_yandex_wave(self,*,playlist=None,recording=None):
         if self.host.source!='yandex-music':return False
+        if getattr(self.host, 'exit_apple_podcast', None):self.host.exit_apple_podcast()
         params={}
         if playlist is not None:
             if not playlist.get('id'):return False
@@ -357,6 +365,7 @@ class MusicService:
             index=self.book.indices[source] if self.error and self.book.current(source) else pending[0][0] if pending else max(0,self.book.indices[source])
         item=self.book.select(source,index)
         if not item:return
+        if getattr(self.host, 'exit_apple_podcast', None):self.host.exit_apple_podcast()
         self.play_generation+=1;generation=self.play_generation
         if self.play_future:self.play_future.cancel()
         self.loading=True;self.error='';self.started=time.monotonic();self.watch.reset();self.changed()
@@ -450,11 +459,14 @@ class MusicService:
         if self.previous_restart:
             item=self.book.current(source);state=snapshot(self.host)
             if item and matches(item,state) and state['position']<=3:self.previous_restart=None
-        self.flow.tick(snapshot(self.host))
-        self.poll_transition_preview(snapshot(self.host))
+        state = snapshot(self.host)
+        upcoming = self.book.upcoming(source)
+        if state.get('kind') != 'episode' and not (upcoming and upcoming[0][1].get('kind') == 'episode'):
+            self.flow.tick(state)
+            self.poll_transition_preview(state)
         if self.flow.busy:return True
         if self.book.active==source and not self.loading:
-            item=self.book.current(source);result=self.watch.observe(item,snapshot(self.host)) if item else None
+            item=self.book.current(source);result=self.watch.observe(item,state) if item else None
             if result=='next':self.step(1)
             elif result=='external':self.stop()
             elif not self.watch.seen and time.monotonic()-self.started>20:

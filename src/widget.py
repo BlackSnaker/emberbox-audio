@@ -52,6 +52,8 @@ from kwin_desktop import KWinDesktop
 from widget_settings import SettingsMenu, settings_button, window_button
 from ember_brand import BrandIgnition, logo
 from welcome_tour import WelcomeTour, SEEN as WELCOME_SEEN, CSS as WELCOME_CSS
+from podcast_audio import PodcastAudio
+from podcast_catalog import APPLE as APPLE_PODCASTS
 from seasonal_theme import Appearance
 from widget_control import WidgetControl
 from quest_bridge import start_if_enabled as start_quest_bridge
@@ -251,6 +253,7 @@ class Widget:
         self.youtube_render_timer = 0
         self.youtube_last_sound = 0.
         self.youtube = YouTubeAudio(self.on_youtube_changed)
+        self.podcast_audio = PodcastAudio(self.on_podcast_changed)
         self.monitor = Monitor(self.connection, self.on_sessions)
         self.accounts_visible = False
         self.accounts = Accounts(self.apple_web,self.on_accounts_changed,self.open_spotify_login,
@@ -260,7 +263,7 @@ class Widget:
         self.kwin_desktop = None
         self.settings = SettingsMenu(lambda: self.toggle_compact(None), self.reconnect_player,
                                      self.restart_widget, self.show_accounts, self.show_fullscreen,
-                                     self.hide_widget, self.quit, tour=self.show_welcome)
+                                     self.hide_widget, self.quit, tour=self.show_welcome, podcasts=self.show_podcasts)
         self.welcome = None
         self.welcome_pending = not saved and not WELCOME_SEEN.is_file()
         self.restarting = False
@@ -639,6 +642,7 @@ class Widget:
         self.cover_pause.close()
         self.youtube_panel.close()
         self.youtube.close()
+        self.podcast_audio.close()
         self.accounts.close()
         self.mpris.close()
         self.apple.close()
@@ -654,6 +658,44 @@ class Widget:
     def show_fullscreen(self):
         if self.fullscreen is None:self.fullscreen=FullscreenPlayer(self)
         self.fullscreen.open()
+
+    def show_podcasts(self):
+        if self.fullscreen is None:self.fullscreen=FullscreenPlayer(self)
+        self.fullscreen.open_podcasts()
+
+    def play_podcast(self, provider, item, episodes):
+        if provider != APPLE_PODCASTS:
+            if self.podcast_audio.enabled or self.source != provider or (
+                    provider == 'spotify' and not self.spotify_native()):
+                self.select_source(provider)
+            self.music.play_now(item, context=episodes)
+            return
+        if not self.podcast_audio.enabled:
+            self.music.stop(pause_pending=True)
+            self.music.pause(self.source)
+            self.spotify_web.set_enabled(False)
+            self.apple_web.set_enabled(False)
+            self.yandex_web.set_enabled(False)
+            self.youtube.set_enabled(False)
+            self.podcast_audio.set_enabled(True)
+        self.podcast_audio.play(item, episodes)
+        if self.podcast_audio.enabled:
+            self.update_source_ui()
+
+    def exit_apple_podcast(self, restore=True):
+        if not self.podcast_audio.enabled:
+            return
+        self.podcast_audio.set_enabled(False)
+        if restore:
+            self.spotify_web.set_enabled(self.spotify_native())
+            self.apple_web.set_enabled(self.apple_native())
+            self.yandex_web.set_enabled(self.source == 'yandex-music')
+            self.youtube.set_enabled(self.youtube_native())
+            self.update_source_ui()
+
+    def on_podcast_changed(self):
+        if not getattr(self, 'resources_closed', True) and self.podcast_audio.enabled:
+            self.render_apple()
 
     def show_album(self,_button=None):
         if not album_ref(self):return
@@ -749,7 +791,9 @@ class Widget:
         self.visual_velocity = [0.] * 9
         self.equalizer.set_levels(self.visual_levels)
         self.monitor.poll()
-        if self.native_web():
+        if self.podcast_audio.enabled:
+            self.podcast_audio.restart()
+        elif self.native_web():
             self.native_web().ensure_started()
             self.native_web().poll()
         if self.expanded and not self.compact:
@@ -870,6 +914,7 @@ class Widget:
         self.source_picker.show(button, self.source, self.sessions, self.browser_binding, self.youtube_binding, self.youtube_mode)
 
     def select_source(self, source, session=None):
+        self.exit_apple_podcast(restore=False)
         self.accounts_visible = False
         previous = self.session
         if not (self.youtube_native() and source == 'youtube' and session is None):
@@ -925,8 +970,9 @@ class Widget:
 
     def update_source_ui(self):
         names = {'spotify':'SPOTIFY', 'apple-music':'APPLE MUSIC', 'youtube':'YOUTUBE','yandex-music':text('YANDEX MUSIC','ЯНДЕКС МУЗЫКА')}
-        self.source_button.set_label('●  ' + names[self.source] + '  ⌄')
-        self.compact_source.set_label({'spotify':'S⌄','apple-music':'A⌄','youtube':'Y⌄','yandex-music':'Я⌄'}[self.source])
+        podcast=self.podcast_audio.enabled
+        self.source_button.set_label('●  ' + ('APPLE PODCASTS' if podcast else names[self.source]) + '  ⌄')
+        self.compact_source.set_label('P⌄' if podcast else {'spotify':'S⌄','apple-music':'A⌄','youtube':'Y⌄','yandex-music':'Я⌄'}[self.source])
         self.open.get_accessible().set_name({'spotify':'Open Spotify','apple-music':'Open Apple Music',
                                             'youtube':'Open YouTube','yandex-music':'Open Yandex Music'}[self.source])
         self.library_stack.set_visible_child_name('accounts' if self.accounts_visible else self.source)
@@ -959,6 +1005,7 @@ class Widget:
         return self.source=='spotify' and self.spotify_mode=='native'
 
     def native_web(self):
+        if self.podcast_audio.enabled:return self.podcast_audio
         if self.spotify_native():return self.spotify_web
         if self.source=='yandex-music':return self.yandex_web
         return self.apple_web if self.apple_native() else None
@@ -971,6 +1018,7 @@ class Widget:
         self.save_position()
 
     def start_yandex_wave(self):
+        self.exit_apple_podcast()
         self.music.stop()
         if self.source!='yandex-music':self.select_source('yandex-music')
         self.yandex_panel.request('wave')
@@ -1015,10 +1063,14 @@ class Widget:
             return False
         apple = self.native_web()
         state = apple.state
+        podcast = apple is self.podcast_audio
         self.session = None
-        self.player = ('spotify-native' if self.source=='spotify' else 'yandex-native' if self.source=='yandex-music' else 'apple-native') if apple.connected else None
-        target = Target(self.source, apple.pid, '', self.player or '')
-        self.sound.refresh(target)
+        self.player = ('podcast-native' if podcast else 'spotify-native' if self.source=='spotify' else
+                       'yandex-native' if self.source=='yandex-music' else 'apple-native') if apple.connected else None
+        target = Target(APPLE_PODCASTS if podcast else self.source, apple.pid, '', self.player or '')
+        if not podcast or time.monotonic() - self.youtube_last_sound >= .8 or getattr(self.sound, 'target', None) != target:
+            self.sound.refresh(target)
+            if podcast:self.youtube_last_sound = time.monotonic()
         self.set_meter_target(target)
         self.playing = bool(apple.enabled and state.get('playing'))
         self.meter.start() if self.audio_meter_active() else self.meter.stop()
@@ -1028,7 +1080,8 @@ class Widget:
         authorized = state.get('authorized', False)
         self.title.set_text(state.get('title') or ('Spotify' if self.source=='spotify' else text('Yandex Music','Яндекс Музыка') if self.source=='yandex-music' else 'Apple Music'))
         self.artist.set_text(state.get('artist') or (text('Your library is inside Emberbox','Медиатека внутри плеера') if authorized else text('Connecting your music…','Подключаю твою музыку…')))
-        self.album.set_text(apple.error or state.get('album') or '')
+        self.album.set_text(apple.error or (text('Loading episode…', 'Загружаю выпуск…') if podcast and apple.loading
+                                            else 'Apple Podcasts' if podcast else state.get('album') or ''))
         self.quality.update(self)
         self.time.set_text(f'{stamp(self.position)}  /  {stamp(self.length)}')
         self.progress.set_fraction(max(0.,min(1.,self.position/self.length)) if self.length else 0.)
@@ -1058,6 +1111,7 @@ class Widget:
         self.save_position()
 
     def play_youtube(self, item, queue, start=0, managed=False):
+        self.exit_apple_podcast()
         if not managed:self.music.stop()
         if self.source != 'youtube' or self.youtube_mode != 'native':
             self.select_source('youtube')
@@ -1076,7 +1130,7 @@ class Widget:
 
     def render_youtube(self):
         self.youtube_render_timer = 0
-        if not self.youtube_native() or self.resources_closed:
+        if not self.youtube_native() or self.resources_closed or self.podcast_audio.enabled:
             return False
         audio, item = self.youtube, self.youtube.current
         self.session = None
@@ -1141,6 +1195,7 @@ class Widget:
         self.music_message=self.music.error
 
     def play_apple_uri(self, uri):
+        self.exit_apple_podcast()
         self.music.stop()
         if self.source != 'apple-music' or not uri.startswith('apple:'):
             return
@@ -1208,6 +1263,7 @@ class Widget:
         threading.Thread(target=work, daemon=True).start()
 
     def play_uri(self, uri):
+        self.exit_apple_podcast()
         self.music.stop()
         if self.source != 'spotify':
             return
@@ -1362,6 +1418,10 @@ class Widget:
         return True
 
     def on_action(self, _button, action):
+        if self.podcast_audio.enabled:
+            if action=='open':self.show_podcasts()
+            elif action in ('toggle', 'previous', 'next'):self.podcast_audio.action('transport', action=action)
+            return
         if self.music.loading and action=='toggle':
             self.music.stop(pause_pending=True);self.music.pause(self.source);return
         if self.music.book.active==self.source and action in ('next','previous'):
@@ -1501,7 +1561,8 @@ class Widget:
         if self.native_web():
             web=self.native_web()
             item = web.state
-            state = {**item,'active':bool(item.get('authorized') and web.connected),'source':self.source,
+            state = {**item,'active':bool(item.get('authorized') and web.connected),
+                     'source':APPLE_PODCASTS if web is self.podcast_audio else self.source,
                      'next':item.get('canNext'),'previous':item.get('canPrevious')}
         elif self.youtube_native() and self.youtube.current:
             item = self.youtube.current

@@ -11,7 +11,7 @@ const {FlowDecks}=require('./flow.cjs');let flow=null;
 const {SpatialPlayback}=require('./spatial.cjs');let spatial=null;
 const yandex = process.env.EMBERBOX_WEB_SERVICE === 'yandex';
 const spotify = process.env.EMBERBOX_WEB_SERVICE === 'spotify';
-const integrationVersion = yandex?7:spotify?2:32;
+const integrationVersion = yandex?7:spotify?4:32;
 const service = yandex ? {title:'Yandex Music',origin:'https://music.yandex.ru/',
   url:'https://music.yandex.ru/',command:'emberboxYandexCommand',page:'yandex.js',error:'YANDEX_REQUEST_FAILED'} :
   spotify ? {title:'Spotify',origin:'https://open.spotify.com/',url:'https://open.spotify.com/',
@@ -128,7 +128,7 @@ function spotifyRoute(route) {
   if(url.origin!=='https://open.spotify.com'||url.hash)return '';
   if(url.pathname==='/search'&&[...url.searchParams.keys()].every(k=>k==='q')&&url.searchParams.get('q')?.length<=200)return url.pathname+url.search;
   if(url.search)return '';
-  return /^(\/|\/collection\/(tracks|playlists|albums)|\/(track|album|playlist)\/[A-Za-z0-9]{1,64}|\/artist\/[A-Za-z0-9]{1,64}(\/discography\/(all|album|single|compilation))?|\/search\/[^/]{1,800})$/.test(url.pathname)?url.pathname:'';
+  return /^(\/|\/collection\/(tracks|playlists|albums)|\/(track|album|playlist|show|episode)\/[A-Za-z0-9]{1,64}|\/artist\/[A-Za-z0-9]{1,64}(\/discography\/(all|album|single|compilation))?|\/search\/[^/]{1,800}(\/podcasts)?)$/.test(url.pathname)?url.pathname:'';
  }catch{return '';}
 }
 async function command(win,request){

@@ -50,9 +50,11 @@ def matches(props, target):
     except (ValueError, TypeError):
         pid = 0
     if descendant(pid, target.pid):
-        # Yandex's libmpv now lives in the widget process, alongside YouTube.
-        # Prefer its audio-client name when the server supplies one.
         name = str(props.get('application.name') or '')
+        # Several libmpv transports share the widget PID. A retained paused
+        # publisher stream must never become the new music meter or volume.
+        if name == 'Emberbox Apple Podcasts' or target.player == 'podcast-native':
+            return target.player == 'podcast-native' and name == 'Emberbox Apple Podcasts'
         if target.player == 'yandex-native' and name:
             return name == 'Emberbox Yandex Music'
         return True
