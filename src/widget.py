@@ -50,6 +50,8 @@ from desktop_launch import launch as launch_desktop
 import desktop_window
 from kwin_desktop import KWinDesktop
 from widget_settings import SettingsMenu, settings_button, window_button
+from ember_brand import BrandIgnition, logo
+from welcome_tour import WelcomeTour, SEEN as WELCOME_SEEN, CSS as WELCOME_CSS
 from seasonal_theme import Appearance
 from widget_control import WidgetControl
 from quest_bridge import start_if_enabled as start_quest_bridge
@@ -204,7 +206,7 @@ def stamp(microseconds):
 class Widget:
     def __init__(self):
         provider = Gtk.CssProvider()
-        provider.load_from_data(CSS+QUALITY_CSS+FLOW_CSS+NOTICE_CSS+FAVORITE_CSS)
+        provider.load_from_data(CSS+QUALITY_CSS+FLOW_CSS+NOTICE_CSS+FAVORITE_CSS+WELCOME_CSS)
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -256,7 +258,11 @@ class Widget:
         self.source_picker = SourcePicker(self.select_source, self.launch_apple,self.show_accounts)
         self.fullscreen = None
         self.kwin_desktop = None
-        self.settings = SettingsMenu(lambda: self.toggle_compact(None), self.reconnect_player, self.restart_widget,self.show_accounts,self.show_fullscreen,self.hide_widget,self.quit)
+        self.settings = SettingsMenu(lambda: self.toggle_compact(None), self.reconnect_player,
+                                     self.restart_widget, self.show_accounts, self.show_fullscreen,
+                                     self.hide_widget, self.quit, tour=self.show_welcome)
+        self.welcome = None
+        self.welcome_pending = not saved and not WELCOME_SEEN.is_file()
         self.restarting = False
         self.resources_closed = False
         self.expanded = bool(saved.get('expanded', False))
@@ -269,6 +275,7 @@ class Widget:
         self.drag_offset = None
         self.last_size = None
 
+        Gtk.Window.set_default_icon(logo(128))
         self.window = Gtk.Window(title='Emberbox Audio')
         self.window.set_name('emberbox-audio')
         self.window.set_decorated(False)
@@ -367,6 +374,10 @@ class Widget:
         self.cover_layers=Gtk.Overlay();self.cover_layers.add(self.cover)
         self.cover_pause=CoverPause(self.artwork.pool);self.cover_pause.resize(112,13)
         self.cover_layers.add_overlay(self.cover_pause);self.cover_layers.set_overlay_pass_through(self.cover_pause,True)
+        self.launch_mark = BrandIgnition()
+        self.launch_mark.set_no_show_all(True)
+        self.cover_layers.add_overlay(self.launch_mark)
+        self.cover_layers.set_overlay_pass_through(self.launch_mark, True)
         self.cover_layers.connect('map',lambda *_:GLib.idle_add(self.sync_cover_pause))
         cover_surface.pack_start(self.cover_layers, False, False, 0)
         cover_drag = Gtk.EventBox()
@@ -556,9 +567,11 @@ class Widget:
         self.update_loading()
         if self.expanded and not self.compact:
             GLib.idle_add(self.active_panel().open)
-        if not saved:
-            GLib.idle_add(self.show_accounts)
         GLib.idle_add(self.place_window)
+        if self.welcome_pending:
+            GLib.idle_add(self.show_first_welcome)
+        else:
+            self.launch_mark.ignite(64 if self.compact else 112)
         self.refresh()
         GLib.timeout_add_seconds(1, self.refresh)
         self.frame_health = FrameHealth(self.window,self.animate)
@@ -588,6 +601,8 @@ class Widget:
         self.layout_transition.finish(notify=False)
         self.save_position()
         self.drag_offset=None
+        if self.welcome:
+            self.welcome.destroy()
         self.settings.dismiss_for(self.window)
         if self.source_picker.popover:self.source_picker.popover.dismiss()
         if self.fullscreen:self.fullscreen.hide()
@@ -609,6 +624,9 @@ class Widget:
         if self.resources_closed:
             return
         self.resources_closed = True
+        if self.welcome:
+            self.welcome.destroy()
+        self.launch_mark.stop()
         if getattr(self,'quest_bridge',None):self.quest_bridge.close()
         self.music.close()
         self.layout_transition.finish(notify=False)
@@ -669,7 +687,32 @@ class Widget:
 
     def show_settings(self, button):
         self.drag_offset = None
-        self.settings.show(button, self.compact, {'spotify':'Spotify','apple-music':'Apple Music','youtube':'YouTube','yandex-music':text('Yandex Music','Яндекс Музыка')}[self.source])
+        self.settings.show(button, self.compact)
+
+    def show_first_welcome(self):
+        if self.welcome_pending and self.window.get_mapped() and not self.resources_closed:
+            self.welcome_pending = False
+            self.show_welcome(self.window)
+        return False
+
+    def show_welcome(self, parent):
+        if self.welcome:
+            self.welcome.present()
+            return
+
+        def accounts():
+            if self.fullscreen and parent is self.fullscreen.window:
+                self.fullscreen.hide()
+            self.show_accounts()
+
+        def closed(_window):
+            parent.disconnect(unmap)
+            self.welcome = None
+
+        tour = self.welcome = WelcomeTour(parent, accounts, WELCOME_SEEN)
+        unmap = parent.connect('unmap', lambda *_: tour.destroy())
+        tour.connect('destroy', closed)
+        tour.open()
 
     def show_accounts(self, service=None):
         if self.compact:
@@ -759,6 +802,8 @@ class Widget:
         self.compact_settings.set_visible(self.compact)
         self.restore_button.set_visible(self.compact)
         self.equalizer.set_compact(self.compact)
+        if self.launch_mark.get_visible():
+            self.launch_mark.resize_mark(64 if self.compact else 112)
         self.update_loading()
         if self.compact:
             self.drawer.set_reveal_child(False)

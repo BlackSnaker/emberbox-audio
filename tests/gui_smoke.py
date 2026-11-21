@@ -72,19 +72,54 @@ widget.AppleWeb=DummyAppleWeb
 widget.YandexWeb=DummyAppleWeb
 widget.SpotifyWeb=DummyAppleWeb
 widget.STATE.parent.mkdir(parents=True,exist_ok=True)
-widget.STATE.write_text(json.dumps({'always_on_top':True}))
 started=time.monotonic();app=widget.Widget()
 assert app.appearance.audio_host is app,'Desktop rhythm must bind before fullscreen/settings are opened'
 print('Desktop construction before background lamps:',round(time.monotonic()-started,3),'s')
 try:
     settle()
     from gi.repository import Gdk
+    tour = app.welcome
+    assert tour.get_mapped() and tour.get_transient_for() is app.window
+    assert not app.accounts_visible and not widget.WELCOME_SEEN.exists()
+    wait(lambda: tour.mark.filament.get_allocated_width() >= 132,
+         lambda: 'The welcome logo did not receive its full allocation')
+    tour.next.clicked()
+    assert tour.pages.get_visible_child_name() == '1'
+    tour.next.clicked()
+    assert tour.pages.get_visible_child_name() == '2'
+    tour.back.clicked()
+    assert tour.pages.get_visible_child_name() == '1'
+    tour.next.clicked();tour.next.clicked()
+    assert app.welcome is None and not app.welcome_pending and widget.WELCOME_SEEN.is_file()
+    app.show_first_welcome()
+    assert app.welcome is None
+    app.set_always_on_top(True)
     assert app.always_on_top and app.window.get_type_hint()==Gdk.WindowTypeHint.NORMAL
     app.show_settings(app.settings_button);settle(.1)
     assert app.settings.top_switch.get_active()
     app.settings.top_switch.set_active(False)
     assert not app.always_on_top and json.loads(widget.STATE.read_text())['always_on_top'] is False
     app.settings.popover.dismiss()
+    app.change_compact()
+    app.show_settings(app.compact_settings)
+    app.settings.select_section('system')
+    settle(.3)
+    assert app.settings.tour_button.get_mapped()
+    app.settings.tour_button.clicked()
+    tour = app.welcome
+    assert tour.get_mapped() and tour.index == 0 and app.compact
+    assert not app.settings.popover.get_mapped()
+    tour.skip.clicked()
+    assert app.welcome is None and app.compact
+    app.settings.section = 'player'
+    app.change_compact()
+    app.launch_mark.ignite(112)
+    assert app.cover_layers.get_overlay_pass_through(app.launch_mark)
+    if app.window.get_settings().get_property('gtk-enable-animations'):
+        wait(lambda: 0. < app.launch_mark.filament.get_opacity() < 1. and app.launch_mark.filament.get_mapped(),
+             lambda: 'The launch mark never lit up inside the cover')
+    wait(lambda: not app.launch_mark.get_visible(), lambda: 'The launch mark stayed over the cover')
+    assert not app.launch_mark.tick,'The launch animation kept a frame callback after ending'
     app.accounts_visible=False;app.expanded=False;app.apply_layout();settle(.3)
     app.startup_pending=False
     native=app.spotify_web;native.connected=False;app.update_loading()
@@ -500,6 +535,14 @@ try:
     app.source='apple-music';app.browser_binding='firefox';app.compact=True
     prepared=app.fullscreen
     assert prepared is not None,'Prepare the fullscreen scene before the first click'
+    prepared.open()
+    wait(lambda: not prepared.reveal.active, lambda: 'Fullscreen entrance never finished')
+    prepared.show_settings()
+    app.settings.select_section('system')
+    app.settings.tour_button.clicked()
+    assert app.welcome.get_transient_for() is prepared.window
+    prepared.hide()
+    assert app.welcome is None
     with patch.object(prepared,'open') as opening:
         app.fullscreen_button.clicked();app.show_settings(app.settings_button)
         app.settings.fullscreen_button.clicked()

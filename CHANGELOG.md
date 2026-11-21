@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.36.0 — 2026-11-21 · First light
+
+- Give Ember a filament logo for the desktop launcher and fullscreen header. The filament warms up briefly over the cover at startup, following the system's animation setting.
+- Add a skippable first-launch tour for music services, fullscreen listening and EmberFlow. Replay it from **Settings → System → Meet Ember**, including in Mini and fullscreen.
+- Remove the redundant source and desktop labels from the settings footer.
+
 ## 0.35.0 — 2026-11-18 · Velvet Jazz
 
 - Add Velvet Jazz: deep burgundy cloth, subdued wine reflections, warm brass and soft tungsten light across the desktop widget, Mini and fullscreen room. Preserve artwork pixels and readable warm text.

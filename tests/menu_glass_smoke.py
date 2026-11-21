@@ -208,7 +208,7 @@ try:
             host.window.move(screen_x+screen_w-size[0]-10, screen_y+screen_h-size[1]-10)
             settle(.1)
             original = host.window.get_size()
-            host.settings.show(host.anchor, size[0] == 320, 'Apple Music')
+            host.settings.show(host.anchor, size[0] == 320)
             menu = host.settings
             wait(lambda: menu.popover.get_mapped(), 'Settings did not open')
             observe_fade(menu.popover, True)
@@ -245,7 +245,7 @@ try:
         # The soundstage is a second native popup with real GTK combobox menus.
         # A nested grab must return to the soundstage, not dismiss it or leave
         # a dead layer that consumes subsequent clicks.
-        menu.show(host.anchor, True, 'Apple Music')
+        menu.show(host.anchor, True)
         menu.select_section('audio')
         settle(.35)
         menu.scene_button.clicked()
@@ -269,7 +269,7 @@ try:
 
         # Rapid changes cannot restore the classic theme or leave two visible
         # sections. Reduced motion must switch directly to the requested page.
-        menu.show(host.anchor, False, 'Apple Music')
+        menu.show(host.anchor, False)
         menu.select_section('appearance')
         settle(.3)
         for theme in ('classic', 'christmas', 'mirrorball', 'velvet', 'nocturne'):
@@ -303,7 +303,7 @@ try:
         try:
             menu.popover.popdown()
             assert not menu.popover.get_mapped() and not menu.popover._tick
-            menu.show(host.anchor, False, 'Apple Music')
+            menu.show(host.anchor, False)
             assert menu.popover.get_mapped() and menu.popover.get_opacity() == 1. and not menu.popover._tick
             menu.select_section('system')
             settle(.05)
@@ -373,14 +373,14 @@ try:
         # small menu repeatedly cannot retain every old Appearance callback.
         listeners = len(host.appearance.listeners)
         for _ in range(8):
-            menu.show(host.anchor, True, 'Apple Music')
+            menu.show(host.anchor, True)
             menu.select_section('player')
             picker.show(host.source_anchor, 'apple-music', [], '')
             picker.popover.popdown()
             menu.popover.popdown()
             settle(.04)
         assert len(host.appearance.listeners) <= listeners+1, 'Reopening menus retained stale theme subscriptions'
-        menu.show(host.anchor, True, 'Apple Music')
+        menu.show(host.anchor, True)
         settle(.15)
         host.window.hide()
         wait(lambda: not menu.popover.get_mapped(), 'Hiding the player left an orphaned settings window')

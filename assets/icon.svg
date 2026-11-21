@@ -1,6 +1,44 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
- <defs><linearGradient id="case" x2=".8" y2="1"><stop stop-color="#48473d"/><stop offset="1" stop-color="#282b25"/></linearGradient><linearGradient id="gas" x2="0" y2="1"><stop stop-color="#ffe6a5"/><stop offset=".5" stop-color="#ffb347"/><stop offset="1" stop-color="#ef741a"/></linearGradient><filter id="glow" x="-300%" y="-100%" width="700%" height="300%"><feGaussianBlur stdDeviation="4"/></filter></defs>
- <rect x="6" y="8" width="116" height="112" rx="28" fill="#1b1f18"/>
- <rect x="6" y="5" width="116" height="112" rx="28" fill="url(#case)"/>
- <path d="M29 14h62" stroke="#fbf1c7" stroke-opacity=".08" stroke-linecap="round"/>
- <rect x="28" y="25" width="20" height="68" rx="10" fill="#1c201a" stroke="#80745b" stroke-opacity=".6"/><rect x="34" y="57" width="8" height="29" rx="4" fill="#fe8019" filter="url(#glow)"/><rect x="36" y="57" width="4" height="29" rx="2" fill="url(#gas)"/><path d="M31 34v40" stroke="#fbf1c7" stroke-opacity=".2" stroke-linecap="round"/><rect x="54" y="25" width="20" height="68" rx="10" fill="#1c201a" stroke="#80745b" stroke-opacity=".6"/><rect x="60" y="37" width="8" height="49" rx="4" fill="#fe8019" filter="url(#glow)"/><rect x="62" y="37" width="4" height="49" rx="2" fill="url(#gas)"/><path d="M57 34v40" stroke="#fbf1c7" stroke-opacity=".2" stroke-linecap="round"/><rect x="80" y="25" width="20" height="68" rx="10" fill="#1c201a" stroke="#80745b" stroke-opacity=".6"/><rect x="86" y="48" width="8" height="38" rx="4" fill="#fe8019" filter="url(#glow)"/><rect x="88" y="48" width="4" height="38" rx="2" fill="url(#gas)"/><path d="M83 34v40" stroke="#fbf1c7" stroke-opacity=".2" stroke-linecap="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="128" height="128" viewBox="0 0 128 128">
+  <title>Ember</title>
+  <defs>
+    <linearGradient id="shell" x1="0%" y1="0%" x2="82%" y2="100%">
+      <stop stop-color="#53524b"/>
+      <stop offset=".46" stop-color="#27292a"/>
+      <stop offset="1" stop-color="#101315"/>
+    </linearGradient>
+    <linearGradient id="bevel" x2="58%" y2="100%">
+      <stop stop-color="#edddbc" stop-opacity=".57"/>
+      <stop offset=".5" stop-color="#706456" stop-opacity=".32"/>
+      <stop offset="1" stop-color="#080909"/>
+    </linearGradient>
+    <radialGradient id="glass" cx="55%" cy="47%" r="68%">
+      <stop stop-color="#433023"/>
+      <stop offset=".56" stop-color="#201d19"/>
+      <stop offset="1" stop-color="#111416"/>
+    </radialGradient>
+    <linearGradient id="reflection" x2="30%" y2="100%">
+      <stop stop-color="#fff5df" stop-opacity=".15"/>
+      <stop offset="1" stop-color="#fff5df" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="filament" x1="22%" y1="0%" x2="72%" y2="100%">
+      <stop stop-color="#fff1c6"/>
+      <stop offset=".43" stop-color="#ffc074"/>
+      <stop offset="1" stop-color="#ff8037"/>
+    </linearGradient>
+    <path id="mark" d="M88 37H59c-7.7 0-12.1 3.6-14.1 11L35.6 80c-2.1 7.2 1.5 11 8.5 11H74M40 64h36"/>
+  </defs>
+  <rect x="5" y="7" width="118" height="118" rx="30" fill="#101214"/>
+  <rect x="5.5" y="4.5" width="117" height="117" rx="29.5" fill="url(#shell)" stroke="url(#bevel)"/>
+  <rect x="13" y="12" width="102" height="102" rx="23" fill="#0d1011" stroke="#d7b992" stroke-opacity=".19"/>
+  <rect x="16" y="15" width="96" height="96" rx="20" fill="url(#glass)"/>
+  <path d="M16 36a21 21 0 0 1 21-21h54a21 21 0 0 1 20 15C80 27 48 44 16 65z" fill="url(#reflection)"/>
+  <g id="ignition" opacity="1">
+    <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <use href="#mark" xlink:href="#mark" stroke="#fa661e" stroke-width="20" opacity=".10"/>
+      <use href="#mark" xlink:href="#mark" stroke="#f17830" stroke-width="14" opacity=".23"/>
+      <use href="#mark" xlink:href="#mark" stroke="url(#filament)" stroke-width="8"/>
+    </g>
+    <circle cx="93" cy="64" r="7" fill="#ed6b25" opacity=".17"/>
+    <circle cx="93" cy="64" r="3.8" fill="#ffd197"/>
+  </g>
+</svg>

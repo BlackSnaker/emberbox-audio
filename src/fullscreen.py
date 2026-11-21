@@ -224,7 +224,11 @@ class FullscreenPlayer:
         self.header_layout=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=8);header.add(self.header_layout)
         toolbar=Gtk.Box(spacing=8);self.toolbar=toolbar;self.header_layout.pack_start(toolbar,False,False,0)
         wordmark=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=3);self.wordmark=wordmark
-        wordmark.pack_start(label('EMBER','stage-brand'),False,False,0)
+        from ember_brand import logo
+        signature = Gtk.Box(spacing=7)
+        signature.pack_start(Gtk.Image.new_from_pixbuf(logo(24)), False, False, 0)
+        signature.pack_start(label('EMBER','stage-brand'), False, False, 0)
+        wordmark.pack_start(signature,False,False,0)
         self.edition_label=label(text('CLASSIC','КЛАССИКА'),'stage-overline')
         self.edition_label.set_line_wrap(True);self.edition_label.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
         self.edition_label.set_width_chars(1);self.edition_label.set_max_width_chars(72)
@@ -863,8 +867,7 @@ class FullscreenPlayer:
     def show_settings(self):
         if self.reveal.active:return
         h=self.host
-        names={'spotify':'Spotify','apple-music':'Apple Music','youtube':'YouTube','yandex-music':text('Yandex Music','Яндекс Музыка')}
-        h.settings.show(self.settings_button,h.compact,names.get(h.source,h.source),stage=self)
+        h.settings.show(self.settings_button,h.compact,stage=self)
 
     def open_accounts(self):
         self.hide();self.host.show_accounts()

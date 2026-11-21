@@ -388,6 +388,10 @@ Then open **Emberbox Audio** from your applications menu. Omit `--autostart` to 
 
 To run from the checkout after dependencies are ready, use `./run.sh`.
 
+The optional first-launch tour covers music services, fullscreen controls and EmberFlow. Replay it from **Settings → System → Meet Ember**.
+
+The `main` branch tracks development at **0.36.0**.
+
 Select a source in the header. Apple Music plays through a background web engine, with playlists, albums, songs and catalogue search inside Emberbox. It requires a compatible installed DRM-capable runtime and an Apple Music subscription. [One-time setup →](docs/APPLE_MUSIC.md)
 
 Connect Spotify in **Settings → Player → Accounts & sign-in** and listen inside Ember. The desktop client remains an optional MPRIS fallback. [Spotify setup →](docs/SPOTIFY.md)

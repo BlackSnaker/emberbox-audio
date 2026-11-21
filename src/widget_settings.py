@@ -29,12 +29,14 @@ def window_button(icon_name, name, callback):
 
 
 class SettingsMenu:
-    def __init__(self, compact, refresh, restart, accounts=None, fullscreen=None, hide=None, quit=None, dj=None):
+    def __init__(self, compact, refresh, restart, accounts=None, fullscreen=None, hide=None, quit=None, dj=None,
+                 tour=None):
         self.compact, self.refresh, self.restart = compact, refresh, restart
         self.accounts, self.fullscreen = accounts, fullscreen
         owner = getattr(fullscreen, '__self__', None)
         self.dj = dj or ((lambda: self.open_dj(owner)) if owner else None)
         self.hide, self.quit = hide, quit
+        self.tour = tour
         self.popover = None
         self.section = 'player'
         self.selecting = False
@@ -71,7 +73,7 @@ class SettingsMenu:
         finally:
             self.selecting = False
 
-    def show(self, anchor, compact, source, stage=None):
+    def show(self, anchor, compact, stage=None):
         if self.popover:
             self.popover.destroy()
         popup = self.popover = GlassPopover(anchor, 'settings-popover')
@@ -164,6 +166,8 @@ class SettingsMenu:
         if self.accounts:
             self.accounts_button = action('player', text('Accounts & sign-in', 'Аккаунты и вход'), desktop_action(self.accounts),
                                           'avatar-default-symbolic', 'Spotify · Apple Music · YouTube · '+text('Yandex', 'Яндекс'))
+        self.mode_button = action('player', text('Full player', 'Обычный режим') if compact else text('Compact player', 'Компактный режим'),
+                                  desktop_action(self.compact), 'view-dual-symbolic')
         # Small tactile badges keep all four sources recognisable even in Mini.
         from service_icons import service_icon
         services = Gtk.Grid(column_spacing=12,row_spacing=8)
@@ -188,8 +192,6 @@ class SettingsMenu:
             self.top_switch.connect('notify::active',lambda item,_p:owner.set_always_on_top(item.get_active()))
             row.pack_end(self.top_switch,False,False,0)
             self.pages['player'].pack_start(row,False,False,0)
-        self.mode_button = action('player', text('Full player', 'Обычный режим') if compact else text('Compact player', 'Компактный режим'),
-                                  desktop_action(self.compact), 'view-dual-symbolic')
 
         audio = self.pages['audio']
         audio.pack_start(label(text('Sound & transitions', 'Звук и переходы'), 'menu-section-title'), False, False, 0)
@@ -230,17 +232,17 @@ class SettingsMenu:
         self.build_appearance(appearance)
         system = self.pages['system']
         system.pack_start(label(text('Connections & player', 'Подключения и приложение'), 'menu-section-title'), False, False, 0)
+        if self.tour:
+            def open_tour():
+                popup.dismiss()
+                self.tour(anchor.get_toplevel())
+            self.tour_button = action('system', text('Meet Ember', 'Знакомство с Ember'), open_tour, 'help-about-symbolic')
         self.refresh_button = action('system', text('Refresh connections', 'Обновить подключения'), self.refresh, 'view-refresh-symbolic')
         self.restart_button = action('system', text('Restart player', 'Перезапустить плеер'), self.restart, 'system-reboot-symbolic')
         if self.hide:
             self.hide_button = action('system', text('Hide player', 'Скрыть плеер'), self.hide, 'window-minimize-symbolic')
         if self.quit:
             self.quit_button = action('system', text('Close player', 'Закрыть плеер'), self.quit, 'window-close-symbolic', danger=True)
-        footer = Gtk.Box(spacing=7)
-        footer.pack_start(label('●', 'source-status', False), False, False, 0)
-        footer.pack_start(label(source, 'menu-subtitle', False), True, True, 0)
-        footer.pack_end(label(text('DESKTOP', 'ПК'), 'menu-brand', False), False, False, 0)
-        popup.body.pack_start(footer, False, False, 0)
         self.select_section(self.section)
         popup.present()
 
