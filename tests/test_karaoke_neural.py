@@ -8,7 +8,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 try:
     import scipy
     from karaoke_neural import (stft,istft,NeuralSeparator,NeuralBlocks,WINDOW_SAMPLES,
-                                MODEL_SAMPLES,LOOKAHEAD,FREQUENCIES,FRAMES)
+                                MODEL_SAMPLES,LOOKAHEAD,FREQUENCIES,FRAMES,protect_accompaniment)
 except ImportError:scipy=None
 
 
@@ -47,6 +47,18 @@ class NeuralTests(unittest.TestCase):
             needed=engine.required;result.append(engine.process(pcm[offset:offset+needed]));offset+=needed
         np.testing.assert_array_equal(np.concatenate(result),pcm[:block*4])
 
+    def test_dialled_zero_returns_to_exact_dry_audio(self):
+        class Voice:
+            def vocals(self,pcm):return pcm*.25
+        block=32768;engine=NeuralBlocks(Voice(),block,1.)
+        pcm=np.random.default_rng(24).normal(0,.1,(block*4+LOOKAHEAD,2)).astype(np.float32)
+        offset=0
+        for step in range(4):
+            if step==1:engine.target=0.
+            end=offset+engine.required
+            rendered=engine.process(pcm[offset:end]);offset=end
+        np.testing.assert_array_equal(rendered,pcm[3*block:4*block])
+
     def test_stems_mix_without_mid_side_cancellation_or_boundary_jumps(self):
         class Voice:
             def vocals(self,pcm):
@@ -65,6 +77,20 @@ class NeuralTests(unittest.TestCase):
         with patch.object(separator,'vocals'),patch('karaoke_neural.time.monotonic',side_effect=(0,1.,2.,3.)):
             with self.assertRaisesRegex(RuntimeError,'ai-too-slow'):separator.benchmark()
 
+    def test_overlap_eases_between_different_vocal_estimates(self):
+        class Voice:
+            amount=0.
+            def vocals(self,pcm):return np.full_like(pcm,self.amount)
+        voice=Voice();engine=NeuralBlocks(voice,32768,1.)
+        first=engine.process(np.full((engine.required,2),.25,np.float32))
+        voice.amount=.08
+        second=engine.process(np.full((engine.required,2),.25,np.float32))
+        overlap=len(engine.overlap_gain)
+        np.testing.assert_array_equal(first[-1],second[0])
+        self.assertLess(abs(float(second[1,0]-second[0,0])),1e-6)
+        self.assertLess(abs(float(second[overlap-1,0]-second[overlap-2,0])),1e-6)
+        np.testing.assert_allclose(second[overlap:],.17,atol=1e-7)
+
     def test_denoise_cancels_polarity_independent_model_noise(self):
         class Session:
             def __init__(self):self.inputs=[]
@@ -81,6 +107,18 @@ class NeuralTests(unittest.TestCase):
         self.assertEqual(len(session.inputs),2)
         np.testing.assert_array_equal(session.inputs[1],-session.inputs[0])
         np.testing.assert_allclose(result[4096:-4096],pcm[4096:-4096]*.5175,atol=.001)
+
+    def test_protects_instrumental_passages_without_changing_strong_vocal_phase(self):
+        mixture=np.zeros((1,4,FREQUENCIES,FRAMES),np.float32)
+        mixture[0,:,120,:]=np.array([1,-2,3,4],np.float32)[:,None]
+        voice=mixture.copy()
+        voice[..., :32]*=.01
+        voice[..., 32:]*=.5
+        voice[..., 4,:]=.1
+        corrected=protect_accompaniment(voice,mixture)
+        np.testing.assert_allclose(corrected[0,:,120,:26],voice[0,:,120,:26]*.35,atol=1e-7)
+        np.testing.assert_array_equal(corrected[0,:,120,38:],voice[0,:,120,38:])
+        np.testing.assert_array_equal(corrected[0,:,4,:],0.)
 
     def test_full_strength_overload_is_limited_without_flat_clipped_peaks(self):
         class Voice:

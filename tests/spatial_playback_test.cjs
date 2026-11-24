@@ -4,6 +4,7 @@ const root=fs.mkdtempSync(path.join(os.tmpdir(),'ember-spatial-controller-'));
 const calls=[],commands=[];let defer=null;
 fs.writeFileSync(path.join(root,'host'),'fixture');fs.writeFileSync(path.join(root,'decoder'),'fixture');
 process.env.EMBERBOX_SPATIAL_RUNTIME=path.join(root,'runtime.json');process.env.EMBERBOX_SPATIAL_CONFIG=path.join(root,'preference.json');
+process.env.EMBERBOX_SPATIAL_WORKER=path.join(root,'worker.py');
 fs.writeFileSync(process.env.EMBERBOX_SPATIAL_RUNTIME,JSON.stringify({schema:1,host:path.join(root,'host'),decoder:path.join(root,'decoder')}));
 const {SpatialPlayback}=require('../src/apple_web_host/spatial.cjs');
 const win={isDestroyed:()=>false};
@@ -173,11 +174,26 @@ p.loadDeck=async(r,deck,prepared)=>{deck.context=prepared.contextId;deck.child=c
  pauseRelease();assert.equal((await lateCold).superseded,true);
  assert.equal(p.session.active.metadata.id,'456','An older pause acknowledgement replaced the latest cold selection');
  p.page=realPage;await p.stop(false);
+ const fixtureLoad=p.load,fixtureSpawn=p.spawn,fixtureWire=p.wire;
+ p.load=SpatialPlayback.prototype.load;p.spawn=()=>{const mixer=child();mixer.stdio[3].on=()=>{};return mixer;};p.wire=()=>{};
+ let finishColdPrime;const coldActions=[];
+ p.source=async(w,request)=>{
+  coldActions.push(request.action);
+  if(request.action==='prime'){await new Promise(resolve=>finishColdPrime=resolve);return {ready:true};}
+  return ordinarySource(w,request);
+ };
+ const coldHover=p.prime(win,{kind:'songs',id:'456'});
+ await p.intercept(win,{method:'play',params:{kind:'songs',id:'456'}});await tick();
+ assert.deepEqual(coldActions,['prime'],'A first Play should join its ongoing manifest preparation');
+ finishColdPrime();await coldHover;await tick();
+ assert.deepEqual(coldActions,['prime','prepare']);assert.equal(p.session.active.ready,true);
+ await p.stop(false);p.source=ordinarySource;p.load=fixtureLoad;p.spawn=fixtureSpawn;p.wire=fixtureWire;
  const realPrime=p.prime,listed=[];
  p.prime=async(w,item)=>{listed.push(item.id);return {ready:true};};
- p.primeList(win,{tracks:[{kind:'albums',id:'album'},{kind:'library-songs',id:'i.first'},{kind:'songs',id:'789'},{kind:'songs',id:'unrequested'}]});
+ p.primeList(win,{tracks:[{kind:'albums',id:'album'},{kind:'songs',id:'unavailable',playable:false},
+  {kind:'library-songs',id:'i.first',catalogId:'456'},{kind:'songs',id:'789'},{kind:'songs',id:'unrequested'}]});
  await new Promise(resolve=>setTimeout(resolve,400));
- assert.deepEqual(listed,['i.first','789'],'Library album rows did not prime the bounded first two songs');
+ assert.deepEqual(listed,['456','789'],'Prime the first two playable album tracks with verified catalogue IDs');
  p.prime=realPrime;
  await p.configure(true);current={...metadata};p.merge(win,metadata);r=p.session;r.active.quality=quality;r.state.phase='playing';
  const sceneWorker=r.active.child,sceneMixer=r.mixer,scenePosition=r.state.position;

@@ -358,9 +358,10 @@ async function emberboxAppleCommand(request) {
       if(!albumId)throw Error('NOT_FOUND');
     }
     if(!/^\d{1,20}$/.test(albumId))throw Error('Invalid album');
+    if(offset)return page(await read(`/v1/catalog/${sf}/albums/${albumId}/tracks`,{limit:100,offset}));
     const resource=(await read(`/v1/catalog/${sf}/albums/${albumId}`,{extend:'editorialNotes'})).data?.[0];
     if(!resource||resource.type!=='albums'||String(resource.id)!==albumId)throw Error('NOT_FOUND');
-    const tracks=offset?await read(`/v1/catalog/${sf}/albums/${albumId}/tracks`,{limit:100,offset}):resource.relationships?.tracks||{};
+    const tracks=resource.relationships?.tracks||await read(`/v1/catalog/${sf}/albums/${albumId}/tracks`,{limit:100,offset:0});
     return {release:item(resource),...page(tracks)};
   }
   if (request.method === 'search') {

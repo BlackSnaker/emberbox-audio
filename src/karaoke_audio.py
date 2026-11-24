@@ -26,6 +26,7 @@ RATE=48000
 SIZE=2048
 HOP=512
 PREFIX=f'emberbox_karaoke_{os.getuid()}_'
+STREAM_WAIT=8
 
 
 class VocalFilter:
@@ -140,23 +141,17 @@ class Route:
         temporary.replace(self.path)
 
     def start(self):
-        streams=[s for s in pactl('list','sink-inputs',json_output=True) if matches(s.get('properties',{}),self.target)]
-        sinks=pactl('list','sinks',json_output=True)
-        names={str(s['index']):s['name'] for s in sinks}
-        destinations={names.get(str(s['sink'])) for s in streams}
-        destinations.discard(None)
-        if len(destinations)>1:raise RuntimeError('multiple-outputs')
-        if not streams:raise RuntimeError('no-stream')
-        if any(s.get('channel_map')!='front-left,front-right' for s in streams):raise RuntimeError('stereo-required')
-        self.destination=next(iter(destinations),pactl('get-default-sink'))
-        if self.destination.startswith(PREFIX):raise RuntimeError('invalid-output')
+        self.destination=self.wait_for_stream()
         if self.engine=='ai':
             self.notify(phase='model')
             from karaoke_neural import NeuralSeparator,NeuralBlocks,LOOKAHEAD
-            separator=NeuralSeparator()
+            separator=NeuralSeparator(protect_backing=True)
             block,duration=separator.benchmark()
             self.neural=NeuralBlocks(separator,block,self.amount)
             self.delay=block/RATE+LOOKAHEAD/RATE+duration*1.4+.15
+            # The provider can replace its stream or the user can change the
+            # system output during inference warm-up. Resolve the live route.
+            self.destination=self.wait_for_stream()
         if self.stop.is_set():raise RuntimeError('cancelled')
         # Save before creating anything, so a crash during setup is recoverable.
         self.save()
@@ -184,6 +179,28 @@ class Route:
         if self.engine=='ai':self.notify(phase='buffering',delay=self.delay)
         self.thread=threading.Thread(target=self.audio,daemon=True);self.thread.start()
         self.refresh()
+
+    def wait_for_stream(self):
+        deadline=time.monotonic()+STREAM_WAIT
+        announced=False
+        while not self.stop.is_set():
+            streams=[s for s in pactl('list','sink-inputs',json_output=True)
+                     if matches(s.get('properties',{}),self.target)]
+            if streams:
+                names={str(s['index']):s['name'] for s in pactl('list','sinks',json_output=True)}
+                destinations={names.get(str(s['sink'])) for s in streams}
+                if None not in destinations:
+                    if len(destinations)>1:raise RuntimeError('multiple-outputs')
+                    if any(s.get('channel_map')!='front-left,front-right' for s in streams):
+                        raise RuntimeError('stereo-required')
+                    destination=destinations.pop()
+                    if destination.startswith(PREFIX):raise RuntimeError('invalid-output')
+                    return destination
+            if time.monotonic()>=deadline:raise RuntimeError('no-stream')
+            if not announced:
+                self.notify(phase='waiting-stream');announced=True
+            self.stop.wait(.12)
+        raise RuntimeError('cancelled')
 
     def refresh(self):
         # The real output must still exist; stop rather than leave a silent sink.
@@ -321,7 +338,7 @@ class KaraokeAudio:
     def __init__(self,changed=lambda:None):
         self.changed=changed;self.process=None;self.active=False;self.starting=False
         self.error='';self.amount=.7;self.target=None;self.closed=False
-        self.retiring=set();self.pending=None
+        self.retiring=set();self.pending=None;self.target_wait=0
         self.engine='ai';self.delay=0.;self.phase='';self.setup_process=None;self.setup_stage='';self.setup_fraction=0.
         self.muted=False
         self.pulse_available=bool(shutil.which('pacat') and shutil.which('pactl'))
@@ -378,18 +395,21 @@ class KaraokeAudio:
         except Exception:pass
 
     def enable(self,target):
-        if self.closed or self.process or not self.available:return
-        if not target or not target.player:self.error='no-stream';self.changed();return
+        if self.closed or self.process or self.target_wait or not self.available:return
+        self.target=target;self.error='';self.starting=True;self.phase='waiting-stream'
+        if not target or not target.player:
+            from gi.repository import GLib
+            self.target_wait=GLib.timeout_add_seconds(STREAM_WAIT,self._target_timed_out)
+            self.changed();return
         if self.retiring:
-            self.pending=target;self.target=target;self.starting=True;self.changed();return
-        self.target=target;self.error='';self.starting=True
+            self.pending=target;self.changed();return
         try:
             python=str(karaoke_model.PYTHON) if self.engine=='ai' else sys.executable
             self.process=subprocess.Popen([python,'-B',str(Path(__file__).resolve()),
                 '--worker',json.dumps(target.__dict__),str(self.amount),self.engine,str(int(self.muted))],stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,bufsize=1)
         except OSError:
-            self.error='audio-failed';self.starting=False;self.changed();return
+            self.error='audio-failed';self.starting=False;self.phase='';self.changed();return
         process=self.process
         threading.Thread(target=self._read,args=(process,),daemon=True).start()
         self.changed()
@@ -412,13 +432,19 @@ class KaraokeAudio:
             if self.phase:self.starting=True
             value=message.get('delay',self.delay)
             if isinstance(value,(int,float)) and math.isfinite(value):self.delay=max(0,min(8,float(value)))
-            self.error=str(message.get('error') or '');self.changed()
+            self.error=str(message.get('error') or '')
+            if self.error:
+                # The helper reports errors before restoring the dry route.
+                # A new click is allowed to queue behind that restoration.
+                self.process=None;self.retiring.add(process)
+                self.active=self.starting=False;self.phase='';self.delay=0.
+            self.changed()
         return False
 
     def _ended(self,process):
         self.retiring.discard(process)
         if self.process is process:
-            self.process=None;self.active=self.starting=False
+            self.process=None;self.active=self.starting=False;self.phase='';self.delay=0.
             if not self.error:self.error='ai-runtime-invalid' if self.engine=='ai' else 'audio-failed'
             if not self.closed:self.changed()
         if not self.retiring and self.pending and not self.closed:
@@ -442,6 +468,7 @@ class KaraokeAudio:
     def disable(self):
         process=self.process;self.process=None;self.active=self.starting=False;self.error='';self.target=None;self.delay=0.;self.phase=''
         self.pending=None
+        self._cancel_target_wait()
         if process:
             self.retiring.add(process)
             # SIGTERM reaches the helper's finally even if its input pipe is busy.
@@ -450,7 +477,26 @@ class KaraokeAudio:
         if not self.closed:self.changed()
 
     def check_target(self,target):
+        if self.target_wait:
+            if not target:return
+            if self.target and target.source!=self.target.source:
+                self.disable()
+            elif target.player:
+                self._cancel_target_wait()
+                self.enable(target)
+            return
+        if self.starting and target and self.target and target.source==self.target.source and not target.player:return
         if (self.process or self.pending) and target!=self.target:self.disable()
+
+    def _cancel_target_wait(self):
+        if self.target_wait:
+            from gi.repository import GLib
+            GLib.source_remove(self.target_wait);self.target_wait=0
+
+    def _target_timed_out(self):
+        self.target_wait=0;self.starting=False;self.phase='';self.target=None
+        self.error='no-stream';self.changed()
+        return False
 
     def close(self):
         self.closed=True;self.disable()

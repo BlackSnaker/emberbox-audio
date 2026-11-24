@@ -944,6 +944,10 @@ class FullscreenPlayer:
     def on_key(self,_window,event):
         if getattr(self.host,'settings',None) and self.host.settings.is_open_for(self.window):return False
         key=Gdk.keyval_name(event.keyval)
+        reader=self.podcasts.reader if self.page=='podcasts' else None
+        if reader and reader.get_mapped():
+            if key=='Escape':reader.popdown();return True
+            return False
         if key in ('Escape','F11'):self.dismiss();return True
         if key=='Left' and event.state&Gdk.ModifierType.MOD1_MASK and self.page=='artist':self.artist_view.back();return True
         if event.state&Gdk.ModifierType.CONTROL_MASK and key.lower()=='f':

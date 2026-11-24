@@ -10,6 +10,7 @@ import fullscreen_smoke as f
 import fullscreen
 from source_picker import text
 from artist_header import portrait_rect
+from music_library import MusicRepository
 from gi.repository import Gdk,Gtk
 
 tracks=[{'id':str(i),'uri':'spotify:track:'+str(i),'title':name,'artist':'Emberbox Sessions',
@@ -229,6 +230,26 @@ with patch('urllib.request.urlopen',side_effect=AssertionError('Unexpected netwo
         host.source='youtube';stage.update();release.set();block[0]=False
         wait(lambda:view.source=='youtube' and view.profile is not None and view.profile.get('name')=='A video channel')
         assert view.search_only and not view.album_buttons
+        # Keep one real catalogue call blocked while the foreground opens the
+        # album the user actually chose. The late response must be ignored.
+        host.source='apple-music';entered.clear();release.clear();apple_requests=[]
+        def apple_request(method,**params):
+            ident=params['id'];apple_requests.append((method,ident))
+            if ident=='100':entered.set();release.wait(8)
+            song={'id':ident+'1','uri':'apple:songs:'+ident+'1','kind':'songs',
+                  'title':'Track from '+ident,'playable':True}
+            return {'release':{'id':ident,'title':'Album '+ident,'kind':'albums'},'items':[song]}
+        host.apple_web.request=apple_request
+        service.repository.load=MusicRepository.load.__get__(service.repository)
+        stage.show_album({'id':'100','title':'Album 100'});wait(entered.is_set)
+        stage.show_album({'id':'200','title':'Album 200'})
+        wait(lambda:bool(view.items) and view.items[0]['id']=='2001')
+        assert not release.is_set()
+        release.set();f.settle(.3)
+        assert view.items[0]['id']=='2001'
+        stage.show_album({'id':'200','title':'Another display title','songId':'2001'})
+        assert not view.busy and view.items[0]['id']=='2001'
+        assert apple_requests==[('release','100'),('release','200')]
         stage.hide();assert not view.active
         stage.close();assert view.closed
         print('PASS dense artist overview, sparse real catalogue, in-room navigation, prose, background loading, accessible controls, queue continuation, choices, source guards and three screen sizes')

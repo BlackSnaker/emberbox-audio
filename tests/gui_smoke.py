@@ -542,10 +542,11 @@ try:
     podcasts = prepared.podcasts
     show = {'id':'42','kind':'show','title':'Example show','feed':'https://example.org/feed',
             'language':'en','categories':['history']}
-    episode = {'id':'43','kind':'episode','title':'Example episode','url':'https://example.org/episode.mp3'}
+    episode = {'id':'43','kind':'episode','title':'Example episode','url':'https://example.org/episode.mp3',
+               'description':'Episode notes.\n\nSecond paragraph.'}
     with (patch.object(podcasts.discovery, 'browse', return_value=[show]),
           patch.object(podcasts.discovery, 'search', return_value=[show]) as search,
-          patch.object(podcasts.catalogue, 'load', return_value=[episode]) as load):
+          patch.object(podcasts.catalogue, 'open_show', return_value=(dict(show,description='Show notes.'),[episode])) as load):
         prepared.show_page('podcasts', force=True)
         wait(lambda: podcasts.results == [show] and not prepared.page_transition.active,
              lambda: 'The podcast wall did not load')
@@ -560,9 +561,17 @@ try:
         podcasts.wall.get_children()[0].get_child().clicked()
         wait(lambda: podcasts.results == [episode], lambda: 'Opening a show returned no episodes')
         with patch.object(app, 'play_podcast') as play:
-            podcasts.list.get_children()[0].clicked()
+            podcasts.show_info.clicked();settle()
+            assert podcasts.reader and podcasts.reader.get_mapped()
+            podcasts.reader.popdown();settle(.3)
+            listen, read = podcasts.list.get_children()[0].get_children()
+            read.clicked();settle()
+            assert podcasts.reader and podcasts.reader.get_mapped()
+            play.assert_not_called()
+            podcasts.reader.popdown();settle(.3)
+            listen.clicked()
             play.assert_called_once_with('apple-podcasts', episode, [episode])
-        load.assert_called_once_with('apple-podcasts', 'Example', show)
+        load.assert_called_once_with('apple-podcasts', show)
     podcasts.providers['spotify'].clicked()
     assert podcasts.provider == 'spotify' and podcasts.sign_in.get_visible()
     wait(lambda: not prepared.page_transition.active, lambda: 'Podcasts page transition never finished')

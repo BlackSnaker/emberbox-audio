@@ -107,19 +107,23 @@ class SpatialPlayback {
  }
  prime(win,p){
   if(!['songs','library-songs'].includes(p.kind)||!/^\w[\w.-]{0,199}$/.test(String(p.id)))throw Error('INVALID_ARGUMENTS');
-  if(!this.enabled||!this.session?.active.quality||this.session.manual||this.session.standby&&!this.session.standby.ready)return Promise.resolve({ready:false});
-  if(this.primeJob?.id===p.id&&this.primeJob.kind===p.kind)return this.primeJob.promise;
+  const r=this.session;
+  if(!this.enabled||r&&(!r.active.quality||r.manual||r.standby&&!r.standby.ready))return Promise.resolve({ready:false});
+  const nativeRuntime=r?.nativeRuntime||runtime();
+  if(!nativeRuntime)return Promise.resolve({ready:false});
+  if(this.primeJob?.win===win&&this.primeJob.id===p.id&&this.primeJob.kind===p.kind)return this.primeJob.promise;
   this.cancelPrime();
   const job={win,id:p.id,kind:p.kind,requestKey:'native-'+(++this.generation)};this.primeJob=job;
   // Manifests only: no extra decoder, licensed host, audio download or output.
-  job.promise=this.source(win,{action:'prime',id:p.id,kind:p.kind,requestKey:job.requestKey,allowStereo:true,fairplay:!!this.session.nativeRuntime?.fairplay})
+  job.promise=this.source(win,{action:'prime',id:p.id,kind:p.kind,requestKey:job.requestKey,allowStereo:true,fairplay:!!nativeRuntime.fairplay})
    .finally(()=>{if(this.primeJob===job)this.primeJob=null;});
   return job.promise;
  }
  primeList(win,result){
   if(this.primeJob||this.session?.manual)return;
   clearTimeout(this.primeTimer);
-  const items=(result?.items||result?.tracks||[]).filter(p=>['songs','library-songs'].includes(p.kind)&&/^\w[\w.-]{0,199}$/.test(String(p.id))).slice(0,2),revision=this.revision;
+  const items=(result?.items||result?.tracks||[]).filter(p=>p.playable!==false&&['songs','library-songs'].includes(p.kind)&&/^\w[\w.-]{0,199}$/.test(String(p.id)))
+   .slice(0,2).map(p=>/^\d{1,20}$/.test(String(p.catalogId||''))?{id:String(p.catalogId),kind:'songs'}:p),revision=this.revision;
   const next=()=>{if(this.revision!==revision||!items.length)return;
    this.prime(win,items.shift()).catch(()=>{}).finally(()=>{if(this.revision===revision&&items.length)this.primeTimer=setTimeout(next,150);});};
   if(items.length)this.primeTimer=setTimeout(next,200);
@@ -152,7 +156,10 @@ class SpatialPlayback {
   this.applyHeadphones(r);
   this.send(mixer,{type:'pause',paused:r.paused});
   const metadata=r.active.metadata,id=/^\d{1,20}$/.test(String(metadata.catalogId||''))?metadata.catalogId:metadata.id;
-  await this.loadDeck(r,r.active,await this.source(r.win,{action:'prepare',requestKey:r.active.requestKey,id,kind:String(id).startsWith('i.')?'library-songs':'songs',allowStereo:true,fairplay:!!r.nativeRuntime?.fairplay}),r.state.position);
+  const kind=String(id).startsWith('i.')?'library-songs':'songs',prime=this.primeJob;
+  if(prime?.win===r.win&&prime.id===id&&prime.kind===kind)await prime.promise.catch(()=>{});
+  if(this.session!==r)return;
+  await this.loadDeck(r,r.active,await this.source(r.win,{action:'prepare',requestKey:r.active.requestKey,id,kind,allowStereo:true,fairplay:!!r.nativeRuntime?.fairplay}),r.state.position);
  }
  async loadDeck(r,deck,prepared,position=0){
   deck.scene=this.scenes.render();
@@ -321,7 +328,7 @@ class SpatialPlayback {
    r.decks[deck.slot]=deck;
    const started=Date.now();
    const prime=this.primeJob;
-   if(prime?.id===p.id&&prime.kind===p.kind)await prime.promise.catch(()=>{});
+   if(prime?.win===r.win&&prime.id===p.id&&prime.kind===p.kind)await prime.promise.catch(()=>{});
    if(this.session!==r||revision!==r.flowRevision||r.standby!==deck)throw Error('FLOW_CANCELLED');
    const prepared=await this.source(r.win,{action:'prepare',requestKey:deck.requestKey,id:p.id,kind:p.kind,allowStereo:true,fairplay:!!r.nativeRuntime?.fairplay});
    deck.timing.sourceMs=Date.now()-started;
@@ -488,6 +495,7 @@ class SpatialPlayback {
    await this.page(win,{method:'transport',params:{action:'pause'}});
    if(revision!==this.revision)return {ok:true,superseded:true};
    if(this.session)return this.select(this.session,{kind:p.kind,id:String(p.id)},Math.max(0,Number(p.position)||0));
+   this.cancelPrime(p);
    this.begin(win,{id:String(p.id),catalogId:p.kind==='songs'?String(p.id):''},Math.max(0,Number(p.position)||0));
    this.session.nativeOnly=true;
    return {ok:true,preparing:true};

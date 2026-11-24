@@ -1,4 +1,4 @@
-"""Transparent stereo peak protection for buffered karaoke stems.
+"""Stereo true-peak protection for buffered karaoke stems.
 
 The caller supplies a short piece of already available future audio. This lets
 the gain approach an overload smoothly, without delaying audio or running the
@@ -8,11 +8,17 @@ import math
 
 import numpy as np
 from scipy.ndimage import maximum_filter1d
+from scipy.signal import firwin, resample_poly
 
 
 RATE=48000
-FUTURE=1536                 # 32 ms; fits the separator's existing future context.
+LOOKAHEAD=1536              # 32 ms; fits the separator's existing future context.
 PEAK_HOLD=192               # Hold a real crest for 4 ms; do not follow its carrier.
+PHASES=4
+RADIUS=16
+FUTURE=LOOKAHEAD+RADIUS
+INTERPOLATOR=firwin(2*RADIUS*PHASES+1,1/PHASES,window=('kaiser',7.5))
+MAX_INTERPOLATION_GAIN=PHASES*max(np.abs(INTERPOLATOR[phase::PHASES]).sum() for phase in range(PHASES))
 
 
 class StereoPeakLimiter:
@@ -34,9 +40,37 @@ class StereoPeakLimiter:
         self.attack=rate*attack_ms/1000
         self.release=rate*release_ms/1000
         self.deficit=0.
+        self.tail=np.zeros((RADIUS+1,2),np.float64)
+
+    def bypass(self,pcm):
+        self.deficit=0.
+        self.remember(pcm)
+
+    def remember(self,pcm):
+        count=min(len(self.tail),len(pcm))
+        if not count:return
+        self.tail[:-count]=self.tail[count:]
+        self.tail[-count:]=pcm[-count:]
+
+    def peaks(self,pcm,frames):
+        count=frames+LOOKAHEAD
+        magnitude=np.abs(pcm)
+        peak=np.max(magnitude[:count],axis=1)
+        # A bound on the interpolation filter gives quiet records a fast path.
+        # Only the detector upsamples. The original stereo PCM is emitted.
+        if max(magnitude.max(),np.abs(self.tail).max())*MAX_INTERPOLATION_GAIN>self.ceiling:
+            working=np.concatenate((self.tail,pcm))
+            upsampled=resample_poly(working,PHASES,1,axis=0,window=INTERPOLATOR)
+            start=(len(self.tail)-1)*PHASES
+            intervals=upsampled[start:start+(count+1)*PHASES].reshape(-1,PHASES,2)
+            between=np.max(np.abs(intervals),axis=(1,2))
+            # An inter-sample crest needs protection from both surrounding gains.
+            np.maximum(peak,np.maximum(between[:-1],between[1:]),out=peak)
+        self.remember(pcm[:frames])
+        return peak
 
     def process(self,pcm_with_future,frames):
-        """Return ``frames`` stereo samples; retain only the release state.
+        """Return ``frames`` stereo samples and retain release/interpolation state.
 
         Future samples are examined but are neither emitted nor consumed. The
         next call must begin at the first sample after the returned frames.
@@ -48,7 +82,7 @@ class StereoPeakLimiter:
         if frames==0:return np.empty((0,2),dtype='<f4')
         pcm=np.nan_to_num(pcm[:frames+self.required_future].astype(np.float64),
                           nan=0.,posinf=0.,neginf=0.)
-        peak=np.max(np.abs(pcm),axis=1)
+        peak=self.peaks(pcm,frames)
         requested=np.maximum(0.,1-self.ceiling/np.maximum(peak,self.ceiling))
         if self.deficit==0 and not np.any(requested):
             return pcm[:frames].astype('<f4')
@@ -60,7 +94,7 @@ class StereoPeakLimiter:
         held=maximum_filter1d(log_request,size=PEAK_HOLD+1,
                                origin=-PEAK_HOLD//2,
                                mode='constant',cval=-np.inf)
-        attack_future=self.required_future-PEAK_HOLD
+        attack_future=LOOKAHEAD-PEAK_HOLD
         # D[n] = max(held[n+j] * exp(-j/attack), j=0..attack_future).
         # Taking logs turns the weighted maximum into a fast flat sliding max.
         # Offsets cancel before exponentiation, avoiding exponential overflow.

@@ -298,19 +298,20 @@ class ArtistView(Gtk.Box):
         if self.closed or not self.active:return
         self.request+=1;generation=self.request;source=self.source
         offset=self.next_offset or 0 if append else 0
-        key=(source,category,str(ref.get('id') or ''),str(ref.get('songId') or ref.get('songUri') or ''),
-             str(ref.get('name') or ''),str(ref.get('section') or ''),offset)
-        self.busy=True;self.spinner.start();self.accounts_button.hide()
-        self.notice.set_text(text('Opening this release…','Открываю альбом…') if category=='release' else
-                            text('Opening a little more of their world…','Открываю музыкальный мир артиста…'))
-        self.render()
-        def done(result,error):
+        def cache_key(reference):
+            ident=str(reference.get('id') or '')
+            lookup=() if category=='release' and ident else tuple(str(reference.get(field) or '')
+                for field in ('songId','songUri','songKind','name'))
+            return source,category,ident,lookup,reference.get('section',''),reference.get('storefront',''),offset
+        key=cache_key(ref)
+        self.accounts_button.hide()
+        def done(result,error,save=True):
             if self.closed or not self.active or generation!=self.request or source!=self.service.host.source:return
             self.busy=False;self.spinner.stop()
             if error:
                 self.notice.set_text(str(error)[:350]);self.accounts_button.show();self.render();return
-            result=result or {};self.cache[key]=(time.monotonic(),result)
-            while len(self.cache)>24:self.cache.pop(next(iter(self.cache)))
+            result=result or {}
+            if save:entry=self.cache[key]=(time.monotonic(),result)
             self.note=str(result.get('note') or '')[:450];self.choices=result.get('choices') or []
             if not self.note and any(section.get('unavailable') for section in result.get('sections') or []):
                 self.note=text('Some catalogue sections did not respond. Available music is ready; refresh to retry.',
@@ -323,7 +324,10 @@ class ArtistView(Gtk.Box):
                 self.search_only=bool(result.get('searchOnly'))
             elif category=='release':
                 self.release=result.get('release') or self.release
-                if self.release and self.release.get('id'):self.release_ref.update(self.release)
+                if self.release and self.release.get('id'):
+                    self.release_ref.update(self.release)
+                    if save:self.cache[cache_key(self.release_ref)]=entry
+            while len(self.cache)>24:self.cache.pop(next(iter(self.cache)))
             values=result.get('items') or []
             if append:
                 seen={v.get('uri') or v.get('id') for v in self.items}
@@ -343,7 +347,12 @@ class ArtistView(Gtk.Box):
             if category=='artist' and self.catalog_mode():self.load_catalog()
         cached=self.cache.get(key)
         if not refresh and cached and time.monotonic()-cached[0]<900:
-            done(cached[1],None);return
+            self.service.cancel_browse()
+            done(cached[1],None,save=False);return
+        self.busy=True;self.spinner.start()
+        self.notice.set_text(text('Opening this release…','Открываю альбом…') if category=='release' else
+                            text('Opening a little more of their world…','Открываю музыкальный мир артиста…'))
+        self.render()
         self.service.load(category,done,collection=ref,offset=offset)
 
     def songs(self):

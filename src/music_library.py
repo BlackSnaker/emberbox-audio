@@ -22,8 +22,22 @@ def youtube_item(item):
 class MusicRepository:
     def __init__(self,host):self.host=host;self.locks={s:threading.RLock() for s in NAMES}
 
+    def load_apple(self,category,term,collection,offset):
+        h=self.host;native=h.apple_mode=='native'
+        if category in ('artist','artist-section','release'):
+            return ArtistRepository(h).load('apple-music',category,collection,offset)
+        player=h.apple_web if native else h.apple
+        if collection:return player.request('tracks',kind=collection['kind'],id=collection['id'],offset=offset)
+        if category=='search':
+            if not native:raise RuntimeError(text('Connect Apple Music in Accounts to search its catalogue.','Подключи Apple Music в Аккаунтах для поиска по каталогу.'))
+            return player.request('search',term=term)
+        return player.request('browse',category='albums' if category=='albums' else 'playlists',offset=offset)
+
     def load(self,source,category,term='',collection=None,offset=0):
         h=self.host
+        # The native Apple bridge matches concurrent replies by request ID.
+        # Album reads can run beside a previous catalogue request safely.
+        if source=='apple-music' and h.apple_mode=='native':return self.load_apple(category,term,collection,offset)
         with self.locks[source]:
             if category in ('artist','artist-section','release'):
                 return ArtistRepository(h).load(source,category,collection,offset)
@@ -46,13 +60,7 @@ class MusicRepository:
                         item=dict(value,kind='album' if ':album:' in value['uri'] else 'playlist')
                         if category!='albums' or item['kind']=='album':items.append(item)
                 return {'items':items,'note':text('Your personal Spotify picks','Твои персональные подборки Spotify') if category!='albums' else text('Albums from your personal picks','Альбомы из твоих подборок')}
-            if source=='apple-music':
-                player=h.apple_web if h.apple_mode=='native' else h.apple
-                if collection:return player.request('tracks',kind=collection['kind'],id=collection['id'],offset=offset)
-                if category=='search':
-                    if h.apple_mode!='native':raise RuntimeError(text('Connect Apple Music in Accounts to search its catalogue.','Подключи Apple Music в Аккаунтах для поиска по каталогу.'))
-                    return player.request('search',term=term)
-                return player.request('browse',category='albums' if category=='albums' else 'playlists',offset=offset)
+            if source=='apple-music':return self.load_apple(category,term,collection,offset)
             if source=='yandex-music':
                 player=h.yandex_web
                 if collection:return player.request('tracks',id=collection['id'])
@@ -140,6 +148,7 @@ class MusicService:
         self.previous_restart=None
         self.transition_preview=None
         self.browse_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-collection')
+        self.album_pool=ThreadPoolExecutor(max_workers=2,thread_name_prefix='ember-apple-album')
         self.play_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='ember-queue')
         self.youtube=Search(self._youtube_results);self.youtube_done=None
         from ember_flow import EmberFlow
@@ -168,7 +177,10 @@ class MusicService:
                 done({'items':[youtube_item({'id':ident,'url':parsed[0],'title':text('YouTube link','Ссылка YouTube'),'duration':0})]},None)
                 return
             self.youtube_done=(generation,source,done);self.youtube.start(term);return
-        future=self.browse_pool.submit(self.repository.load,source,category,term,collection,offset)
+        apple_album=(source=='apple-music' and self.host.apple_mode=='native' and
+                     (category=='release' or (collection or {}).get('kind') in ('albums','library-albums')))
+        pool=self.album_pool if apple_album else self.browse_pool
+        future=pool.submit(self.repository.load,source,category,term,collection,offset)
         self.browse_future=future
         def complete(result):
             if self.closed or generation!=self.browse_generation or source!=self.host.source:return False
@@ -224,7 +236,8 @@ class MusicService:
         def prepare():
             self.prime_timer=0
             if not self.closed and not self.loading and h.source=='apple-music' and generation==self.play_generation:
-                h.apple_web.action('spatial',operation='prime',kind=value['kind'],id=value['id'])
+                h.apple_web.action('spatial',operation='prime',kind='songs' if value.get('catalogId') else value['kind'],
+                                   id=value.get('catalogId') or value['id'])
             return False
         self.prime_timer=GLib.timeout_add(180,prepare)
 
@@ -476,4 +489,5 @@ class MusicService:
     def close(self):
         self.cancel_prime();self.closed=True;self.flow.close();self.favorites.close();self.play_generation+=1;self.cancel_browse()
         GLib.source_remove(self.timer);self.youtube.close();self.listeners.clear()
-        self.browse_pool.shutdown(wait=False,cancel_futures=True);self.play_pool.shutdown(wait=False,cancel_futures=True)
+        self.browse_pool.shutdown(wait=False,cancel_futures=True);self.album_pool.shutdown(wait=False,cancel_futures=True)
+        self.play_pool.shutdown(wait=False,cancel_futures=True)

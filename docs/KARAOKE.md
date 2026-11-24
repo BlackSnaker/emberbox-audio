@@ -72,15 +72,16 @@ exceed their limit, the helper stops and restores original playback; it never
 silently switches to centre cancellation.
 
 The model processes both signal polarities and averages its estimates using
-UVR's denoising method. This reduces sign-independent model artifacts, especially
-at full vocal subtraction; a requested 100% is not silently reduced. There is
-no global low-pass filter on the accompaniment. Some separation artifacts remain
-possible for individual recordings.
+UVR's denoising method. When the estimated vocals are far quieter than the mix,
+Ember gradually reduces the subtraction to protect instrumental passages and
+reverb tails. Deep bass protection acts on the estimated vocal stem. The mix
+retains its original stereo image. Quiet singing under loud accompaniment may
+remain partly audible at 100%.
 
-A stereo-linked peak limiter anticipates residual peaks above 0.98 instead of
-hard-clipping them. It uses future audio already present in the model context,
-adding no model passes or extra audio delay itself. Quiet signals are not boosted,
-stereo balance is retained and an initial 0% returns the exact original PCM.
+A stereo-linked limiter estimates inter-sample peaks using fourfold interpolation
+in the existing buffer. Output stays at the route's sample rate. The limiter
+needs no additional model pass and only turns the signal down around peaks.
+At 0%, output returns to the exact original PCM once the smooth control ramp ends.
 
 AI needs buffering. On the development AMD four-core machine the expected
 buffer with denoising is around 2–3 seconds; the panel reports the measured delay rather

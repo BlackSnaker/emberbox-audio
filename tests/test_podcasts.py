@@ -7,7 +7,7 @@ from unittest.mock import Mock
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 
 from listening_queue import track
-from podcast_catalog import APPLE, PodcastCatalog, apple_episodes, apple_shows, public_url
+from podcast_catalog import APPLE, PodcastCatalog, apple_feed, apple_shows, public_url
 from podcast_discovery import LANGUAGES, PodcastDiscovery, showcase
 from stream_target import Target, matches
 from yandex_web import YandexWeb
@@ -45,19 +45,25 @@ class PodcastTests(unittest.TestCase):
             {'collectionId': 124, 'collectionName': 'Subscriber only'},
         ]}
         show, = apple_shows(data)
-        rss = b'''<rss xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"><channel>
+        rss = b'''<rss xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"
+                       xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel>
+          <description><![CDATA[<p>About the show.</p><p>Science &amp; people.</p>]]></description>
           <item><title>Episode</title><guid>stable</guid><itunes:duration>1:02:03</itunes:duration>
+          <description>This is the short summary.</description>
+          <content:encoded><![CDATA[<p>Full notes.</p><script>Hidden</script><p>Second paragraph.</p>]]></content:encoded>
           <enclosure type="audio/mpeg" url="https://publisher.example/one.mp3"/></item>
           <item><title>Repeated enclosure</title><enclosure url="https://publisher.example/one.mp3"/></item>
           <item><title>Video</title><enclosure type="video/mp4" url="https://publisher.example/video.mp4"/></item>
           <item><title>Local</title><enclosure url="file:///etc/passwd"/></item>
         </channel></rss>'''
-        episode, = apple_episodes(show, rss)
+        about, (episode,) = apple_feed(show, rss)
+        self.assertEqual(about, 'About the show.\n\nScience & people.')
+        self.assertEqual(episode['description'], 'Full notes.\n\nSecond paragraph.')
         self.assertEqual((episode['artist'], episode['title'], episode['duration_ms']), ('Show', 'Episode', 3723000))
-        self.assertEqual(episode['id'], apple_episodes(show, rss.replace(b'one.mp3', b'new.mp3'))[0]['id'])
+        self.assertEqual(episode['id'], apple_feed(show, rss.replace(b'one.mp3', b'new.mp3'))[1][0]['id'])
         self.assertEqual(episode['uri'], APPLE + ':episode:' + episode['id'])
         with self.assertRaises(ValueError):
-            apple_episodes(show, '<!DOCTYPE rss><rss/>'.encode('utf-16'))
+            apple_feed(show, '<!DOCTYPE rss><rss/>'.encode('utf-16'))
 
     def test_local_addresses_and_credentials_are_not_media_urls(self):
         for url in ('https://localhost/a', 'https://127.0.0.1/a', 'https://a.local/a',
@@ -81,17 +87,20 @@ class PodcastTests(unittest.TestCase):
         yandex.api = Mock()
         yandex.api.call.side_effect = [
             {'podcasts': {'results': [{'id': 22, 'title': 'Show'}]}},
-            {'title': 'Show', 'volumes': [[{'id': 11, 'title': 'First episode', 'durationMs': 10000},
+            {'title': 'Show', 'description': {'text': 'Show <b>details</b>'},
+             'volumes': [[{'id': 11, 'title': 'First episode', 'durationMs': 10000, 'shortDescription':'Episode notes'},
                                           {'id': 12, 'title': 'Unavailable', 'available': False}]]},
         ]
         catalog = PodcastCatalog(SimpleNamespace(yandex_web=yandex))
         show, = catalog.load('yandex-music', 'Show')
         yandex.api.call.assert_called_with('search', text='Show', type='podcast', page=0)
-        episode, = catalog.load('yandex-music', '', show)
+        show, (episode,) = catalog.open_show('yandex-music', show)
         yandex.api.call.assert_called_with('albums/22/with-tracks')
         self.assertEqual((episode['kind'], episode['uri'], episode['duration_ms']),
                          ('episode', 'yandex:track:11', 10000))
         self.assertEqual(track(episode, 'yandex-music')['kind'], 'episode')
+        self.assertEqual(show['description'], 'Show details')
+        self.assertEqual(episode['description'], 'Episode notes')
 
     def test_podcast_audio_matches_only_its_mpv_stream(self):
         import os

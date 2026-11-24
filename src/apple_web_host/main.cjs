@@ -11,7 +11,7 @@ const {FlowDecks}=require('./flow.cjs');let flow=null;
 const {SpatialPlayback}=require('./spatial.cjs');let spatial=null;
 const yandex = process.env.EMBERBOX_WEB_SERVICE === 'yandex';
 const spotify = process.env.EMBERBOX_WEB_SERVICE === 'spotify';
-const integrationVersion = yandex?7:spotify?4:32;
+const integrationVersion = yandex?7:spotify?5:33;
 const service = yandex ? {title:'Yandex Music',origin:'https://music.yandex.ru/',
   url:'https://music.yandex.ru/',command:'emberboxYandexCommand',page:'yandex.js',error:'YANDEX_REQUEST_FAILED'} :
   spotify ? {title:'Spotify',origin:'https://open.spotify.com/',url:'https://open.spotify.com/',
@@ -131,13 +131,16 @@ function spotifyRoute(route) {
   return /^(\/|\/collection\/(tracks|playlists|albums)|\/(track|album|playlist|show|episode)\/[A-Za-z0-9]{1,64}|\/artist\/[A-Za-z0-9]{1,64}(\/discography\/(all|album|single|compilation))?|\/search\/[^/]{1,800}(\/podcasts)?)$/.test(url.pathname)?url.pathname:'';
  }catch{return '';}
 }
+let catalogueGeneration=0;
 async function command(win,request){
+ const catalogue=spatial&&['release','tracks','search'].includes(request.method);
+ const browse=catalogue?++catalogueGeneration:0,revision=spatial?.revision;
  if(spatial){const result=await spatial.intercept(flow?.current||win,request);if(result!==null)return result;}
  if(request.method==='flow'){if(!flow)throw Error('FLOW_UNAVAILABLE');return flow.command(request.params||{});}
  if(flow&&(['play','seek'].includes(request.method)||request.method==='enable'&&request.params?.enabled!==true||
    request.method==='transport'))await flow.cancel();
  const result=await pageRequest(flow?.current||win,request);
- if(spatial&&['release','tracks','search'].includes(request.method))spatial.primeList(flow?.current||win,result);
+ if(browse&&browse===catalogueGeneration&&revision===spatial.revision)spatial.primeList(flow?.current||win,result);
  if(request.method==='status'){
   const value=flow?await flow.status()||result:result;
   const merged=spatial?spatial.merge(flow?.current||win,value):value;

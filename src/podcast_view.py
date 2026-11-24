@@ -62,6 +62,26 @@ CSS = b'''
   border: 1px solid rgba(255,222,173,.20);
   box-shadow: inset 0 1px rgba(255,239,217,.13);
 }
+.ember-stage button.podcast-info-button, .podcast-reader button.podcast-reader-close {
+  color: #f1d6ac; padding: 6px 12px; border-radius: 16px;
+  background-image: linear-gradient(142deg, rgba(242,211,170,.14), rgba(144,168,187,.08) 50%, rgba(29,33,39,.38));
+  border: 1px solid rgba(236,212,188,.23);
+  box-shadow: inset 0 1px rgba(255,242,222,.13);
+}
+.ember-stage button.podcast-info-button:hover, .podcast-reader button.podcast-reader-close:hover {
+  background-color: rgba(206,157,100,.18); border-color: rgba(253,218,180,.47);
+}
+popover.podcast-reader {
+  padding: 0; border-radius: 22px; border: 1px solid rgba(244,214,178,.36);
+  background-color: #1c2024;
+  background-image: linear-gradient(143deg, #37302b, #24292f 40%, #1c2024 77%, #29221f);
+  box-shadow: inset 0 1px rgba(255,244,222,.22), inset 0 -1px rgba(135,169,196,.15), 0 8px 23px rgba(0,0,0,.38);
+}
+.podcast-reader .podcast-reader-body { padding: 18px 22px 20px; }
+.podcast-reader .podcast-reader-heading { color: #f8e8d0; font-size: 22px; font-weight: 700; }
+.podcast-reader .podcast-reader-meta { color: #dcc397; font-size: 12px; }
+.podcast-reader .podcast-reader-prose { color: #eee3d2; font-size: 15px; }
+.podcast-reader separator { background: rgba(244,216,181,.19); min-height: 1px; }
 '''
 
 
@@ -87,6 +107,7 @@ class PodcastView(Gtk.Box):
         self.started = False
         self.selecting = False
         self.open_show = None
+        self.reader = None
         self.results = []
         self.terms = {}
 
@@ -98,6 +119,9 @@ class PodcastView(Gtk.Box):
         heading.pack_start(self.show_art, False, False, 0)
         self.heading = caption(text('Podcasts', 'Подкасты'), 'podcast-heading')
         heading.pack_start(self.heading, True, True, 0)
+        self.show_info = self.info_button(text('About the show', 'О подкасте'), self.open_show_info)
+        self.show_info.set_no_show_all(True)
+        heading.pack_start(self.show_info, False, False, 0)
         self.sign_in = self.button(text('Accounts', 'Аккаунты'), lambda: self.accounts())
         self.sign_in.set_no_show_all(True)
         heading.pack_end(self.sign_in, False, False, 0)
@@ -166,6 +190,7 @@ class PodcastView(Gtk.Box):
         self.content.add_named(self.list, 'episodes')
         scroll.add(self.content)
         self.pack_start(scroll, True, True, 0)
+        self.connect('unmap', lambda _view: self.dismiss_reader())
         self.select(APPLE, refresh=False)
 
     def activate(self):
@@ -201,6 +226,71 @@ class PodcastView(Gtk.Box):
         button.get_style_context().add_class('stage-quiet')
         button.connect('clicked', lambda _button: callback())
         return button
+
+    def info_button(self, label, callback):
+        button = Gtk.Button(label=label, valign=Gtk.Align.CENTER)
+        button.get_style_context().add_class('podcast-info-button')
+        button.connect('clicked', callback)
+        return button
+
+    def open_show_info(self, anchor):
+        if self.open_show:
+            self.open_reader(anchor, self.open_show, text('About the show', 'О подкасте'))
+
+    def episode_info(self, item):
+        label = text('Episode notes', 'О выпуске')
+        button = self.info_button(label, lambda anchor: self.open_reader(anchor, item, label))
+        button.get_accessible().set_name(f'{label} · {item["title"]}')
+        return button
+
+    def open_reader(self, anchor, item, label):
+        self.dismiss_reader()
+        reader = self.reader = Gtk.Popover(relative_to=anchor, position=Gtk.PositionType.BOTTOM,
+                                           constrain_to=Gtk.PopoverConstraint.WINDOW)
+        reader.get_style_context().add_class('podcast-reader')
+        reader.get_accessible().set_name(label)
+        body = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=11)
+        body.get_style_context().add_class('podcast-reader-body')
+        width = min(500, max(275, self.get_allocated_width() - 88))
+        body.set_size_request(width, -1)
+        header = Gtk.Box(spacing=10)
+        service = PROVIDERS[item.get('provider', self.provider)]
+        header.pack_start(caption(f'{label}  ·  {service}', 'podcast-reader-meta'), True, True, 0)
+        close = Gtk.Button.new_from_icon_name('window-close-symbolic', Gtk.IconSize.BUTTON)
+        close.get_style_context().add_class('podcast-reader-close')
+        close.get_accessible().set_name(text('Close', 'Закрыть'))
+        close.connect('clicked', lambda _button: reader.popdown())
+        header.pack_end(close, False, False, 0)
+        body.pack_start(header, False, False, 0)
+        title = caption(item['title'], 'podcast-reader-heading')
+        title.set_line_wrap(True)
+        title.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        title.set_lines(3)
+        body.pack_start(title, False, False, 0)
+        body.pack_start(Gtk.Separator(), False, False, 0)
+        max_height = min(345, max(120, self.get_allocated_height() - 260))
+        scroll = Gtk.ScrolledWindow(hscrollbar_policy=Gtk.PolicyType.NEVER, overlay_scrolling=False,
+                                    max_content_height=max_height)
+        prose = Gtk.Label(label=item['description'], xalign=0, yalign=0, selectable=True)
+        prose.get_style_context().add_class('podcast-reader-prose')
+        prose.set_line_wrap(True)
+        prose.set_line_wrap_mode(Pango.WrapMode.WORD_CHAR)
+        if hasattr(Pango, 'attr_line_height_new'):
+            attributes = Pango.AttrList()
+            attributes.insert(Pango.attr_line_height_new(1.45))
+            prose.set_attributes(attributes)
+        scroll.add(prose)
+        body.pack_start(scroll, True, True, 0)
+        reader.add(body)
+        body.show_all()
+        _, prose_height = prose.get_preferred_height_for_width(width - 46)
+        scroll.set_min_content_height(min(max_height, prose_height))
+        reader.popup()
+
+    def dismiss_reader(self):
+        if self.reader is not None:
+            reader, self.reader = self.reader, None
+            reader.destroy()
 
     def select(self, provider, refresh=True):
         if self.selecting:
@@ -239,6 +329,7 @@ class PodcastView(Gtk.Box):
         self.started = True
         self.cancel()
         self.open_show = show
+        self.show_info.set_visible(bool(show and show.get('description')))
         self.show_art.set_visible(bool(show))
         if show:
             self.artwork.load(self.show_art, show.get('image', ''), 56, 9)
@@ -262,7 +353,7 @@ class PodcastView(Gtk.Box):
         self.set_busy(not browsing or not initial)
         if show:
             self.note.set_text(text('Loading episodes…', 'Загружаю выпуски…'))
-            request = (self.catalogue.load, provider, term, show)
+            request = (self.catalogue.open_show, provider, show)
         elif browsing:
             self.set_caption(initial, browsing=True)
             request = (self.discovery.browse, provider, self.language, self.category)
@@ -279,6 +370,9 @@ class PodcastView(Gtk.Box):
         self.set_busy(False)
         try:
             values = future.result()
+            if self.open_show:
+                self.open_show, values = values
+                self.show_info.set_visible(bool(self.open_show.get('description')))
         except Exception as error:
             if browsing and self.results:
                 return False
@@ -354,7 +448,13 @@ class PodcastView(Gtk.Box):
         body.pack_start(caption(' · '.join(info), 'podcast-card-meta'), False, False, 0)
         tile.add(body)
         tile.connect('clicked', lambda _button: self.activate_item(item))
-        self.wall.add(tile)
+        if item['kind'] == 'episode' and item.get('description'):
+            actions = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+            actions.pack_start(tile, True, True, 0)
+            actions.pack_end(self.episode_info(item), False, False, 0)
+            self.wall.add(actions)
+        else:
+            self.wall.add(tile)
 
     def render_more(self):
         end = min(self.rendered + 30, len(self.results))
@@ -392,7 +492,13 @@ class PodcastView(Gtk.Box):
             row.pack_end(duration, False, False, 0)
             button.add(row)
             button.connect('clicked', lambda _button, selected=item: self.activate_item(selected))
-            self.list.pack_start(button, False, False, 0)
+            if not show and item.get('description'):
+                actions = Gtk.Box(spacing=9)
+                actions.pack_start(button, True, True, 0)
+                actions.pack_end(self.episode_info(item), False, False, 0)
+                self.list.pack_start(actions, False, False, 0)
+            else:
+                self.list.pack_start(button, False, False, 0)
         self.rendered = end
         if end < len(self.results):
             def more():
@@ -415,6 +521,7 @@ class PodcastView(Gtk.Box):
         self.host.play_podcast(self.provider, item, episodes)
 
     def cancel(self):
+        self.dismiss_reader()
         self.generation += 1
         if self.future:
             self.future.cancel()

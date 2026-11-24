@@ -8,21 +8,17 @@
 
 <a id="release-candidate"></a>
 
-## November 20, 2026 · Ember is getting ready for 1.0
+## November 24, 2026 · 1.0.0-rc.2 · Between the Lines
 
-![Ember release candidate — warm glass, bronze and flowing light](assets/updates/2026-11-20-release-candidate.png)
+![Ember release candidate artwork with glowing tubes and brushed bronze](assets/updates/2026-11-20-release-candidate.png)
 
-**1.0.0-rc.1 · Pre-release · Final Linux testing candidate**
+**Linux desktop · Pre-release**
 
-Ember is entering the final testing stage before its first major release. Music services, glowing tubes, liquid glass, saved playlists and Slow Current now come together in one candidate — ready for a real day of listening.
+Hear a little more of what happens between vocal phrases. This candidate brings cleaner AI karaoke, quicker Apple Music album changes and a podcast shelf with show descriptions and episode notes. It also introduces Ember’s filament logo and a first-launch tour.
 
-**Download, extract, install. No repository clone required.** The release provides **tar.gz** and **zip** bundles, a dependency-aware installer and checksums. Inside the extracted folder, run `bash install.sh --autostart`.
+[**Download 1.0.0-rc.2 →**](https://github.com/BlackSnaker/emberbox-audio/releases/tag/v1.0.0-rc.2) · [Release notes and sound comparison](docs/releases/1.0.0-rc.2.md) · [Report an issue](https://github.com/BlackSnaker/emberbox-audio/issues)
 
-[**Download 1.0.0-rc.1 →**](https://github.com/BlackSnaker/emberbox-audio/releases/tag/v1.0.0-rc.1) · [Features and installation](docs/releases/1.0.0-rc.1.md) · [Report an issue](https://github.com/BlackSnaker/emberbox-audio/issues)
-
-This is a **release candidate, not stable 1.0**. Tester feedback will decide whether Ember is ready for launch; another RC may follow if fixes are needed. Please try saved playlists, transitions, installation on GNOME/KDE and long listening sessions.
-
-*The artwork is a conceptual illustration; see the film below for the real interface. Downloads contain source and an installer, not standalone binaries; dependencies and music services need internet access.*
+Choose the **tar.gz** or **zip** installer bundle. Extract it and run `bash install.sh --autostart` from the extracted folder. This candidate is open for Linux testing before 1.0.
 
 <a id="watch-ember"></a>
 
@@ -392,7 +388,7 @@ The optional first-launch tour covers music services, fullscreen controls and Em
 
 Open **Podcasts** in the fullscreen navigation or in **Settings → Player**. Pick a spoken language and category to fill the cover wall. When a service has few verified matches, clearly labelled Apple Podcasts cards round out the selection. Public Apple episodes play from publisher RSS without an Apple sign-in. Spotify and Yandex Music use their connected accounts.
 
-The `main` branch tracks development at **0.37.0**.
+The `main` branch currently tracks **1.0.0-rc.2**.
 
 Select a source in the header. Apple Music plays through a background web engine, with playlists, albums, songs and catalogue search inside Emberbox. It requires a compatible installed DRM-capable runtime and an Apple Music subscription. [One-time setup →](docs/APPLE_MUSIC.md)
 

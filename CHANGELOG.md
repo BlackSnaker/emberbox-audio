@@ -2,6 +2,14 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 1.0.0-rc.2 — 2026-11-24 · Between the Lines
+
+- Protect bass and instrumental passages in AI karaoke, smooth block joins and limit peaks between samples. Return to the original PCM at 0% after the control ramp.
+- Keep the first karaoke activation pending while the source stream appears, and show distinct audio, model and buffer stages.
+- Open Apple Music albums independently of older requests. Reuse recent album lists and in-progress stream preparation for the selected track.
+- Add glass show descriptions and episode notes to the podcast wall when the source supplies them.
+- Package the new filament logo, first-launch tour and podcast shelf in the second Linux release candidate. [Release notes and sound comparison](docs/releases/1.0.0-rc.2.md)
+
 ## 0.37.0 — 2026-11-21 · Podcasts
 
 - Browse Apple Podcasts, Spotify and Yandex Music with a glass cover wall, six spoken languages and category filters.

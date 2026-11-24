@@ -53,7 +53,7 @@ class KaraokeStartup(Gtk.Box):
         self.pack_start(self.hint,False,False,0)
 
     @property
-    def waiting(self):return self.state in ('model','buffering')
+    def waiting(self):return self.state in ('waiting-stream','model','buffering')
 
     def set_small(self,small):
         self.set_spacing(4 if small else 18)
@@ -64,7 +64,7 @@ class KaraokeStartup(Gtk.Box):
     def sync(self,starting,active,phase='',error=''):
         was_waiting=self.waiting
         if error or not (starting or active):state='idle'
-        elif starting:state='buffering' if phase=='buffering' else 'model'
+        elif starting:state=phase if phase in ('waiting-stream','buffering') else 'model'
         elif self.waiting:state='ready'
         else:return
         if state==self.state:return
@@ -77,11 +77,15 @@ class KaraokeStartup(Gtk.Box):
             self.progress.set_fraction(1.)
             for dot in self.dots:dot.set_opacity(1.)
             self.dot_levels=None;return
-        self.title.set_text(text('Let the sound warm up','Дадим звуку согреться'))
-        self.note.set_text(text('A short pause — your music will return in a moment',
-                                'Короткая пауза — музыка сейчас вернётся') if state=='buffering' else
-                           text('Preparing karaoke. The music may briefly become quiet',
-                                'Готовим караоке. Музыка может ненадолго затихнуть'))
+        self.title.set_text(text('Waiting for the track','Ждём звуковой поток') if state=='waiting-stream' else
+                            text('Let the sound warm up','Дадим звуку согреться'))
+        self.note.set_text({
+            'waiting-stream':text('Karaoke will start as soon as audio is available',
+                                  'Караоке подключится, как только появится звук'),
+            'model':text('Warming up the local vocal model','Прогреваем локальную модель приглушения вокала'),
+            'buffering':text('A short pause — your music will return in a moment',
+                             'Короткая пауза — музыка сейчас вернётся'),
+        }[state])
         if not was_waiting:
             self.progress.set_fraction(0.)
             if self.get_settings().get_property('gtk-enable-animations'):self.progress.pulse()

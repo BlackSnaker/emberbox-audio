@@ -217,6 +217,7 @@ async function emberboxSpotifyCommand(request) {
   return {title:clean(data.title),items:values,tracks:values,total:data.total,
    next:data.cached&&offset+data.expected<data.total?offset+data.expected:null};
  }
+ const podcastProse=node=>String(node?.innerText||node?.textContent||'').trim().slice(0,14000);
  function podcastItems(root, types){
   const seen=new Set(),result=[];
   for(const a of root?.querySelectorAll('a[href]')||[]){
@@ -230,6 +231,7 @@ async function emberboxSpotifyCommand(request) {
    const showId=kind==='episode'?identifier(row?.querySelector('a[href^="/show/"]')?.getAttribute('href'),'show'):'';
    result.push({kind,id,uri:'spotify:'+kind+':'+id,title,
     artist:clean(row?.querySelector('[data-encore-id="cardSubtitle"]')?.textContent),
+    description:podcastProse(row?.querySelector('[data-testid="episode-description"], [data-testid="show-description"], [data-encore-id="cardDescription"]')),
     image:image(row?.querySelector('img')?.src),showId});
    if(result.length>=100)break;
   }
@@ -238,8 +240,11 @@ async function emberboxSpotifyCommand(request) {
  async function podcasts(route,types){
   await navigate(route);
   for(let attempt=0;attempt<30;attempt++){
-   const items=podcastItems(document.querySelector('main'),types);
-   if(items.length||document.querySelector('main [data-testid="search-no-results"]'))return {items};
+   const root=document.querySelector('main');
+   const items=podcastItems(root,types);
+   const description=route.startsWith('/show/')?podcastProse(root?.querySelector(
+    '[data-testid="show-description"], [data-testid="podcast-description"], [data-testid="entity-header"] [data-testid="description"]')):'';
+   if(items.length||attempt===29||document.querySelector('main [data-testid="search-no-results"]'))return {items,description};
    await new Promise(resolve=>setTimeout(resolve,150));
   }
   return {items:[]};

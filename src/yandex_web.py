@@ -380,13 +380,19 @@ class YandexWeb:
         return {}
 
     def _podcasts(self, api, method, params):
+        def episode(value, **extra):
+            source = value.get('track', value)
+            return dict(track(value), kind='episode',
+                        description=source.get('description') or source.get('shortDescription', ''), **extra)
+
         if method == 'podcastEpisodes':
             ident = str(params.get('id', ''))
             if not ident.isdecimal() or len(ident) > 20:
                 raise YandexError('Invalid podcast ID.')
             show = api.call('albums/' + ident + '/with-tracks') or {}
             episodes = [value for volume in show.get('volumes', []) for value in volume]
-            return {'items': [dict(track(value), kind='episode', album=show.get('title', ''))
+            return {'description': show.get('description') or show.get('shortDescription', ''),
+                    'items': [episode(value, album=show.get('title', ''))
                               for value in episodes[:200] if value.get('available', True)]}
         result = api.call('search', text=params.get('term', ''), type='podcast', page=0) or {}
         shows = (result.get('podcasts') or {}).get('results', [])
@@ -394,8 +400,10 @@ class YandexWeb:
         if not shows:
             shows = [value for value in (result.get('albums') or {}).get('results', [])
                      if value.get('type') == 'podcast' or value.get('genre') == 'podcasts']
-        return {'items': [dict(album(value), kind='show') for value in shows[:100]]
-                + [dict(track(value), kind='episode') for value in episodes[:100] if value.get('available', True)]}
+        return {'items': [dict(album(value), kind='show',
+                               description=value.get('description') or value.get('shortDescription', ''))
+                          for value in shows[:100]]
+                + [episode(value) for value in episodes[:100] if value.get('available', True)]}
 
     def _catalog(self, method, params):
         ident = str(params.get('id') or '')

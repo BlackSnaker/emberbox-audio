@@ -44,15 +44,20 @@ vm.runInContext(fs.readFileSync('src/apple_web_host/spotify.js','utf8')+'\ngloba
  main.querySelector=q=>q==='[data-testid="entity-header"]'?header:null;
  main.querySelectorAll=q=>q==='a[href*="/album/"]'?[album]:q==='a[href]'?[album]:q==='div'?[decoration]:[];
  const a=await context.command({method:'artist',params:{id:'ARTIST123'}});assert.equal(a.artist.name,'Fixture artist');assert.equal(a.sections[0].items.length,1);assert.equal(a.artist.image,'','Page decorations are not artist portraits');
- const podcastLink=(href,title)=>({textContent:title,getAttribute:key=>key==='href'?href:'',closest:()=>({querySelector:()=>null})});
+ const podcastLink=(href,title)=>({textContent:title,getAttribute:key=>key==='href'?href:'',closest:()=>({
+  querySelector:q=>q.includes('episode-description')&&href.startsWith('/episode/')?{innerText:'First paragraph\n\nSecond paragraph'}:null
+ })});
  const show=podcastLink('/show/SHOW123','A podcast'),episode=podcastLink('/episode/EP123','A new episode');
  context.location.pathname='/search/A/podcasts';
  main.querySelectorAll=()=>[show,episode,album];
  const found=await context.command({method:'search',params:{term:'A',media:'podcasts'}});
  assert.deepEqual(Array.from(found.items,item=>item.uri),['spotify:show:SHOW123','spotify:episode:EP123']);
  context.location.pathname='/show/SHOW123';
+ main.querySelector=q=>q.includes('show-description')?{textContent:'This is the show description.'}:null;
  const list=await context.command({method:'tracks',params:{uri:'spotify:show:SHOW123'}});
  assert.deepEqual(Array.from(list.items,item=>item.title),['A new episode']);
+ assert.equal(list.description,'This is the show description.');
+ assert.equal(list.items[0].description,'First paragraph\n\nSecond paragraph');
  await context.command({method:'play',params:{uri:'spotify:episode:EP123'}});
  assert.equal(calls.at(-1)[1].uri,'spotify:episode:EP123');
  state.item.uri='spotify:episode:EP123';

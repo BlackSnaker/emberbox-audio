@@ -36,14 +36,14 @@ function host(yandex){
   const apple=host(false);win.webContents.getURL=()=> 'https://music.apple.com/us/new';
   responses.push({ready:true,authorized:true});
   const appleStatus=await apple.command(win,{method:'status'});
-  assert.equal(appleStatus.integrationVersion,32);assert.equal(appleStatus.emberFlowEQ,true);
+  assert.equal(appleStatus.integrationVersion,33);assert.equal(appleStatus.emberFlowEQ,true);
   responses.push({ready:true,id:'123'});win.emberboxQuality={snapshot:id=>({codec:'aac',track:id,evidence:'decoder'})};
   assert.equal((await apple.command(win,{method:'status'})).audioQuality.track,'123');
   const spotify=host('spotify');
   for(const route of ['/','/collection/albums','/collection/playlists','/album/ABC','/artist/ABC/discography/all','/search/Original%20fixture','/search/Test/podcasts','/show/SHOW123','/episode/EP123'])assert.equal(spotify.spotifyRoute(route),route);
   for(const route of ['https://evil.invalid/album/ABC','/account','/album/ABC?access_token=secret','/playlist/../account','//evil.invalid/'])assert.equal(spotify.spotifyRoute(route),'');
   win.webContents.getURL=()=> 'https://open.spotify.com/';responses.push({ready:true,authorized:true});
-  assert.equal((await spotify.command(win,{method:'status'})).integrationVersion,4);
+  assert.equal((await spotify.command(win,{method:'status'})).integrationVersion,5);
   responses.push({__emberboxNavigate:'/collection/albums'},{items:[]});await spotify.command(win,{method:'browse'});
   assert.equal(loaded.at(-1),'https://open.spotify.com/collection/albums');
   responses.push({__emberboxNavigate:'https://evil.invalid/'});await assert.rejects(spotify.command(win,{method:'browse'}),/ADAPTER_UNAVAILABLE/);

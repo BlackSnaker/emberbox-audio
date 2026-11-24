@@ -211,7 +211,10 @@ class LibraryView(Gtk.Box):
         if not self.entry.get_text().strip():return
         self.category='search';self.selected=None;self.sync_tabs();self.load(refresh=True)
 
-    def key(self):return self.source,self.category,self.entry.get_text().strip() if self.category=='search' else '',(self.selected or {}).get('uri') or (self.selected or {}).get('id') or ''
+    def key(self):
+        if self.selected:
+            return self.source,self.selected.get('kind',''),'',self.selected.get('uri') or self.selected.get('id','')
+        return self.source,self.category,self.entry.get_text().strip() if self.category=='search' else '',''
 
     def load(self,refresh=False,append=False):
         if not self.active:return
@@ -226,6 +229,7 @@ class LibraryView(Gtk.Box):
         if self.category=='search' and not key[2] and not self.selected:
             self.items=[];self.next_offset=None;self.render();return
         if not refresh and not append and key in self.cache:
+            self.request+=1;self.service.cancel_browse();self.busy=False;self.spinner.stop();self.connect_button.hide()
             values,self.next_offset,note=self.cache[key]
             unchanged=self.rendered_key==key and self.items==values
             self.items=values
@@ -235,6 +239,8 @@ class LibraryView(Gtk.Box):
         self.request+=1;request=self.request
         self.busy=True;self.spinner.start();self.notice.set_text(text('Finding your music…','Ищу твою музыку…'))
         self.connect_button.hide()
+        if self.selected and key!=self.rendered_key:
+            self.items=[];self.next_offset=None;self.render()
         def done(result,error):
             if not self.active or request!=self.request or key!=self.key():return
             self.busy=False;self.spinner.stop()
@@ -346,7 +352,7 @@ class LibraryView(Gtk.Box):
                 prime_on_hover(row,self.service,item)
                 self.track_table.append(row)
                 self.song_buttons.append((row.play_button,row.action_buttons[0],item))
-        if not self.items:
+        if not self.items and not self.busy:
             empty=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=12);empty.set_margin_top(25)
             empty.pack_start(label('✦','stage-queue-empty'),False,False,0)
             empty.pack_start(label(text('Music is one search away.','Музыка начинается с поиска.'),'stage-queue-empty',55),False,False,0)

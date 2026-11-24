@@ -9,7 +9,7 @@ from unittest.mock import patch,Mock
 import numpy as np
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
-from karaoke_audio import VocalFilter,KaraokeAudio,restore,recover,RATE,SIZE,HOP,PREFIX
+from karaoke_audio import VocalFilter,KaraokeAudio,Route,restore,recover,RATE,SIZE,HOP,PREFIX
 from stream_target import Target,matches
 
 
@@ -94,6 +94,45 @@ class AudioTests(unittest.TestCase):
         with patch.object(audio,'enable') as enabled:
             audio._ended(old);enabled.assert_not_called()
         audio.close()
+
+    def test_first_click_waits_for_the_same_player_identity(self):
+        with patch('karaoke_audio.shutil.which',return_value=None):audio=KaraokeAudio()
+        audio.available=True
+        target=Target('apple-music',123,'','apple-native')
+        with patch('gi.repository.GLib.timeout_add_seconds',return_value=17), \
+             patch('gi.repository.GLib.source_remove') as remove, \
+             patch('karaoke_audio.subprocess.Popen') as spawn,patch('karaoke_audio.threading.Thread'):
+            audio.enable(Target('apple-music'))
+            self.assertTrue(audio.starting)
+            self.assertEqual(audio.phase,'waiting-stream')
+            spawn.assert_not_called()
+            audio.check_target(target)
+            audio.check_target(Target('apple-music'))  # Temporary renderer gap during model warm-up.
+            audio.check_target(target)
+            remove.assert_called_once_with(17)
+            spawn.assert_called_once()
+            self.assertTrue(audio.starting)
+            audio.disable()
+            audio.enable(Target('apple-music'))
+            audio.check_target(Target('spotify',124,'','spotify-native'))
+            self.assertFalse(audio.starting)
+            self.assertFalse(audio.target_wait)
+            self.assertEqual(spawn.call_count,1)
+        audio.close()
+
+    def test_worker_waits_for_late_audio_before_touching_routing(self):
+        target=Target('youtube',os.getpid(),'','fixture')
+        stream={'sink':4,'channel_map':'front-left,front-right',
+                'properties':{'application.process.id':str(os.getpid())}}
+        notify=Mock()
+        with patch('karaoke_audio.runtime',return_value=Path('/tmp')), \
+             patch('karaoke_audio.pactl',side_effect=[[],[stream],[{'index':4,'name':'speakers'}]]) as server:
+            route=Route(target,.7,notify=notify)
+            with patch.object(route.stop,'wait'):
+                self.assertEqual(route.wait_for_stream(),'speakers')
+        notify.assert_called_once_with(phase='waiting-stream')
+        self.assertEqual([call.args for call in server.call_args_list],
+                         [('list','sink-inputs'),('list','sink-inputs'),('list','sinks')])
 
     def test_restore_only_temporary_sink_and_own_module(self):
         name=PREFIX+'99999999';calls=[]

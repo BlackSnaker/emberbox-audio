@@ -220,7 +220,10 @@ class KaraokeView(Gtk.Box):
 
     def toggle_audio(self):
         if self.audio.active or self.audio.starting:self.audio.disable()
-        else:self.audio.enable(getattr(self.stage.host.sound,'target',None))
+        else:
+            from stream_target import Target
+            host=self.stage.host
+            self.audio.enable(getattr(host.sound,'target',None) or Target(host.source))
 
     def set_amount(self,value):
         self.audio.set_amount(value);self.audio_changed()
@@ -271,11 +274,15 @@ class KaraokeView(Gtk.Box):
                   if stage=='download' else text('Installing the private AI runtime…','Устанавливаем отдельный модуль AI…'))
         elif ai and missing and not self.audio.error:
             note=text('Prepare AI once · 30 MB model + private runtime','Подготовь AI один раз · модель 30 МБ + отдельный модуль')
+        elif self.audio.starting and self.audio.phase=='waiting-stream':
+            note=text('Waiting for the audio stream…','Ждём звуковой поток…')
         elif ai and self.audio.starting:
-            note=text('Preparing AI and buffering your audio…','Готовим AI и буфер звука…')
+            note=(text('Buffering audio…','Заполняем буфер звука…') if self.audio.phase=='buffering' else
+                  text('Warming up the local model…','Прогреваем локальную модель…'))
         elif ai and self.audio.active:
             note=text('Local UVR AI · delay ≈ ','Локальный AI UVR · задержка ≈ ')+f'{getattr(self.audio,"delay",0):.1f} '+text('s','с')
         if self.audio_note.get_text()!=note:self.audio_note.set_text(note)
+        self.voice_toggle.get_accessible().set_description(note)
         self.startup.sync(self.active and ai and self.audio.starting,
                           self.active and ai and self.audio.active,
                           getattr(self.audio,'phase',''),self.audio.error)

@@ -10,6 +10,7 @@ import os
 import time
 import numpy as np
 from numpy.lib.stride_tricks import sliding_window_view
+from scipy.ndimage import uniform_filter1d
 from scipy.signal import resample_poly
 from karaoke_model import verified_model
 from karaoke_limiter import StereoPeakLimiter
@@ -24,6 +25,29 @@ MODEL_SAMPLES=(FRAMES-1)*HOP
 WINDOW_SAMPLES=math.ceil(MODEL_SAMPLES*160/147)
 LOOKAHEAD=8192
 OVERLAP=2048
+VOCAL_COMPENSATION=1.035
+VOCAL_BAND=slice(19,925)  # About 135 Hz to 6.6 kHz at the model's FFT size.
+
+
+def smoothstep(value,low,high):
+    fraction=np.clip((value-low)/(high-low),0,1)
+    return fraction*fraction*(3-2*fraction)
+
+
+BASS_GUARD=smoothstep(np.arange(FREQUENCIES,dtype=np.float32)*MODEL_RATE/FFT,34,88)[:,None]
+
+
+def protect_accompaniment(voice,mixture):
+    """Avoid subtracting faint model bleed in instrumental passages.
+
+    The gain is shared by both channels and acts on the estimate's complex
+    coefficients. The original PCM is retained as the accompaniment bed.
+    """
+    estimated=np.sum(voice[:,:,VOCAL_BAND,:]**2,axis=(0,1,2))*VOCAL_COMPENSATION**2
+    energy=np.sum(mixture[:,:,VOCAL_BAND,:]**2,axis=(0,1,2))
+    ratio=uniform_filter1d(estimated,7)/np.maximum(1e-8,uniform_filter1d(energy,7))
+    presence=.35+.65*smoothstep(ratio,.001,.02)
+    return voice*(BASS_GUARD*presence)
 
 
 def stft(pcm):
@@ -50,7 +74,7 @@ def istft(tensor):
 
 
 class NeuralSeparator:
-    def __init__(self,model=None,session=None):
+    def __init__(self,model=None,session=None,*,protect_backing=False):
         if session is None:
             import onnx,onnxruntime as ort
             graph=onnx.load(str(model or verified_model()))
@@ -66,6 +90,7 @@ class NeuralSeparator:
             self.session=ort.InferenceSession(graph.SerializeToString(),options,providers=['CPUExecutionProvider'])
         else:self.session=session
         self.input=self.session.get_inputs()[0].name
+        self.protect_backing=protect_backing
 
     def vocals(self,pcm):
         if pcm.shape!=(WINDOW_SAMPLES,2):raise ValueError('Wrong AI context length')
@@ -82,7 +107,8 @@ class NeuralSeparator:
                 raise RuntimeError('ai-invalid-output')
         prediction=positive*.5-negative*.5
         if not np.isfinite(prediction).all():raise RuntimeError('ai-invalid-output')
-        voice=istft(prediction[0])*1.035
+        if self.protect_backing:prediction=protect_accompaniment(prediction,spectrum)
+        voice=istft(prediction[0])*VOCAL_COMPENSATION
         return resample_poly(voice,160,147,axis=1).T[:WINDOW_SAMPLES].astype(np.float32)
 
     def benchmark(self):
@@ -114,6 +140,8 @@ class NeuralBlocks:
         self.history=np.zeros((WINDOW_SAMPLES,2),np.float32)
         self.first=True;self.ahead=None
         self.limiter=StereoPeakLimiter()
+        angle=np.linspace(0,np.pi,OVERLAP,dtype=np.float32)
+        self.overlap_gain=((1-np.cos(angle))*.5)[:,None]
 
     @property
     def required(self):return self.block+LOOKAHEAD if self.first else self.block
@@ -126,17 +154,20 @@ class NeuralBlocks:
         begin=WINDOW_SAMPLES-LOOKAHEAD-self.block;end=begin+self.block
         predicted=voice[begin:end].copy()
         if self.ahead is not None:
-            weight=np.linspace(0,1,OVERLAP,dtype=np.float32)[:,None]
+            weight=self.overlap_gain
             predicted[:OVERLAP]=self.ahead*(1-weight)+predicted[:OVERLAP]*weight
         self.ahead=voice[end:end+OVERLAP].copy()
         # Strength follows the physical dial smoothly across a whole block.
+        self.first=False
+        target=self.target
+        if self.amount==0 and target==0:
+            dry=self.history[begin:end].copy()
+            self.limiter.bypass(dry)
+            return dry
         future=self.limiter.required_future
-        ramp=(self.target+(self.amount-self.target)*np.exp(-np.arange(self.block+future)/RATE/.085)).astype(np.float32)
-        bypass=self.amount==0 and self.target==0
-        self.amount=float(ramp[self.block-1]);self.first=False
-        if bypass:
-            self.limiter.deficit=0.
-            return self.history[begin:end].copy()
+        ramp=(target+(self.amount-target)*np.exp(-np.arange(self.block+future)/RATE/.085)).astype(np.float32)
+        self.amount=float(ramp[self.block-1])
+        if abs(self.amount-target)<1e-6:self.amount=target
         predicted=np.concatenate((predicted,voice[end:end+future]))
         wet=self.history[begin:end+future]-ramp[:,None]*predicted
         return self.limiter.process(wet,self.block)

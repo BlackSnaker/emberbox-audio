@@ -15,7 +15,8 @@ except ImportError:
 @unittest.skipIf(StereoPeakLimiter is None,'Optional neural runtime needs SciPy')
 class LimiterTests(unittest.TestCase):
     def test_quiet_audio_is_exact_unity_including_silent_future(self):
-        pcm=np.random.default_rng(12).uniform(-.7,.7,(32768+FUTURE,2)).astype(np.float32)
+        pcm=np.random.default_rng(12).uniform(-.3,.3,(32768+FUTURE,2)).astype(np.float32)
+        pcm[-FUTURE:]=0
         result=StereoPeakLimiter().process(pcm,32768)
         np.testing.assert_array_equal(result,pcm[:32768])
 
@@ -30,6 +31,19 @@ class LimiterTests(unittest.TestCase):
         flat=np.abs(np.diff(result[2400:,0]))<1e-7
         self.assertLess(float(np.mean(flat)),.001)
         np.testing.assert_allclose(result[:,1],result[:,0]*(.7/1.6),atol=1e-7)
+
+    def test_intersample_overload_is_caught_in_both_channels(self):
+        from scipy.signal import resample_poly
+        count=8192;t=np.arange(count+FUTURE)/48000
+        left=(1.20*np.cos(2*np.pi*12000*t+np.pi/4)).astype(np.float32)
+        pcm=np.column_stack((left,left*.5))
+        # Every 48 kHz sample fits, but the continuous waveform clips.
+        self.assertLess(float(np.abs(pcm).max()),.98)
+        self.assertGreater(float(np.abs(resample_poly(left,8,1)[256:-256]).max()),1.18)
+        result=StereoPeakLimiter().process(pcm,count)
+        peak=np.abs(resample_poly(result[:,0],8,1)[256:-256]).max()
+        self.assertLess(float(peak),1.)
+        np.testing.assert_array_equal(result[:,1],result[:,0]*.5)
 
     def test_gain_anticipates_peak_and_recovers_smoothly(self):
         count=96000;pcm=np.full((count+FUTURE,2),.2,np.float32)
