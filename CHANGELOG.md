@@ -2,6 +2,11 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.38.0 — 2026-11-24 · Yandex Music lyrics
+
+- Show Yandex Music lyrics in fullscreen and karaoke, with timed lines when available.
+- Fall back to LRCLIB when Yandex lyrics are unavailable and retry the native source after a short cache interval.
+
 ## 1.0.0-rc.2 — 2026-11-24 · Between the Lines
 
 - Protect bass and instrumental passages in AI karaoke, smooth block joins and limit peaks between samples. Return to the original PCM at 0% after the control ramp.

@@ -53,7 +53,10 @@ class LyricsTests(unittest.TestCase):
                 self.assertTrue(drain_until(lambda: client.state.status == 'ready'))
                 self.assertEqual(client.state.source_url, 'https://lrclib.net')
                 fallback.assert_called_once()
-            self.assertEqual(api.lyrics.call_args_list, [call('1', 'LRC'), call('2', 'LRC'),
+            self.assertLessEqual(client.cache[client.key][0]-time.time(), 120)
+            self.assertTrue(all(0 < entry.kwargs['timeout'] <= 2 for entry in api.lyrics.call_args_list))
+            self.assertEqual([call(*entry.args) for entry in api.lyrics.call_args_list],
+                             [call('1', 'LRC'), call('2', 'LRC'),
                              call('2', 'TEXT'), call('3', 'LRC'), call('3', 'TEXT')])
 
     def test_lrc_repeated_lines_offsets_gaps_and_seek_index(self):

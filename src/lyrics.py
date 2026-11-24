@@ -334,7 +334,7 @@ class LyricsClient:
             record = {'instrumental': state.status == 'instrumental', 'plainLyrics': state.plain,
                       'local':not bool(state.source_url), 'yandex':state.source_url == YANDEX_SOURCE,
                       'syncedLyrics': serialize_lrc(state.lines)}
-            data = {'version': 1, 'expires': time.time()+self._ttl(state), 'record': record}
+            data = {'version': 1, 'expires': time.time()+self._ttl(key, state), 'record': record}
             path = self._path(key)
             temporary = path.with_suffix('.next.json')
             with temporary.open('w', encoding='utf-8') as target:
@@ -348,7 +348,9 @@ class LyricsClient:
             pass
 
     @staticmethod
-    def _ttl(state):
+    def _ttl(key, state):
+        if len(key) > 4 and state.source_url != YANDEX_SOURCE:
+            return 120
         return 7*86400 if state.status in ('ready', 'instrumental') else 3600 if state.status == 'missing' else 120
 
     def _request(self, endpoint, params, generation):
@@ -401,11 +403,16 @@ class LyricsClient:
                 return cached
         if yandex:
             api, identifier = yandex
+            deadline = time.monotonic() + 4
             for fmt, field in (('LRC', 'syncedLyrics'), ('TEXT', 'plainLyrics')):
                 if not self._current(generation):
                     return LyricsState()
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
                 try:
-                    state = _record({field: api.lyrics(identifier, fmt), 'yandex': True})
+                    state = _record({field: api.lyrics(identifier, fmt, timeout=min(2, remaining)),
+                                     'yandex': True})
                 except (YandexError, OSError, ValueError):
                     continue
                 if state.status == 'ready':
@@ -456,7 +463,7 @@ class LyricsClient:
         except Exception:
             state = LyricsState('error')
         self.state = state
-        self.cache[key] = (time.time()+self._ttl(state), state)
+        self.cache[key] = (time.time()+self._ttl(key, state), state)
         self.cache.move_to_end(key)
         while len(self.cache)>64:
             self.cache.popitem(last=False)
