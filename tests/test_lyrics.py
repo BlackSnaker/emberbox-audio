@@ -4,13 +4,13 @@ import sys
 import tempfile
 import threading
 import time
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 import unittest
 import urllib.error
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'src'))
 from gi.repository import GLib
-from lyrics import LyricsClient, LyricsState, LyricLine, LyricWord, active_line, parse_lrc, serialize_lrc
+from lyrics import LyricsClient, LyricsState, YANDEX_SOURCE, LyricLine, LyricWord, active_line, parse_lrc, serialize_lrc
 
 
 def drain_until(predicate, timeout=2):
@@ -32,6 +32,30 @@ def record(title='Fixture', duration=180, synced='[00:01.00]Ember fixture\n[00:0
 
 
 class LyricsTests(unittest.TestCase):
+    def test_yandex_prefers_native_lyrics_and_keys_by_recording(self):
+        with tempfile.TemporaryDirectory() as folder:
+            client = LyricsClient(lambda: None, folder)
+            self.addCleanup(client.close)
+            api = Mock()
+            api.lyrics.side_effect = ['[00:01.00]Timed', 'not LRC', 'Plain', '', '']
+            with patch.object(client, '_request', return_value=record()) as fallback:
+                client.set_track('Fixture', 'Fixture artist', yandex=(api, '1'))
+                self.assertTrue(drain_until(lambda: client.state.status == 'ready'))
+                self.assertTrue(client.state.synced)
+                self.assertEqual(client._cached(client.key).source_url, YANDEX_SOURCE)
+                client.set_track('Fixture', 'Fixture artist', yandex=(api, '2'))
+                self.assertTrue(drain_until(lambda: client.state.status == 'ready'))
+                self.assertEqual(client.state.plain, 'Plain')
+                self.assertFalse(client.state.synced)
+                self.assertEqual(client.state.source_url, YANDEX_SOURCE)
+                fallback.assert_not_called()
+                client.set_track('Fixture', 'Fixture artist', yandex=(api, '3'))
+                self.assertTrue(drain_until(lambda: client.state.status == 'ready'))
+                self.assertEqual(client.state.source_url, 'https://lrclib.net')
+                fallback.assert_called_once()
+            self.assertEqual(api.lyrics.call_args_list, [call('1', 'LRC'), call('2', 'LRC'),
+                             call('2', 'TEXT'), call('3', 'LRC'), call('3', 'TEXT')])
+
     def test_lrc_repeated_lines_offsets_gaps_and_seek_index(self):
         parsed = parse_lrc('[ar:Synthetic artist]\n[offset:500]\n'
                            '[00:01.00][00:05.000]<00:01.00>Ember fixture\n'

@@ -220,10 +220,10 @@ class QuestBridge:
             if value not in ('ai','stereo'):raise ValueError('Invalid karaoke engine')
             self.vocal().set_engine(value)
         elif op=='lyrics':
+            from lyrics import LyricsClient, yandex_recording
             if not self.lyrics:
-                from lyrics import LyricsClient
                 self.lyrics=LyricsClient(lambda *_:None)
-            self.lyrics.set_track(h.title.get_text(),h.artist.get_text(),h.album.get_text(),h.length/1e6)
+            self.lyrics.set_track(h.title.get_text(),h.artist.get_text(),h.album.get_text(),h.length/1e6,yandex=yandex_recording(h))
         else:raise ValueError('Unsupported action')
         return {'ok':True}
 

@@ -1,7 +1,10 @@
 """Small direct Yandex Music API client. OAuth credentials never reach media URLs."""
+import base64
 import hashlib
+import hmac
 import json
 import subprocess
+import time
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, quote, urlsplit
 from urllib.request import Request, build_opener, HTTPRedirectHandler
@@ -76,6 +79,26 @@ class API:
 
     def tracks(self, ids):
         return self.call('tracks', {'track-ids': ','.join(map(str, ids))}) or []
+
+    def lyrics(self, identifier, fmt):
+        """Fetch one lyric format using the signed API flow documented by yamusic-rs."""
+        identifier = str(identifier).partition(':')[0]
+        if not identifier.isascii() or not identifier.isdecimal() or fmt not in ('LRC', 'TEXT'):
+            raise ValueError('Invalid Yandex lyrics request.')
+        timestamp = str(int(time.time()))
+        digest = hmac.digest(b'p93jhgh689SBReK6ghtw62', (identifier + timestamp).encode(), 'sha256')
+        result = self.call(f'tracks/{identifier}/lyrics', format=fmt, timeStamp=timestamp,
+                           sign=base64.b64encode(digest).decode('ascii'))
+        url = result.get('downloadUrl') if isinstance(result, dict) else None
+        if not isinstance(url, str) or not url:
+            return ''
+        limit = 512_000
+        # No OAuth headers on the download, and no unvalidated redirects.
+        with urlopen(safe_url(url), timeout=5) as response:
+            raw = response.read(limit + 1)
+        if len(raw) > limit:
+            raise YandexError('Yandex lyrics response is too large.')
+        return raw.decode('utf-8-sig')
 
     def stream(self, identifier):
         variants = self.call('tracks/' + quote(str(identifier), safe='') + '/download-info') or []
