@@ -9,7 +9,7 @@ from hardware_controls import MuteToggle, VolumeKnob
 from karaoke_audio import KaraokeAudio
 from karaoke_timeline import HeardTimeline,PlaybackPoint
 from karaoke_startup import KaraokeStartup,CSS as STARTUP_CSS
-from lyrics import active_line
+from lyrics import active_line, yandex_recording
 from source_picker import text
 
 CSS=b'''
@@ -299,7 +299,8 @@ class KaraokeView(Gtk.Box):
         if hasattr(self.audio,'set_muted'):self.audio.set_muted(h.sound.muted)
         now=time.monotonic()
         title,artist,album=h.title.get_text(),h.artist.get_text(),h.album.get_text()
-        identity=(h.source,title,artist,album,round(h.length/1e6))
+        recording=yandex_recording(h)
+        identity=(h.source,title,artist,album,round(h.length/1e6),recording[1] if recording else None)
         position=h.position/1e6+(min(1.8,max(0,now-self.stage.anchor)) if h.playing else 0)
         self.timeline.observe(PlaybackPoint(now,identity,title,artist,position,h.length/1e6,h.playing,h.art_url),self.stage.lyrics.state)
         self.frame(now,force=True)

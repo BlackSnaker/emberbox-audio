@@ -41,7 +41,7 @@ The **Karaoke** tab adds a large sing-along stage, genuine word timing where sup
 
 Fullscreen opens with a large centred cover. Press **Lyrics** in the header to show the text panel; **Artwork** returns to the cover. No lyric lookup, line rendering or scrolling runs before you ask for text.
 
-While the text panel is open, Emberbox looks for lyrics matching the current song on [LRCLIB](https://lrclib.net/). Synchronized lyrics highlight the current line and scroll with playback; clicking a timed line seeks to it when the source supports seeking. Plain lyrics remain readable when timestamps are unavailable.
+For Yandex Music tracks, Emberbox first requests synchronized lyrics by track ID, then tries plain text. If neither is available, or the track is from another service, Emberbox looks up the song on [LRCLIB](https://lrclib.net/). Synchronized lyrics highlight the current line and scroll with playback; clicking a timed line seeks to it when the source supports seeking. Plain lyrics remain readable when timestamps are unavailable.
 
 Some songs have no matching text, are instrumental, or only have plain lyrics. A failed lookup leaves the cover and playback controls usable. Lyrics availability depends on the song and the lyrics database; a music-service subscription does not guarantee lyrics.
 

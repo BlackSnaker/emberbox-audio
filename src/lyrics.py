@@ -1,4 +1,4 @@
-"""Optional LRCLIB lyrics, fetched off the GTK thread without service credentials.
+"""Optional Yandex Music / LRCLIB lyrics, fetched off the GTK thread.
 
 Call ``set_track`` on the GTK thread when metadata changes. ``changed`` runs on
 the GLib main context; ``state`` always belongs to that track, even if an older
@@ -25,8 +25,20 @@ import urllib.request
 
 from gi.repository import GLib
 from paths import CACHE_DIR, CONFIG_DIR
+from yandex_api import YandexError
 
 API = 'https://lrclib.net/api/'
+YANDEX_SOURCE = 'https://music.yandex.ru/'
+
+
+def yandex_recording(host):
+    if host.source == 'yandex-music':
+        web = host.yandex_web
+        identifier = web.state.get('id')
+        if identifier and web.api is not None:
+            return web.api, str(identifier)
+    return None
+
 MAX_BYTES = 512_000
 MAX_TEXT = 120_000
 STAMP = re.compile(r'\[(\d{1,3}):([0-5]\d)(?:[.:](\d{1,3}))?\]')
@@ -180,7 +192,8 @@ def _record(record):
     if not plain and lines:
         plain = '\n'.join(line.text for line in lines)
     return LyricsState('ready' if lines or plain else 'missing', lines, plain,
-                       '' if record.get('local') is True else 'https://lrclib.net')
+                       '' if record.get('local') is True else
+                       YANDEX_SOURCE if record.get('yandex') is True else 'https://lrclib.net')
 
 
 class LyricsClient:
@@ -190,6 +203,7 @@ class LyricsClient:
         self.state = LyricsState()
         self.closed = False
         self.key = None
+        self.yandex = None
         self.generation = 0
         self.future = None
         self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix='ember-lyrics')
@@ -207,7 +221,7 @@ class LyricsClient:
                 pass
         self.user_agent = f'Emberbox Audio/{version} (https://github.com/BlackSnaker/emberbox-audio)'
 
-    def set_track(self, title, artist, album='', duration=0, force=False):
+    def set_track(self, title, artist, album='', duration=0, force=False, *, yandex=None):
         if self.closed:
             return
         title, artist, album = map(_text, (title, artist, album))
@@ -217,6 +231,9 @@ class LyricsClient:
         except (TypeError, ValueError, OverflowError):
             seconds = 0
         key = (title, artist, album, seconds) if title and artist else None
+        if key and yandex:
+            key += (yandex[1],)
+        self.yandex = yandex
         if key == self.key and not force:
             return
         self.generation += 1
@@ -230,7 +247,7 @@ class LyricsClient:
             self.cache.move_to_end(key)
         else:
             self.state = LyricsState('loading')
-            self.future = self.pool.submit(self._lookup, key, generation, force)
+            self.future = self.pool.submit(self._lookup, key, generation, force, yandex)
             self.future.add_done_callback(lambda future: GLib.idle_add(self._deliver, generation, key, future, priority=GLib.PRIORITY_DEFAULT))
         GLib.idle_add(self._notify, generation, priority=GLib.PRIORITY_DEFAULT)
 
@@ -246,7 +263,8 @@ class LyricsClient:
         return self.cache_dir/(hashlib.sha256(json.dumps(key, ensure_ascii=False).encode()).hexdigest()+'.json')
 
     def _import_path(self,key):
-        return self.import_dir/self._path(key).name
+        # Preserve access to existing user imports, which are keyed by metadata.
+        return self.import_dir/self._path(key[:4]).name
 
     def import_file(self,path):
         if self.closed or not self.key:return
@@ -283,15 +301,15 @@ class LyricsClient:
         if self.future:self.future.cancel()
         self.cache.pop(key,None)
         self.state=LyricsState('loading')
-        self.future=self.pool.submit(self._automatic,key,generation)
+        self.future=self.pool.submit(self._automatic,key,generation,self.yandex)
         self.future.add_done_callback(lambda future:GLib.idle_add(self._deliver,generation,key,future,priority=GLib.PRIORITY_DEFAULT))
         self._notify(generation)
 
-    def _automatic(self,key,generation):
+    def _automatic(self,key,generation,yandex):
         if not self._current(generation):return LyricsState()
         try:self._import_path(key).unlink(missing_ok=True)
         except OSError:return LyricsState('error')
-        return self._lookup(key,generation,force=True)
+        return self._lookup(key,generation,force=True,yandex=yandex)
 
     def _cached(self, key):
         try:
@@ -314,7 +332,7 @@ class LyricsClient:
         try:
             self.cache_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
             record = {'instrumental': state.status == 'instrumental', 'plainLyrics': state.plain,
-                      'local':not bool(state.source_url),
+                      'local':not bool(state.source_url), 'yandex':state.source_url == YANDEX_SOURCE,
                       'syncedLyrics': serialize_lrc(state.lines)}
             data = {'version': 1, 'expires': time.time()+self._ttl(state), 'record': record}
             path = self._path(key)
@@ -368,7 +386,7 @@ class LyricsClient:
             finally:
                 error.close()
 
-    def _lookup(self, key, generation, force=False):
+    def _lookup(self, key, generation, force=False, yandex=None):
         if not self._current(generation):
             return LyricsState()
         try:
@@ -381,7 +399,20 @@ class LyricsClient:
             cached = self._cached(key)
             if cached:
                 return cached
-        title, artist, album, seconds = key
+        if yandex:
+            api, identifier = yandex
+            for fmt, field in (('LRC', 'syncedLyrics'), ('TEXT', 'plainLyrics')):
+                if not self._current(generation):
+                    return LyricsState()
+                try:
+                    state = _record({field: api.lyrics(identifier, fmt), 'yandex': True})
+                except (YandexError, OSError, ValueError):
+                    continue
+                if state.status == 'ready':
+                    if self._current(generation):
+                        self._save(key, state)
+                    return state
+        title, artist, album, seconds = key[:4]
         params = {'track_name': title, 'artist_name': artist}
         if album:
             params['album_name'] = album

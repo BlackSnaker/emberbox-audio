@@ -12,7 +12,7 @@ from nixie_spectrum import NixieSpectrum
 from tube_meter import TubeMeter
 from stage_reveal import StageReveal
 from source_picker import SourcePicker, text
-from lyrics import LyricsClient, active_line
+from lyrics import LyricsClient, YANDEX_SOURCE, active_line, yandex_recording
 from cover_sources import AppleMotion, apple_page
 from motion_artwork import MotionCover
 from motion_surface import MotionSurface
@@ -687,7 +687,7 @@ class FullscreenPlayer:
         target=not self.lyrics_visible
         if target:
             h=self.host
-            self.lyrics.set_track(h.title.get_text(),h.artist.get_text(),h.album.get_text(),h.length/1e6)
+            self.lyrics.set_track(h.title.get_text(),h.artist.get_text(),h.album.get_text(),h.length/1e6,yandex=yandex_recording(h))
         def change():
             self.set_lyrics_visible(target);self.update()
             if target:self.on_lyrics(force=True)
@@ -1055,12 +1055,13 @@ class FullscreenPlayer:
             or self.cover_change.pending or self.music.loading or h.length<=0)
         if not self.reveal.active and self.page=='playing':
             self.motion.set_playing(h.playing and not self.cover_change.pending and not self.cover_pause.get_visible())
-        identity=(h.source,title,artist,album,round(h.length/1e6))
+        recording=yandex_recording(h)
+        identity=(h.source,title,artist,album,round(h.length/1e6),recording)
         if identity!=self.track and (self.page=='karaoke' or self.lyrics_visible and self.page=='playing') and not self.reveal.active:
             self.track=identity;self.current_line=-2;self.manual_until=0.;self.last_position=None
             # No network activity for the desktop widget or empty player states.
             valid=bool(h.length>0 and title and artist and not episode)
-            self.lyrics.set_track(title if valid else '',artist if valid else '',album if valid else '',h.length/1e6)
+            self.lyrics.set_track(title if valid else '',artist if valid else '',album if valid else '',h.length/1e6,yandex=recording)
         if self.lyrics_visible and self.page=='playing':self.update_line()
         if self.page=='karaoke':self.karaoke.update()
         if self.page=='mashup':self.mashups.poll_setup()
@@ -1087,6 +1088,10 @@ class FullscreenPlayer:
             self.lines_box.show_all()
             self.lyric_stack.set_visible_child_name('lines')
             self.lyric_note.set_text(text('Tap a line to go there','Нажми на строку, чтобы перемотать') if state.synced else text('Text without timecodes','Текст без таймкодов'))
+            if state.source_url:
+                self.credit.set_uri(state.source_url)
+                self.credit.set_label(text("Yandex Music", "Яндекс Музыка") + " ↗"
+                                      if state.source_url == YANDEX_SOURCE else "LRCLIB ↗")
             self.credit.set_visible(bool(state.source_url))
             self.follow.set_visible(state.synced)
             GLib.idle_add(self.update_line,True,priority=GLib.PRIORITY_DEFAULT)
@@ -1145,7 +1150,7 @@ class FullscreenPlayer:
 
     def retry_lyrics(self):
         h=self.host
-        self.lyrics.set_track(h.title.get_text(),h.artist.get_text(),h.album.get_text(),h.length/1e6,force=True)
+        self.lyrics.set_track(h.title.get_text(),h.artist.get_text(),h.album.get_text(),h.length/1e6,force=True,yandex=yandex_recording(h))
 
     def fade_lines(self):
         height=self.lyrics_scroll.get_allocated_height()

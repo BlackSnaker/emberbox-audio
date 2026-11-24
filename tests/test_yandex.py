@@ -249,6 +249,28 @@ class APITests(unittest.TestCase):
         self.assertEqual(json.loads(request.data), {'seeds': ['user:onyourwave']})
         self.assertEqual(request.full_url, 'https://api.music.yandex.net/rotor/session/new')
 
+    def test_signed_lyrics_download_without_oauth(self):
+        from urllib.parse import urlsplit, parse_qs
+        url = 'https://storage.mds.yandex.net/lyrics'
+        with patch('yandex_api.time.time', return_value=1668687184), patch(
+                'yandex_api.urlopen', side_effect=[self.response({'downloadUrl': url}),
+                                                 io.BytesIO(b'[00:01.00]Lyrics')]) as open_url:
+            self.assertEqual(API('private-token').lyrics('4784420:8', 'LRC'), '[00:01.00]Lyrics')
+        request, download = (call.args[0] for call in open_url.call_args_list)
+        parsed = urlsplit(request.full_url)
+        self.assertEqual(parsed.path, '/tracks/4784420/lyrics')
+        self.assertEqual(parse_qs(parsed.query), {'format': ['LRC'], 'timeStamp': ['1668687184'],
+                         'sign': ['xFMznx4AQv6pjJr9z1NUQFADPasQt+USWFjBOowbpbU=']})
+        self.assertEqual(request.get_header('Authorization'), 'OAuth private-token')
+        self.assertEqual(download, url)
+
+    def test_rejects_untrusted_lyrics_download(self):
+        with patch('yandex_api.urlopen', return_value=self.response({
+                'downloadUrl': 'https://yandex.net.example.org/lyrics'})) as open_url:
+            with self.assertRaises(YandexError):
+                API('token').lyrics('12', 'TEXT')
+        open_url.assert_called_once()
+
     def test_stream_signature_and_no_oauth_on_media_request(self):
         api = API('private-token')
         api.call = Mock(return_value=[{'codec': 'mp3', 'bitrateInKbps': 320,
