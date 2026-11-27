@@ -404,7 +404,7 @@ The optional first-launch tour covers music services, fullscreen controls and Em
 
 Open **Podcasts** in the fullscreen navigation or in **Settings → Player**. Pick a spoken language and category to fill the cover wall. When a service has few verified matches, clearly labelled Apple Podcasts cards round out the selection. Public Apple episodes play from publisher RSS without an Apple sign-in. Spotify and Yandex Music use their connected accounts.
 
-The `main` branch currently tracks **1.0.0-rc.2**.
+The `main` branch currently tracks **0.39.0**.
 
 Select a source in the header. Apple Music plays through a background web engine, with playlists, albums, songs and catalogue search inside Emberbox. It requires a compatible installed DRM-capable runtime and an Apple Music subscription. [One-time setup →](docs/APPLE_MUSIC.md)
 
