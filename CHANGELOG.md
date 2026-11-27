@@ -2,6 +2,12 @@
 
 **English** · [Русский](CHANGELOG.ru.md)
 
+## 0.39.0 — 2026-11-27 · The Record Shelf
+
+- Browse saved albums on an interactive shelf, turn jackets over and slide out the vinyl.
+- Listen to the full album in order, save a wishlist and search for physical editions.
+- Show track credits and album contributors, and style the windowed credits button to match Ember.
+
 ## 0.38.0 — 2026-11-24 · Yandex Music lyrics
 
 - Show Yandex Music lyrics in fullscreen and karaoke, with timed lines when available.

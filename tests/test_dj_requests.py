@@ -181,7 +181,7 @@ class RequestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             book=QueueBook(Path(folder)/'queue.json')
             book.add('apple-music',[song(1,origin='dj'),song(2,'Michael Jackson',origin='manual')]);book.select('apple-music',0)
-            service=SimpleNamespace(host=SimpleNamespace(source='apple-music'),book=book,changed=lambda:None)
+            service=SimpleNamespace(host=SimpleNamespace(source='apple-music'),book=book,album_listening=False,changed=lambda:None)
             MusicService.extend_dj(service,[song(3),song(4)],before_pending=True)
             self.assertEqual([v['id'] for _,v in book.upcoming('apple-music')],['3','4','2'])
             self.assertEqual(book.queues['apple-music'][-1]['origin'],'manual')

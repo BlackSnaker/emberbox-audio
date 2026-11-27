@@ -6,7 +6,7 @@ import gi
 gi.require_version('Gtk', '3.0')
 from gi.repository import GLib, Gtk
 from source_picker import text
-from yandex_api import API, YandexError, token_store, track
+from yandex_api import API, YandexError, artist_credit, token_store, track
 
 
 class YandexWeb:
@@ -260,6 +260,14 @@ class YandexWeb:
                 result = self.api.call('search', text=params.get('term', ''), type='track', page=0) or {}
                 return {'items': [track(v) for v in (result.get('tracks') or {}).get('results', [])]}
             if method == 'browse':
+                if params.get('category') == 'albums':
+                    saved = self.api.call('users/' + self.uid + '/likes/albums') or []
+                    values = [album(value) for row in saved if isinstance(row, dict)
+                              and isinstance(value := row.get('album', row), dict) and value.get('title')
+                              and value.get('type') != 'podcast']
+                    offset = max(0, int(params.get('offset', 0)))
+                    end = offset + 100
+                    return {'items':values[offset:end], 'next':end if len(values)>end else None}
                 if params.get('category') == 'queue':
                     # Playlist playback is owned by MusicService, not this
                     # transport's single-track fallback or Rotor batch.
@@ -500,9 +508,13 @@ def cover(value):
 
 
 def album(value):
+    artists = [artist_credit(a) for a in value.get('artists', [])]
     return {'id': str(value.get('id', '')), 'kind': 'album', 'title': value.get('title', ''),
-            'artist': ', '.join(a.get('name', '') for a in value.get('artists', [])),
+            'artist': ', '.join(a['name'] for a in artists), 'artists': artists,
+            'artistId': artists[0]['id'] if len(artists) == 1 else '',
             'image': 'https://' + value['coverUri'].replace('%%', '400x400') if value.get('coverUri') else '',
+            'description': value.get('description') or value.get('shortDescription') or '',
+            'trackCount': value.get('trackCount') or 0,
             'year': value.get('year', '')}
 
 

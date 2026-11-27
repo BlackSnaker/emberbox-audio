@@ -168,5 +168,22 @@ https://unrelated.invalid/injected.m3u8
                 self.assertEqual(output.getpixel((0,0))[3],0)
             loader.pool.shutdown(wait=False,cancel_futures=True)
 
+    def test_high_resolution_aspect_request_does_not_enlarge_a_small_original(self):
+        loader = Artwork()
+        try:
+            with tempfile.TemporaryDirectory() as folder:
+                loader.folder = Path(folder)
+                path = Path(folder)/'small.png'
+                Image.new('RGB', (144, 120), 'blue').save(path)
+                token = (path.as_uri(), 1280, 0, 'original-v1', 'aspect-v1')
+                widget = SimpleNamespace(_art_token=token)
+                with patch('artwork.GLib.idle_add') as publish:
+                    loader._fetch(widget, token, None)
+                callback, target, received, pixels, _ = publish.call_args.args
+                self.assertEqual((callback, target, received), (loader._apply_pixels, widget, token))
+                self.assertEqual((pixels.get_width(), pixels.get_height()), (144, 120))
+        finally:
+            loader.pool.shutdown(wait=False, cancel_futures=True)
+
 
 if __name__=='__main__':unittest.main()

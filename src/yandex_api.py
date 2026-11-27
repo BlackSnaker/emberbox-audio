@@ -121,6 +121,18 @@ class API:
             raise YandexError('Yandex Music stream is unavailable.') from None
 
 
+def artist_credit(artist):
+    cover = artist.get('cover')
+    uri = (cover.get('uri') if isinstance(cover, dict) else '') or artist.get('coverUri')
+    image = ''
+    if isinstance(uri, str) and uri:
+        try:
+            image = safe_url('https://' + uri.replace('%%', '200x200'))
+        except (ValueError, YandexError):
+            pass
+    return {'id': str(artist.get('id', '')), 'name': artist.get('name', ''), 'image': image}
+
+
 def track(item):
     item = item.get('track', item)
     albums = item.get('albums') or [{}]
@@ -128,7 +140,7 @@ def track(item):
     image = item.get('coverUri') or albums[0].get('coverUri') or ''
     return dict(id=str(item.get('id', '')), uri='yandex:track:' + str(item.get('id', '')),
                 kind='song', title=item.get('title', ''), artist=', '.join(a.get('name', '') for a in artists),
-                artists=[{'id': str(a.get('id', '')), 'name': a.get('name', '')} for a in artists],
+                artists=[artist_credit(a) for a in artists],
                 artistId=str(artists[0].get('id', '')) if artists else '', album=albums[0].get('title', ''),
                 albumId=str(albums[0].get('id', '')), duration=item.get('durationMs', 0) / 1000,
                 image=('https://' + image.replace('%%', '400x400')) if image else '')

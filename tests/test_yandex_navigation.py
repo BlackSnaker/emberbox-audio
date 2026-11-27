@@ -17,6 +17,7 @@ class NavigationTests(unittest.TestCase):
         state={'authorized':True,'title':'Current','duration':211,'position':0,
                'canPrevious':False,'canNext':False}
         app.native_web.return_value=SimpleNamespace(state=state,connected=True,pid=1,enabled=True,error='')
+        app.music.album_listening=False
         app.music.book=SimpleNamespace(active='yandex-music',indices={'yandex-music':1},
             queues={'yandex-music':[{}, {}, {}]},current=lambda source:{'playlistId':'99:1000'})
         app.audio_meter_active.return_value=False

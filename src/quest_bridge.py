@@ -200,7 +200,8 @@ class QuestBridge:
             if source!=h.source:h.select_source(source)
             h.music.play_now(item,context=public(data.get('context',[])))
         elif op=='queue':h.music.add(public(data['items']))
-        elif op=='queue-clear':h.music.book.clear(h.source);h.music.changed()
+        elif op=='queue-clear':
+            if not h.music.album_listening:h.music.book.clear(h.source);h.music.changed()
         elif op=='flow':h.music.flow.set_enabled(bool(value))
         elif op=='favorite':
             h.music.favorites.set(h.music.favorites.current(),bool(value))

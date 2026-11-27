@@ -52,8 +52,10 @@ def matches(item,snapshot):
 
 class QueueBook:
     def __init__(self,path):
-        self.path=Path(path);self.queues={s:[] for s in SOURCES};self.indices={s:-1 for s in SOURCES}
+        self.path=Path(path) if path is not None else None
+        self.queues={s:[] for s in SOURCES};self.indices={s:-1 for s in SOURCES}
         self.active=None;self.revision=0
+        if self.path is None:return
         try:
             if self.path.stat().st_size>5_000_000:return
             data=json.loads(self.path.read_text())
@@ -66,6 +68,7 @@ class QueueBook:
 
     def save(self):
         self.revision+=1
+        if self.path is None:return
         self.path.parent.mkdir(parents=True,exist_ok=True)
         temporary=self.path.with_suffix('.next.json')
         temporary.write_text(json.dumps({s:{'tracks':self.queues[s],'index':self.indices[s]} for s in SOURCES},ensure_ascii=False))

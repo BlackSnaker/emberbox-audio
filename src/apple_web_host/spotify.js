@@ -6,6 +6,14 @@ async function emberboxSpotifyCommand(request) {
  if(!allowed.includes(request.method))throw Error('INVALID_ARGUMENTS');
  const p=request.params||{},finite=n=>Number.isFinite(Number(n))?Math.max(0,Number(n)):0;
  const clean=n=>String(n||'').trim().slice(0,300);
+ function artistLinks(root) {
+  const seen=new Set();
+  return Array.from(root?.querySelectorAll('a[href*="/artist/"]')||[]).flatMap(link=>{
+   const id=identifier(link.getAttribute('href'),'artist'),name=clean(link.textContent);
+   if(!id||!name||seen.has(id))return [];
+   seen.add(id);return [{id,name}];
+  }).slice(0,32);
+ }
  const image=u=>{if(String(u).startsWith('spotify:image:'))u='https://i.scdn.co/image/'+u.split(':').pop();try{return new URL(u).protocol==='https:'?String(u):'';}catch{return '';}};
  const api=name=>(() => {
   const el = document.querySelector('main') || document.querySelector('#main');
@@ -203,6 +211,7 @@ async function emberboxSpotifyCommand(request) {
     tracks: items.filter(Boolean).map(t => t.track || t).filter(t => t.uri?.startsWith('spotify:track:')).map(t => ({
       uri: t.uri, title: t.name || '',
       artist: (t.artists || []).map(a => a.name).join(', '),
+      artists: (t.artists || []).slice(0,32).map(a=>({name:clean(a.name),id:identifier(a.uri||('spotify:artist:'+String(a.id||'')),'artist')})),
       album: t.album?.name || '',albumId:String(t.album?.id||'')||identifier(t.album?.uri,'album'),
       image: t.album?.images?.find(i => i.label === 'small')?.url || t.album?.images?.[0]?.url || '',
       duration_ms: t.duration?.milliseconds || 0,
@@ -354,7 +363,10 @@ async function emberboxSpotifyCommand(request) {
     .filter(p=>/^\/artist\/[A-Za-z0-9]{1,64}\/discography\/(all|album|single|compilation)$/.test(p));
   return {name,image,bio,releases,songs,links};
 })();
-  return {...data,release:{id:artistId,kind:'album',uri:'spotify:album:'+artistId,title:data.title,image:image(info?.image),description:clean(info?.bio)}};
+  const artists=artistLinks(document.querySelector('main [data-testid="entity-header"]'));
+  return {...data,release:{id:artistId,kind:'album',uri:'spotify:album:'+artistId,title:data.title,
+    artist:artists.map(a=>a.name).join(', '),artistId:artists.length===1?artists[0].id:'',artists,
+    image:image(info?.image),description:clean(info?.bio)}};
  }
  if(!artistId){const refs=(() => {
   const uri=String(p.songUri||''),current=true,seen=new Set(),result=[];

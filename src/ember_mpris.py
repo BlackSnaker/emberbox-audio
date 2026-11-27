@@ -74,7 +74,7 @@ class EmberMpris:
                 'Position':GLib.Variant('x',max(0,int(state.get('position',0)))),
                 **{key:GLib.Variant('b',bool(value)) for key,value in {
                     'CanGoNext':active and state.get('next'),'CanGoPrevious':active and state.get('previous'),
-                    'CanPlay':active,'CanPause':active,'CanSeek':active and state.get('duration',0)>0,
+                    'CanPlay':active,'CanPause':active,'CanSeek':active and state.get('seek',True) and state.get('duration',0)>0,
                     'CanControl':True}.items()}}
 
     def publish(self,state):
@@ -118,6 +118,9 @@ class EmberMpris:
         if self.state.get('active'):
             values = params.unpack()
             if method in ('Seek','SetPosition'):
+                if not self.state.get('seek',True):
+                    invocation.return_value(None)
+                    return
                 metadata = self.properties(PLAYER)['Metadata'].unpack()
                 if method=='SetPosition' and values[0] != metadata.get('mpris:trackid'):
                     invocation.return_value(None)

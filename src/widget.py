@@ -32,6 +32,8 @@ from sources import Monitor, choose_session
 from stream_target import Target
 from source_picker import SourcePicker, text
 from quality_badge import QualityBadge,CSS as QUALITY_CSS
+from credits_view import TrackCredits,CSS as CREDITS_CSS
+from recording_credits import current_recording
 from apple_bridge import AppleBridge
 from apple_library import AppleLibraryPanel
 from apple_web import AppleWeb
@@ -208,7 +210,7 @@ def stamp(microseconds):
 class Widget:
     def __init__(self):
         provider = Gtk.CssProvider()
-        provider.load_from_data(CSS+QUALITY_CSS+FLOW_CSS+NOTICE_CSS+FAVORITE_CSS+WELCOME_CSS)
+        provider.load_from_data(CSS+QUALITY_CSS+FLOW_CSS+NOTICE_CSS+FAVORITE_CSS+WELCOME_CSS+CREDITS_CSS)
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(), provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
@@ -439,6 +441,9 @@ class Widget:
         self.album_row=Gtk.Box(spacing=7)
         self.album_row.pack_start(self.album_button,True,True,0)
         self.quality=QualityBadge();self.album_row.pack_end(self.quality,False,False,0)
+        self.credits=TrackCredits(self,self.artwork,icon=True)
+        self.credits.button.set_no_show_all(True)
+        self.album_row.pack_end(self.credits.button,False,False,0)
         details.pack_start(self.album_row, False, False, 0)
 
         self.progress = Gtk.ProgressBar()
@@ -638,6 +643,7 @@ class Widget:
         if self.kwin_desktop:self.kwin_desktop.close()
         self.frame_health.close()
         if self.fullscreen:self.fullscreen.close()
+        self.credits.close()
         self.appearance.close()
         self.cover_pause.close()
         self.youtube_panel.close()
@@ -705,6 +711,9 @@ class Widget:
     def update_album_link(self,*_args):
         self.album_button.set_sensitive(album_ref(self) is not None)
         self.album_button.get_accessible().set_name(text('Open album: ','Открыть альбом: ')+self.album.get_text())
+
+    def update_credits(self):
+        self.credits.button.set_visible(current_recording(self) is not None)
 
     def prepare_fullscreen(self):
         if self.resources_closed:self.fullscreen_prewarm=0;return False
@@ -1083,17 +1092,19 @@ class Widget:
         self.album.set_text(apple.error or (text('Loading episode…', 'Загружаю выпуск…') if podcast and apple.loading
                                             else 'Apple Podcasts' if podcast else state.get('album') or ''))
         self.quality.update(self)
+        self.update_credits()
         self.time.set_text(f'{stamp(self.position)}  /  {stamp(self.length)}')
         self.progress.set_fraction(max(0.,min(1.,self.position/self.length)) if self.length else 0.)
-        self.progress_event.set_sensitive(bool(authorized and self.length and state.get('canSeek',True)))
+        locked=self.music.album_listening
+        self.progress_event.set_sensitive(not locked and bool(authorized and self.length and state.get('canSeek',True)))
         can_previous=state.get('canPrevious');can_next=state.get('canNext')
         if self.source=='yandex-music' and self.music.book.active==self.source:
             book=self.music.book;index=book.indices[self.source]
             current=book.current(self.source) or {}
             can_previous=index>0 or self.position>0
             can_next=index+1<len(book.queues[self.source]) or bool(current.get('playlistId'))
-        self.previous.set_sensitive(bool(authorized and can_previous and state.get('title')))
-        self.next.set_sensitive(bool(authorized and can_next and state.get('title')))
+        self.previous.set_sensitive(not locked and bool(authorized and can_previous and state.get('title')))
+        self.next.set_sensitive(not locked and bool(authorized and can_next and state.get('title')))
         self.play.set_sensitive(True)
         self.play.set_label('Ⅱ' if self.playing else '▶')
         self.set_art(state.get('image') or None)
@@ -1148,6 +1159,7 @@ class Widget:
         self.artist.set_text(str(item.get('channel') or 'YouTube') if item else text('Search or paste a YouTube link','Поиск или ссылка YouTube'))
         self.album.set_text(audio.error or (text('Loading audio…','Загружаю музыку…') if audio.loading else 'YouTube · '+text('audio','музыка')))
         self.quality.update(self)
+        self.update_credits()
         self.time.set_text(f'{stamp(self.position)}  /  {stamp(self.length)}' if self.length else 'LIVE' if audio.loaded else '0:00  /  0:00')
         self.progress.set_fraction(max(0.,min(1.,self.position/self.length)) if self.length else 0.)
         self.progress_event.set_sensitive(bool(audio.loaded and self.length))
@@ -1183,6 +1195,12 @@ class Widget:
 
     def on_music_changed(self):
         self.update_loading()
+        locked=self.music.album_listening
+        self.flow_control.set_sensitive(not locked)
+        if locked:
+            self.progress_event.set_sensitive(False)
+            self.previous.set_sensitive(False);self.next.set_sensitive(False)
+        self.publish_mpris()
         panel={'spotify':self.panel,'apple-music':self.apple_panel,'youtube':self.youtube_panel,'yandex-music':self.yandex_panel}[self.source]
         if self.source=='yandex-music' and panel.category=='queue':
             book=self.music.book
@@ -1202,6 +1220,7 @@ class Widget:
         parts = uri.split(':', 2)
         if len(parts) != 3:
             return
+        if self.music.album_listening:self.music.stop()
         params = {'kind':parts[1],'id':parts[2]}
         if self.apple_native() and parts[1] in ('library-songs','songs'):
             tracks = (self.apple_panel.track_data or {}).get('tracks',[])
@@ -1396,6 +1415,7 @@ class Widget:
         return False
 
     def on_seek(self, _box, event):
+        if self.music.album_listening:return True
         self.music.watch.reset()
         if self.native_web():
             if event.button == 1 and self.length:
@@ -1418,6 +1438,7 @@ class Widget:
         return True
 
     def on_action(self, _button, action):
+        if self.music.album_listening and action in ('next','previous'):return
         if self.podcast_audio.enabled:
             if action=='open':self.show_podcasts()
             elif action in ('toggle', 'previous', 'next'):self.podcast_audio.action('transport', action=action)
@@ -1535,6 +1556,7 @@ class Widget:
         self.sound.set_volume(value)
 
     def seek_to(self,seconds):
+        if self.music.album_listening:return
         self.music.watch.reset()
         if self.native_web():
             self.native_web().action('seek',position=seconds)
@@ -1546,6 +1568,8 @@ class Widget:
             GLib.timeout_add(150,self.refresh_once)
 
     def system_action(self,method,uri=None):
+        if method=='Stop' and self.music.album_listening:
+            self.music.exit_album();return
         if method=='OpenUri' and self.spotify_native():self.play_uri(uri or '');return
         if method=='OpenUri' and self.apple_native():
             self.play_apple_uri(uri)
@@ -1570,6 +1594,7 @@ class Widget:
                      'artist':item.get('channel',''),'image':item.get('image',item.get('thumbnail','')),
                      'next':self.youtube.index<len(self.youtube.queue)-1,'previous':self.youtube.index>0}
         state.update(duration=self.length,position=self.position,playing=self.playing)
+        if self.music.album_listening:state.update(next=False,previous=False,seek=False)
         if state.get('active'):
             state['image'] = self.artwork.cached_uri(self.cover) or state.get('image','')
         if hasattr(self,'sound'):
@@ -1618,6 +1643,7 @@ class Widget:
                                  else text('Start Apple Music · choose its browser', 'Включи Apple Music · выбери браузер'))
             self.album.set_text('')
             self.quality.update(self)
+            self.update_credits()
             self.time.set_text('0:00  /  0:00')
             self.progress.set_fraction(0)
             self.play.set_sensitive(True)
@@ -1641,15 +1667,17 @@ class Widget:
         self.artist.set_text(', '.join(artists) if artists else text('Music', 'Музыка'))
         self.album.set_text(str(metadata.get('xesam:album') or ''))
         self.quality.update(self)
+        self.update_credits()
         if self.source == 'spotify':
             track_id = str(metadata.get('mpris:trackid') or '').rsplit('/', 1)[-1]
             self.panel.update_current('spotify:track:' + track_id)
         self.time.set_text(f'{stamp(self.position)}  /  {stamp(self.length)}')
         self.progress.set_fraction(max(0, min(1, self.position / self.length)) if self.length else 0)
-        self.previous.set_sensitive(bool(props.get('CanGoPrevious', True)))
-        self.next.set_sensitive(bool(props.get('CanGoNext', True)))
+        locked=self.music.album_listening
+        self.previous.set_sensitive(not locked and bool(props.get('CanGoPrevious', True)))
+        self.next.set_sensitive(not locked and bool(props.get('CanGoNext', True)))
         self.play.set_sensitive(bool(props.get('CanControl', True)))
-        self.progress_event.set_sensitive(bool(props.get('CanSeek', True)))
+        self.progress_event.set_sensitive(not locked and bool(props.get('CanSeek', True)))
         self.play.set_label('Ⅱ' if self.playing else '▶')
         self.set_art(metadata.get('mpris:artUrl'))
 

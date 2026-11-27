@@ -14,6 +14,7 @@ from source_picker import text
 from gui_session import systemd_environment
 
 ENGINE_CONFIG = CONFIG_DIR/'apple-engine.json'
+ADAPTER_VERSION = 36
 
 
 class AppleWeb:
@@ -21,7 +22,7 @@ class AppleWeb:
     def __init__(self, changed):
         self.changed = changed
         self.bridge = AppleBridge(getattr(self,'socket_filename','apple-player.sock'),
-            ('status','browse','tracks','search','play','transport','seek','show','hide','enable','artist','artistSection','release','flow','spatial','favorite')+getattr(self,'extra_methods',()),
+            ('status','browse','tracks','search','play','transport','seek','show','hide','enable','artist','artistSection','release','flow','spatial','favorite','credits')+getattr(self,'extra_methods',()),
             on_connection=lambda:GLib.idle_add(self._connection_changed))
         self.pool = ThreadPoolExecutor(max_workers=3, thread_name_prefix='apple-player')
         self.state = {}
@@ -195,7 +196,9 @@ class AppleWeb:
                 message = text('Check your Apple Music sign-in and subscription.', 'Проверь вход и подписку Apple Music.')
             elif code not in ('NOT_READY',):
                 message = text('Apple Music could not complete this request.', 'Apple Music не смог выполнить запрос.')
-            raise BridgeUnavailable(message) from None
+            failure = BridgeUnavailable(message)
+            failure.code = code
+            raise failure from None
 
     def action(self, method, **params):
         if self.closed:
@@ -288,7 +291,7 @@ class AppleWeb:
         try:
             self.state = self._seek_state(future.result())
             self.error = ''
-            if self.state.get('ready') and self.state.get('integrationVersion',0)<33 and not self.upgrade_attempted:
+            if self.state.get('ready') and self.state.get('integrationVersion',0)<ADAPTER_VERSION and not self.upgrade_attempted:
                 self.upgrade_attempted = self.upgrading = True
                 self.pool.submit(self._upgrade,dict(self.state)).add_done_callback(
                     lambda item:GLib.idle_add(self._upgraded,item))
@@ -319,7 +322,7 @@ class AppleWeb:
             if self.connected:
                 try:
                     current = self.bridge.request('status')
-                    if current.get('ready') and current.get('integrationVersion',0)>=33 and (not state.get('authorized') or current.get('authorized')):
+                    if current.get('ready') and current.get('integrationVersion',0)>=ADAPTER_VERSION and (not state.get('authorized') or current.get('authorized')):
                         break
                 except BridgeUnavailable:pass
             time.sleep(.3)

@@ -20,6 +20,7 @@ from music_library import MusicService, snapshot
 from yandex_panel import wave_description,playlist_wave_context
 from listening_library import LibraryView,QueueView,CSS as LIBRARY_CSS
 from quality_badge import QualityBadge,CSS as QUALITY_CSS
+from credits_view import TrackCredits,CSS as CREDITS_CSS
 from karaoke import KaraokeView,CSS as KARAOKE_CSS
 from artist_catalog import artist_ref,album_ref
 from artist_view import ArtistView,CSS as ARTIST_CSS
@@ -209,7 +210,7 @@ class FullscreenPlayer:
         self.window.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self.window.connect('delete-event',lambda *_args:(self.dismiss(),True)[1])
         self.window.connect('key-press-event',self.on_key)
-        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS+KARAOKE_CSS+ARTIST_CSS+DJ_CSS+FLOW_CSS+FAVORITE_CSS+MASHUP_CSS+PODCAST_CSS)
+        provider=Gtk.CssProvider();provider.load_from_data(CSS+LIBRARY_CSS+QUALITY_CSS+KARAOKE_CSS+ARTIST_CSS+DJ_CSS+FLOW_CSS+FAVORITE_CSS+MASHUP_CSS+PODCAST_CSS+CREDITS_CSS)
         Gtk.StyleContext.add_provider_for_screen(self.window.get_screen(),provider,Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION+5)
         self.provider=provider
         self.glass_provider=Gtk.CssProvider();self.glass_provider.load_from_data(GLASS_CSS+ARTIST_GLASS_CSS)
@@ -307,7 +308,13 @@ class FullscreenPlayer:
         album_line.pack_end(label('›','stage-album'),False,False,0)
         self.album_button.remove(self.album_button.get_child());self.album_button.add(album_line)
         self.metadata.pack_start(self.album_button,False,False,0)
-        self.quality=QualityBadge();self.metadata.pack_start(self.quality,False,False,0)
+        self.credit_row=Gtk.Box(spacing=6,halign=Gtk.Align.CENTER)
+        self.credits=TrackCredits(host,self.artwork)
+        self.credits.button.set_no_show_all(True)
+        self.quality=QualityBadge()
+        self.credit_row.pack_start(self.quality,False,False,0)
+        self.credit_row.pack_start(self.credits.button,False,False,0)
+        self.metadata.pack_start(self.credit_row,False,False,0)
         self.body.pack_start(self.left,False,False,0)
         right=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=14)
         self.right=right
@@ -345,7 +352,7 @@ class FullscreenPlayer:
         self.pages=Gtk.Stack();self.pages.set_hhomogeneous(False);self.pages.set_vhomogeneous(False)
         self.pages.set_transition_type(Gtk.StackTransitionType.NONE)
         self.pages.add_named(self.body,'playing')
-        self.library_view=LibraryView(self.music,self.artwork,self.open_accounts,self.open_artist)
+        self.library_view=LibraryView(self.music,self.artwork,self.open_accounts,self.open_artist,self.show_album)
         self.queue_view=QueueView(self.music,self.artwork,self.open_artist)
         self.pages.add_named(self.library_view,'library');self.pages.add_named(self.queue_view,'queue')
         self.podcasts=PodcastView(self.host,self.artwork,self.open_accounts)
@@ -362,6 +369,13 @@ class FullscreenPlayer:
         footer=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10);self.footer=footer
         self.playing_caption=label('','stage-library-note',True);self.playing_caption.set_width_chars(1)
         self.playing_caption.set_no_show_all(True);footer.pack_start(self.playing_caption,False,False,0)
+        self.album_mode=Gtk.Box(spacing=9)
+        self.album_mode_text=label('','record-format-label')
+        self.album_mode_text.set_ellipsize(Pango.EllipsizeMode.END)
+        self.album_mode.pack_start(self.album_mode_text,True,True,0)
+        self.album_mode.pack_end(self.button(text('Exit album mode','Выйти из режима'),self.music.exit_album,'stage-tab'),False,False,0)
+        self.album_mode.show_all();self.album_mode.set_no_show_all(True)
+        footer.pack_start(self.album_mode,False,False,0)
         self.yandex_controls=Gtk.Box(spacing=12);self.yandex_controls.set_no_show_all(True)
         self.yandex_wave_status=label('','stage-library-note',True)
         self.yandex_wave_status.set_ellipsize(Pango.EllipsizeMode.END)
@@ -461,6 +475,11 @@ class FullscreenPlayer:
         source=self.host.source
         count=len(self.music.book.upcoming(source))
         self.page_tabs['queue'].set_label(text('Queue','Очередь')+(f' · {count}' if count else ''))
+        self.album_mode.set_visible(self.music.album_listening)
+        if self.music.album_listening:
+            index=self.music.book.indices[source]+1
+            total=len(self.music.book.queues[source])
+            self.album_mode_text.set_text(text('Full album','Альбом целиком')+f'  ·  {index}/{total}  ·  '+self.music.album_title)
         self.nav_sync=True
         for key,b in self.page_tabs.items():b.set_active(key==(self.pending_page or self.page))
         self.nav_sync=False
@@ -603,6 +622,7 @@ class FullscreenPlayer:
         self.reveal.finish()
         self.dismiss_pending=False
         self.visible=False
+        self.credits.dismiss()
         self.suspend_desktop_visuals(False)
         self.library_view.deactivate();self.queue_view.deactivate();self.artist_view.deactivate()
         self.karaoke.deactivate();self.dj_view.deactivate();self.mashups.deactivate()
@@ -668,7 +688,7 @@ class FullscreenPlayer:
         for item in (self.title,self.artist,self.album):item.set_xalign(0. if visible else .5)
         self.artist_button.set_halign(Gtk.Align.START if visible else Gtk.Align.CENTER)
         self.album_button.set_halign(Gtk.Align.START if visible else Gtk.Align.CENTER)
-        self.quality.set_halign(Gtk.Align.START if visible else Gtk.Align.CENTER)
+        self.credit_row.set_halign(Gtk.Align.START if visible else Gtk.Align.CENTER)
         self.lyrics_button.set_label(text('Artwork','Обложка') if visible else text('Lyrics','Текст песни'))
         self.lyrics_button.get_accessible().set_name(text('Show artwork','Показать обложку') if visible else text('Show lyrics','Показать текст песни'))
         self.layout_size=None;self.track=None
@@ -702,6 +722,7 @@ class FullscreenPlayer:
     def close(self):
         if self.closed:return
         self.hide();self.closed=True
+        self.credits.close()
         if self.theme_unsubscribe:self.theme_unsubscribe()
         if self.winter_surface:self.winter_surface.close()
         self.cover_change.close()
@@ -924,6 +945,7 @@ class FullscreenPlayer:
             if action=='toggle':client.toggle()
             elif action in ('previous','next'):client.seek(max(0,client.position+(-10 if action=='previous' else 10)))
             self.update();return
+        if self.music.album_listening and action in ('next','previous'):return
         if action in ('next','previous') and self.music.book.active!=self.host.source:
             self.cover_change.request()
         self.host.on_action(None,action)
@@ -936,6 +958,7 @@ class FullscreenPlayer:
     def request_seek(self,value):
         if self.mashup_active():
             self.mashups.client.seek(value);return
+        if self.music.album_listening:return
         self.position=max(0,min(self.host.length/1e6,float(value)))
         self.host.seek_to(self.position)
         self.progress.set_value(self.position)
@@ -948,6 +971,8 @@ class FullscreenPlayer:
         if reader and reader.get_mapped():
             if key=='Escape':reader.popdown();return True
             return False
+        if key=='Escape' and self.page=='library' and self.library_view.shelf.inspector_open:
+            self.library_view.shelf.close_inspector();return True
         if key in ('Escape','F11'):self.dismiss();return True
         if key=='Left' and event.state&Gdk.ModifierType.MOD1_MASK and self.page=='artist':self.artist_view.back();return True
         if event.state&Gdk.ModifierType.CONTROL_MASK and key.lower()=='f':
@@ -990,9 +1015,12 @@ class FullscreenPlayer:
             self.artist_button.get_accessible().set_name(accessible_name)
         self.album_button.set_sensitive(album_ref(h) is not None)
         self.album_button.get_accessible().set_name(text('Open album: ','Открыть альбом: ')+album)
+        credits_visible=self.credits.button.get_visible()
+        self.credits.button.set_visible(bool(h.length>0 and title and not episode))
         self.lyrics_button.set_sensitive(not episode)
         quality_visible=self.quality.get_visible();self.quality.update(h)
-        if metadata_changed or quality_visible!=self.quality.get_visible():self.layout_size=None
+        if metadata_changed or quality_visible!=self.quality.get_visible() or credits_visible!=self.credits.button.get_visible():
+            self.layout_size=None
         if self.layout_size!=(width,height):
             from types import SimpleNamespace
             self.on_size(self.window,SimpleNamespace(width=width,height=height))
@@ -1013,6 +1041,8 @@ class FullscreenPlayer:
             self.next_button.set_sensitive(index+1<len(self.music.book.queues[h.source]) or
                                            h.source=='yandex-music' and bool(current.get('playlistId')))
             self.previous_button.set_sensitive(bool(self.music.book.current(h.source)))
+        if self.music.album_listening and not mashup:
+            self.previous_button.set_sensitive(False);self.next_button.set_sensitive(False)
         delayed=mashup or self.page=='karaoke' and self.karaoke.audio.active and self.karaoke.audio.engine=='ai'
         if not delayed:
             value=text('Now playing: ','Сейчас: ')+title+'  ·  '+artist
@@ -1030,7 +1060,7 @@ class FullscreenPlayer:
             upper=max(1,h.length/1e6)
             if self.progress.get_adjustment().get_upper()!=upper:self.progress.set_range(0,upper)
             self.progress.set_value(self.position)
-            self.progress.set_sensitive(h.progress_event.get_sensitive() and h.length>0)
+            self.progress.set_sensitive(not self.music.album_listening and h.progress_event.get_sensitive() and h.length>0)
             for item,value in ((self.elapsed,clock_text(self.position)),(self.total,clock_text(h.length/1e6))):
                 if item.get_text()!=value:item.set_text(value)
         if not mashup:
@@ -1046,7 +1076,7 @@ class FullscreenPlayer:
                                (self.playing_caption,caption)):
                 if item.get_text()!=value:item.set_text(value)
             self.mute.set_state(client.volume,client.muted,True);self.knob.set_state(client.volume,client.muted,True)
-        self.flow_control.set_sensitive(not mashup and not episode)
+        self.flow_control.set_sensitive(not mashup and not episode and not self.music.album_listening)
         self.load_art()
         if not self.reveal.active and self.page=='playing':
             self.motion_lookup.set_track(self.motion_page() if self.motion.executable else '',h.art_url or '')

@@ -8,6 +8,7 @@ from music_library import NAMES,snapshot
 from track_list import RecordList,RecordRow,CSS as RECORD_CSS
 from flow_editor import FlowEditor,CSS as FLOW_CSS
 from flow_plans import playlist_key
+from album_shelf import AlbumShelf,CSS as SHELF_CSS
 
 CSS=b'''
 .stage-nav { background-color: rgba(13,21,16,.48); border-radius: 21px; padding: 3px; }
@@ -54,7 +55,7 @@ CSS=b'''
 .library-dense .record-header { padding: 6px 12px; }
 .library-dense .record-list row.record-row { padding-top: 6px; padding-bottom: 6px; }
 '''
-CSS+=RECORD_CSS+FLOW_CSS
+CSS+=RECORD_CSS+FLOW_CSS+SHELF_CSS
 
 
 def label(value,style,width=0):
@@ -89,8 +90,8 @@ def scroll(content):
 
 
 def collection(item):
-    return item.get('kind') in ('playlist','album','library-playlists','library-albums') or any(
-        value in item.get('uri','') for value in (':album:',':playlist:',':library-albums:',':library-playlists:'))
+    return item.get('kind') in ('playlist','album','albums','library-playlists','library-albums') or any(
+        value in item.get('uri','') for value in (':album:',':albums:',':playlist:',':library-albums:',':library-playlists:'))
 
 
 def duration(item):
@@ -120,7 +121,7 @@ def queue_greeting():
 
 
 class LibraryView(Gtk.Box):
-    def __init__(self,service,artwork,accounts,open_artist=None):
+    def __init__(self,service,artwork,accounts,open_artist=None,open_album=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL,spacing=13)
         self.service,self.artwork,self.accounts=service,artwork,accounts
         self.open_artist=open_artist
@@ -166,6 +167,12 @@ class LibraryView(Gtk.Box):
         self.pack_start(self.context,False,False,0)
         self.content=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=9)
         self.scroll=scroll(self.content);self.pack_start(self.scroll,True,True,0)
+        persisted_book=service.saved_book or service.book
+        self.shelf = AlbumShelf(artwork,persisted_book.path.with_name('album-wishlist.json'),
+                                open_album or self.open_collection,self.play_whole_album,
+                                lambda:self.load(append=True),lambda:self.load(refresh=True))
+        self.shelf.set_no_show_all(True);self.shelf.hide()
+        self.pack_start(self.shelf,True,True,0)
         foot=Gtk.Box(spacing=12);self.notice=label('','stage-library-note',95)
         self.notice.set_line_wrap(True);self.notice.set_lines(2)
         self.notice.set_no_show_all(True)
@@ -188,7 +195,7 @@ class LibraryView(Gtk.Box):
         self.active=True
         if self.source!=self.service.host.source:
             self.source=self.service.host.source;self.selected=None;self.items=[]
-            if self.category!='favorites':self.category='home'
+            if self.category not in ('favorites','albums'):self.category='home'
             self.sync_tabs()
             self.next_offset=None;self.render()
         self.source_badge.set_text(NAMES[self.source].upper())
@@ -196,6 +203,7 @@ class LibraryView(Gtk.Box):
 
     def deactivate(self):
         self.close_editor(render=False)
+        self.shelf.preparing=False;self.shelf.update_controls()
         self.active=False;self.request+=1;self.busy=False;self.spinner.stop();self.service.cancel_browse()
 
     def select(self,category):
@@ -218,6 +226,8 @@ class LibraryView(Gtk.Box):
 
     def load(self,refresh=False,append=False):
         if not self.active:return
+        if self.shelf.preparing:
+            self.shelf.preparing=False;self.shelf.message.set_text('');self.shelf.update_controls()
         if self.category=='favorites':
             values=list(self.service.favorites.items.values())[::-1]
             if self.rendered_key==self.key() and self.favorite_revision==self.service.favorites.revision and self.items==values:
@@ -227,39 +237,85 @@ class LibraryView(Gtk.Box):
             self.next_offset=None;self.favorite_revision=self.service.favorites.revision;self.render();return
         key=self.key()
         if self.category=='search' and not key[2] and not self.selected:
+            self.request+=1;self.service.cancel_browse();self.busy=False;self.spinner.stop()
+            self.notice.set_text('');self.connect_button.hide()
             self.items=[];self.next_offset=None;self.render();return
         if not refresh and not append and key in self.cache:
             self.request+=1;self.service.cancel_browse();self.busy=False;self.spinner.stop();self.connect_button.hide()
             values,self.next_offset,note=self.cache[key]
             unchanged=self.rendered_key==key and self.items==values
             self.items=values
-            if unchanged:self.update_playback()
+            if unchanged:
+                if self.category=='albums' and not self.selected:
+                    self.shelf.feed(self.source,self.items,self.next_offset is not None)
+                else:self.update_playback()
             else:self.render()
             self.notice.set_text(note);return
         self.request+=1;request=self.request
         self.busy=True;self.spinner.start();self.notice.set_text(text('Finding your music…','Ищу твою музыку…'))
         self.connect_button.hide()
-        if self.selected and key!=self.rendered_key:
+        shelf_open=self.category=='albums' and not self.selected
+        if key!=self.rendered_key:
             self.items=[];self.next_offset=None;self.render()
+        elif shelf_open:self.shelf.feed(self.source,self.items,False,True)
+        elif not self.items:self.render()
         def done(result,error):
             if not self.active or request!=self.request or key!=self.key():return
             self.busy=False;self.spinner.stop()
             if error:
-                self.notice.set_text(str(error));self.connect_button.show();return
+                if shelf_open:
+                    self.shelf.feed(self.source,self.items,self.next_offset is not None,error=str(error))
+                elif not self.items:
+                    self.show_load_error(error)
+                self.notice.set_text(str(error) if self.items else '')
+                self.connect_button.set_visible(getattr(error,'code',None) not in ('TIMEOUT','NETWORK_ERROR'))
+                return
             values=result.get('tracks',result.get('items',[]))
             self.items=(self.items if append else [])+values
-            self.items=self.items[:LIMIT];self.next_offset=result.get('next') if len(self.items)<LIMIT else None
+            if shelf_open:self.next_offset=result.get('next')
+            else:
+                self.items=self.items[:LIMIT];self.next_offset=result.get('next') if len(self.items)<LIMIT else None
             note=result.get('note','')
             if result.get('total',len(self.items))>len(self.items) and self.next_offset is None:
                 note=text(f"Showing {len(self.items)} of {result['total']} loaded tracks",f"Показано треков: {len(self.items)} из {result['total']}")
-            elif result.get('next') is not None and len(self.items)>=LIMIT:
+            elif not shelf_open and result.get('next') is not None and len(self.items)>=LIMIT:
                 note=text(f'Showing the first {LIMIT} tracks',f'Показаны первые {LIMIT} треков')
             self.cache[key]=(list(self.items),self.next_offset,note)
             self.render();self.notice.set_text(note)
         self.service.load(self.category,done,term=key[2],collection=self.selected,offset=self.next_offset or 0 if append else 0)
 
+    def show_load_error(self,error):
+        clear(self.content)
+        box=Gtk.Box(orientation=Gtk.Orientation.VERTICAL,spacing=10,halign=Gtk.Align.CENTER)
+        box.set_margin_top(30)
+        box.pack_start(label(text('Could not load music','Не удалось загрузить музыку'),'stage-queue-empty',40),False,False,0)
+        box.pack_start(label(str(error),'stage-library-note',58),False,False,0)
+        retry=button(text('Try again','Повторить'),lambda:self.load(refresh=True))
+        retry.set_halign(Gtk.Align.START)
+        box.pack_start(retry,False,False,0)
+        self.content.pack_start(box,False,False,0);box.show_all()
+
     def open_collection(self,item):
         self.selected=item;self.load();self.scroll.get_vadjustment().set_value(0)
+
+    def play_whole_album(self, album):
+        self.request+=1;generation=self.request
+        def done(result,error):
+            if not self.active or generation!=self.request or not self.shelf.preparing:
+                return
+            self.shelf.preparing=False;self.shelf.update_controls()
+            if error:
+                self.shelf.message.set_text(str(error));return
+            values=result.get('items',[])
+            count=self.service.play_album(result.get('title') or album['title'],values)
+            if not count:
+                message=text('No tracks are playable with this connection.','В этом подключении нет доступных треков альбома.')
+            elif count<len(values):
+                message=text(f'Playing {count} of {len(values)} available tracks.',f'Доступно для прослушивания: {count} из {len(values)}.')
+            else:
+                message=text('Playing in album order.','Альбом играет по порядку.')
+            self.shelf.message.set_text(message)
+        self.service.load('whole-album',done,collection=album)
 
     def back(self):self.selected=None;self.load()
 
@@ -296,9 +352,16 @@ class LibraryView(Gtk.Box):
         self.rendered_key=self.key()
         self.close_editor(render=False)
         self.hero.show();self.filters.show()
+        shelf_visible=self.category=='albums' and not self.selected
+        self.shelf.set_visible(shelf_visible)
+        self.scroll.set_no_show_all(shelf_visible);self.scroll.set_visible(not shelf_visible)
         if self.category=='favorites':self.render_favorites();return
         self.favorite_tables=[];self.source_badge.set_text(NAMES[self.source].upper())
         clear(self.content);self.song_buttons=[];self.album_buttons=[];self.track_table=None;self.playback_key=None
+        if shelf_visible:
+            self.hero.hide();self.hero_image.hide();self.context.hide()
+            self.shelf.feed(self.source,self.items,self.next_offset is not None,self.busy)
+            return
         if self.selected:
             self.artwork.load(self.hero_image,self.selected.get('image',''),68,10,
                               on_loaded=lambda pixels:fit_art(self.hero_image,48 if self.dense else 68,pixels));self.hero_image.show()
@@ -481,8 +544,11 @@ class QueueView(Gtk.Box):
     def deactivate(self):self.active=False
     def changed(self):
         if self.active:self.render()
-    def clear(self):self.service.book.clear(self.service.host.source);self.service.changed()
+    def clear(self):
+        if not self.service.album_listening:
+            self.service.book.clear(self.service.host.source);self.service.changed()
     def edit(self,index,direction):
+        if self.service.album_listening:return
         book=self.service.book;source=self.service.host.source
         book.remove(source,index) if direction==0 else book.move(source,index,direction)
         self.service.changed()
@@ -492,7 +558,8 @@ class QueueView(Gtk.Box):
         if self.title.get_text()!=greeting:self.title.set_text(greeting)
         h=self.service.host;book=self.service.book;source=h.source
         title,artist=h.title.get_text(),h.artist.get_text()
-        key=book.revision,source,title,artist,h.art_url,h.playing,self.service.loading,self.service.error,book.active
+        locked=self.service.album_listening
+        key=id(book),book.revision,source,title,artist,h.art_url,h.playing,self.service.loading,self.service.error,book.active
         if key==self.key and not force:return
         self.key=key;pending=book.upcoming(source)
         self.subtitle.set_text(NAMES[source]+' · '+text(f'{len(pending)} up next',f'Далее: {len(pending)}')+' · '+text('Saved on this device','Сохраняется на этом устройстве'))
@@ -503,19 +570,19 @@ class QueueView(Gtk.Box):
         running=book.active==source
         self.play_button.set_label(text('Playing in order','Играет по порядку') if running and h.playing else
                                    '▶ '+text('Play queue','Слушать очередь'))
-        self.play_button.set_sensitive(bool(pending or self.service.error) and not self.service.loading and not (running and h.playing))
-        self.clear_button.set_sensitive(bool(pending));self.notice.set_text(self.service.error)
-        rows_key=(book.revision,source)
+        self.play_button.set_sensitive(not locked and bool(pending or self.service.error) and not self.service.loading and not (running and h.playing))
+        self.clear_button.set_sensitive(bool(pending) and not locked);self.notice.set_text(self.service.error)
+        rows_key=(id(book),book.revision,source)
         if not force and rows_key==self.rows_key:return
         self.rows_key=rows_key
         clear(self.content);self.rows=[]
         table=self.track_table=RecordList(action_count=3) if pending else None
         if table:self.content.pack_start(table,False,False,0)
         for number,(index,item) in enumerate(pending):
-            actions=[('go-up-symbolic',text('Move up','Выше'),lambda i=index:self.edit(i,-1),number>0),
-                     ('go-down-symbolic',text('Move down','Ниже'),lambda i=index:self.edit(i,1),number<len(pending)-1),
-                     ('list-remove-symbolic',text('Remove from queue','Убрать из очереди'),lambda i=index:self.edit(i,0),True)]
-            row=RecordRow(item,number,source,self.artwork,lambda i=index:self.service.start(i),
+            actions=[('go-up-symbolic',text('Move up','Выше'),lambda i=index:self.edit(i,-1),not locked and number>0),
+                     ('go-down-symbolic',text('Move down','Ниже'),lambda i=index:self.edit(i,1),not locked and number<len(pending)-1),
+                     ('list-remove-symbolic',text('Remove from queue','Убрать из очереди'),lambda i=index:self.edit(i,0),not locked)]
+            row=RecordRow(dict(item,playable=False) if locked else item,number,source,self.artwork,lambda i=index:self.service.start(i),
                           (lambda value=item:self.open_artist(value)) if self.open_artist else None,actions)
             table.append(row);up,down,remove=row.action_buttons
             self.rows.append((row.play_button,up,down,remove,item))

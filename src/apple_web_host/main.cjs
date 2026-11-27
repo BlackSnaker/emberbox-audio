@@ -11,14 +11,15 @@ const {FlowDecks}=require('./flow.cjs');let flow=null;
 const {SpatialPlayback}=require('./spatial.cjs');let spatial=null;
 const yandex = process.env.EMBERBOX_WEB_SERVICE === 'yandex';
 const spotify = process.env.EMBERBOX_WEB_SERVICE === 'spotify';
-const integrationVersion = yandex?7:spotify?5:33;
+const integrationVersion = yandex?7:spotify?6:36;
 const service = yandex ? {title:'Yandex Music',origin:'https://music.yandex.ru/',
   url:'https://music.yandex.ru/',command:'emberboxYandexCommand',page:'yandex.js',error:'YANDEX_REQUEST_FAILED'} :
   spotify ? {title:'Spotify',origin:'https://open.spotify.com/',url:'https://open.spotify.com/',
     command:'emberboxSpotifyCommand',page:'spotify.js',error:'SPOTIFY_REQUEST_FAILED'} :
   {title:'Apple Music',origin:'https://music.apple.com/',url:'https://music.apple.com/us/new',
    command:'emberboxAppleCommand',page:'page.js',error:'APPLE_REQUEST_FAILED'};
-const methods = ['status','browse','tracks','search','play','transport','seek','artist','artistSection','release','favorite',...(yandex?['wave','feedback']:[])];
+const methods = ['status','browse','tracks','search','play','transport','seek','artist','artistSection','release','favorite',
+  ...(yandex?['wave','feedback']:spotify?[]:['credits'])];
 const pageCommand = fs.readFileSync(path.join(__dirname,'favorite_dom.js'),'utf8')+'\n'+fs.readFileSync(path.join(__dirname,service.page),'utf8');
 let enabled = false;
 const profile = process.env.EMBERBOX_APPLE_PROFILE;
@@ -170,7 +171,7 @@ async function pageRequest(win, request, navigations=0) {
       signInError=await win.webContents.executeJavaScript("/something went wrong|try again later|что-то пошло не так/i.test(document.querySelector('h1, h2, [role=alert]')?.textContent||'')");
     return {ready:false,authorized:false,signInError,integrationVersion};
   }
-  const reasons=['CONTENT_EQUIVALENT','CONTENT_UNAVAILABLE','CONTENT_UNSUPPORTED','DEVICE_LIMIT','GEO_BLOCK',
+  const reasons=['TIMEOUT','CONTENT_EQUIVALENT','CONTENT_UNAVAILABLE','CONTENT_UNSUPPORTED','DEVICE_LIMIT','GEO_BLOCK',
     'INVALID_ARGUMENTS','MEDIA_LICENSE','MEDIA_KEY','MEDIA_PLAYBACK','NETWORK_ERROR','SUBSCRIPTION_ERROR','TypeError','ReferenceError','Error',
     'TOKEN_EXPIRED','UNAUTHORIZED_ERROR','UNSUPPORTED_ERROR','USER_INTERACTION_REQUIRED','WIDEVINE_CDM_EXPIRED',
     'SIGN_IN_REQUIRED','NOT_READY','NOT_FOUND','REGION_UNAVAILABLE','SUBSCRIPTION_REQUIRED','ADAPTER_UNAVAILABLE','FAVORITE_NOT_CONFIRMED','YANDEX_REQUEST_FAILED','SPOTIFY_REQUEST_FAILED','PREMIUM_REQUIRED','PLAYBACK_RESTRICTED','REGION_UNAVAILABLE','FLOW_UNAVAILABLE','FLOW_CANCELLED','FLOW_NOT_READY'];

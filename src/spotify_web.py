@@ -15,7 +15,7 @@ from gui_session import systemd_environment
 from spotify_artwork import artist_image
 
 ENGINE_CONFIG=CONFIG_DIR/'spotify-engine.json'
-ADAPTER_VERSION=5
+ADAPTER_VERSION=6
 
 
 def prepare(runtime=None,module=None):

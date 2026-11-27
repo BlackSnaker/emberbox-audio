@@ -158,6 +158,15 @@ async function emberboxAppleCommand(request) {
     const value = String(art?.url || '').replace('{w}', '180').replace('{h}', '180').replace('{f}', 'jpg');
     try { return new URL(value).protocol === 'https:' ? value : ''; } catch { return ''; }
   }
+  function creditText(value) {
+    return typeof value==='string'?value.trim().slice(0,500):'';
+  }
+  function creditArtists(resource) {
+    const artists=resource?.relationships?.artists?.data;
+    return (Array.isArray(artists)?artists:[]).filter(a=>a?.type==='artists'&&
+      /^\d{1,20}$/.test(String(a.id))&&creditText(a.attributes?.name)).slice(0,32)
+      .map(a=>({id:String(a.id),name:creditText(a.attributes.name),image:image(a.attributes.artwork)}));
+  }
   function item(resource) {
     const a = resource.attributes || {};
     const catalogId=String(a.playParams?.catalogId||resource.relationships?.catalog?.data?.[0]?.id||'');
@@ -168,7 +177,7 @@ async function emberboxAppleCommand(request) {
     }
     return {id: String(resource.id), catalogId:mapped, kind: String(resource.type), title: String(a.name || 'Untitled'),
       subtitle: String(a.artistName || a.curatorName || ''), image: image(a.artwork),
-      artist: String(a.artistName || ''), duration_ms: Number(a.durationInMillis || 0),
+      artist: String(a.artistName || ''), artists:creditArtists(resource), duration_ms: Number(a.durationInMillis || 0),
       uri: `apple:${resource.type}:${resource.id}`, playable: !!a.playParams,
       genres:(a.genreNames||[]).filter(v=>typeof v==='string').slice(0,8),album:String(a.albumName||''),
       releaseDate:String(a.releaseDate||''),trackCount:Number(a.trackCount||0),
@@ -249,6 +258,25 @@ async function emberboxAppleCommand(request) {
     try {return await Promise.race([api(path,query),new Promise((_,reject)=>{
       timer=setTimeout(()=>reject(Error('TIMEOUT')),remaining);
     })]);}finally{clearTimeout(timer);}
+  }
+  if(request.method==='credits') {
+    const sf=storefront(),deadline=Date.now()+4500;
+    const catalog=/^\d{1,20}$/.test(id);
+    if(!catalog&&!/^i\.[\w.-]{1,198}$/.test(id))throw Error('INVALID_ARGUMENTS');
+    const path=catalog?`/v1/catalog/${sf}/songs/${id}`:`/v1/me/library/songs/${encodeURIComponent(id)}/catalog`;
+    const response=await artistApi(path,{include:'artists'},deadline);
+    const song=response.data?.[0];
+    if(song?.type!=='songs'||!/^\d{1,20}$/.test(String(song.id))||(catalog&&String(song.id)!==id))
+      throw Error('NOT_FOUND');
+    const artists=creditArtists(song);
+    await Promise.all(artists.filter(a=>!a.image).slice(0,4).map(async artist=>{
+      try {
+        const result=await artistApi(`/v1/catalog/${sf}/artists/${artist.id}`,{},Math.min(deadline,Date.now()+1400));
+        const resource=result.data?.[0];
+        if(resource?.type==='artists'&&String(resource.id)===artist.id)artist.image=image(resource.attributes?.artwork);
+      }catch{}
+    }));
+    return {artists,composer:creditText(song.attributes?.composerName)};
   }
   if(request.method==='artist') {
     const sf=storefront(),deadline=Date.now()+6500;let artistId=id;
@@ -358,10 +386,15 @@ async function emberboxAppleCommand(request) {
       if(!albumId)throw Error('NOT_FOUND');
     }
     if(!/^\d{1,20}$/.test(albumId))throw Error('Invalid album');
-    if(offset)return page(await read(`/v1/catalog/${sf}/albums/${albumId}/tracks`,{limit:100,offset}));
-    const resource=(await read(`/v1/catalog/${sf}/albums/${albumId}`,{extend:'editorialNotes'})).data?.[0];
+    const trackPath=`/v1/catalog/${sf}/albums/${albumId}/tracks`;
+    const readTracks=(start)=>read(trackPath,{limit:100,offset:start,'include[songs]':'artists'})
+      .catch(()=>read(trackPath,{limit:100,offset:start}));
+    if(offset)return page(await readTracks(offset));
+    const albumPath=`/v1/catalog/${sf}/albums/${albumId}`;
+    const resource=(await read(albumPath,{extend:'editorialNotes',include:'artists','include[songs]':'artists'})
+      .catch(()=>read(albumPath,{extend:'editorialNotes'}))).data?.[0];
     if(!resource||resource.type!=='albums'||String(resource.id)!==albumId)throw Error('NOT_FOUND');
-    const tracks=resource.relationships?.tracks||await read(`/v1/catalog/${sf}/albums/${albumId}/tracks`,{limit:100,offset:0});
+    const tracks=resource.relationships?.tracks||await readTracks(0);
     return {release:item(resource),...page(tracks)};
   }
   if (request.method === 'search') {
@@ -424,7 +457,19 @@ async function emberboxAppleCommand(request) {
         partial:results.some(v=>v.status==='rejected')};
     }
     if (!['playlists','albums','songs'].includes(category)) throw Error('Unsupported category');
-    const result = await api(`/v1/me/library/${category}`, {limit: 50, offset});
+    const path = `/v1/me/library/${category}`;
+    const deadline = Date.now()+10500;
+    let result;
+    try {
+      result = await artistApi(path,{limit:50,offset},deadline-5500);
+    } catch (error) {
+      if (error.message !== 'TIMEOUT') throw error;
+      try { result = await artistApi(path,{limit:25,offset},deadline); }
+      catch (retry) {
+        if (retry.message === 'TIMEOUT') retry.errorCode='TIMEOUT';
+        throw retry;
+      }
+    }
     const data = Array.isArray(result) ? result : result.data || [];
     return {items: data.map(item), next: result.next ? offset + data.length : null};
   }

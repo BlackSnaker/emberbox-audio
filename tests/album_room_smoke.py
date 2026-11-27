@@ -59,9 +59,11 @@ TRACKS = [
      'playable': index != 3}
     for index, names in enumerate(NAMES, 1)
 ]
+TRACKS[1]['artists'] = [{'name': ARTIST, 'id': 'DEMOARTIST'}, {'name': 'Paper Satellites', 'id': 'DEMOGUEST'}]
 RELEASE = {
     'id': 'DEMOALBUM', 'uri': 'spotify:album:DEMOALBUM', 'kind': 'album',
     'title': TITLE, 'artist': ARTIST, 'artistId': 'DEMOARTIST',
+    'artists': [{'name': ARTIST, 'id': 'DEMOARTIST'}],
     'artistUri': 'spotify:artist:DEMOARTIST', 'image': 'fixture:original-cover',
     'releaseDate': '2026-10-23', 'trackCount': len(TRACKS),
     'description': text(
@@ -184,7 +186,7 @@ def run():
     host.title.set_text(TRACKS[0]['title'])
     host.artist.set_text(ARTIST)
     host.album.set_text(TITLE)
-    host.session = SimpleNamespace(metadata={'xesam:url': TRACKS[0]['uri']})
+    host.session = SimpleNamespace(metadata={'xesam:url': TRACKS[0]['uri'], 'xesam:composer': ['Original composer']})
     host.youtube = SimpleNamespace(queue=[], current=None, eof=False, paused=True, mpv=None)
     calls, plays = [], []
     entered, release = threading.Event(), threading.Event()
@@ -220,6 +222,7 @@ def run():
 
     with patch('urllib.request.urlopen', side_effect=AssertionError('Unexpected network access')), \
          patch('music_library.LocalSpotify', side_effect=AssertionError('Unexpected private account access')), \
+         patch('credits_view.artist_image', return_value=''), \
          patch.object(fullscreen, 'LyricsClient', f.FixtureLyrics), \
          patch.object(fullscreen.Artwork, 'load', artwork):
         stage = fullscreen.FullscreenPlayer(host)
@@ -232,6 +235,18 @@ def run():
             stage.window.unfullscreen()
             stage.window.resize(1920, 1080)
             f.settle(.3)
+            stage.credits.button.clicked()
+            assert stage.credits.popover is not None
+            wait(lambda: stage.credits.popover.get_allocated_width() >= 374,
+                 'Credits popover collapsed to the width of its trigger')
+            assert any(isinstance(item, Gtk.Stack) and item.get_style_context().has_class('ember-credit-avatar')
+                       for item in descendants(stage.credits.popover))
+            assert any(isinstance(item, Gtk.Label) and item.get_text() == 'Original composer'
+                       for item in descendants(stage.credits.popover))
+            screenshot(stage, 'track-credits')
+            host.title.set_text('A different recording')
+            wait(lambda: stage.credits.popover is None, 'Credits outlived the recording')
+            host.title.set_text(TRACKS[0]['title'])
             assert not calls and not plays and not host.calls
             paints = [0]
             stage.window.get_frame_clock().connect(
@@ -268,6 +283,11 @@ def run():
             assert not any(category == 'artist' for _, category, _, _ in calls)
             assert not view.filter_bar.get_visible(), 'Album navigation must not show artist catalogue filters'
             assert len(view.release_tracks.rows) == len(TRACKS)
+            credit_names = [item.get_text() for item in descendants(view.content) if isinstance(item, Gtk.Label)
+                            and item.get_style_context().has_class('ember-credit-title')]
+            assert text('On this record', 'Участники альбома') in credit_names
+            assert any(isinstance(item, Gtk.Label) and item.get_text() == 'Paper Satellites'
+                       for item in descendants(view.content))
             assert [value['uri'] for _, _, value in view.song_buttons] == [item['uri'] for item in TRACKS]
             assert view.read_button is view.release_hero.notes_button
             assert [widget for widget in descendants(view) if isinstance(widget, Gtk.ScrolledWindow)] == [view.scroll], \

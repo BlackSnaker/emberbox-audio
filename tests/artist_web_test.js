@@ -8,14 +8,14 @@ const artist=id=>({id:String(id),type:'artists',attributes:{name:'Emberbox Sessi
   artwork:{url:'https://example.invalid/{w}x{h}.jpg'},genreNames:['Alternative'],
   editorialNotes:{standard:'<p>Original fixture biography &amp; story.</p>'},
   url:'https://music.apple.com/us/artist/fixture/'+id},privateToken:'NEVER_EXPORT'});
-const song=id=>({id:String(id),type:'songs',attributes:{name:'Original song '+id,artistName:'Emberbox Sessions',
+const song=id=>({id:String(id),type:'songs',attributes:{name:'Original song '+id,artistName:'Emberbox Sessions',composerName:'Fixture Composer',
   durationInMillis:180000,playParams:{id:String(id)},artwork:{url:'https://example.invalid/{w}x{h}.jpg'}},
   relationships:{artists:{data:missingRelationship?[]:[artist(100),...(collaboration?[artist(101)]:[])]},
     albums:{data:missingAlbum?[]:[{id:'456',type:'albums'}]}}});
 const album=id=>({id:String(id),type:'albums',attributes:{name:'Original album '+id,artistName:'Emberbox Sessions',
   releaseDate:'2026-10-23',trackCount:3,isCompilation:id===457,isSingle:false,playParams:{id:String(id)},
   artwork:{url:'https://example.invalid/{w}x{h}.jpg'},copyright:'Original fixture © Emberbox',
-  editorialNotes:{standard:'<p>Original liner notes.</p>'}},relationships:{tracks:{data:[song(123),
+  editorialNotes:{standard:'<p>Original liner notes.</p>'}},relationships:{artists:{data:[artist(100)]},tracks:{data:[song(123),
     {...song(124),attributes:{...song(124).attributes,playParams:undefined}},{id:'999',type:'music-videos',attributes:{name:'Not an audio song'}}],
     next:'/v1/catalog/us/albums/'+id+'/tracks?offset=100'}}});
 const release=(id,attributes={})=>({...album(id),attributes:{...album(id).attributes,...attributes}});
@@ -54,7 +54,11 @@ const music={isAuthorized:true,bitrate:256,storefrontId:'us',api:{music:async(pa
     response={data:behavior===undefined?viewData[view]:behavior,next:query.offset?null:path+'?offset=24'};
   }
   else if(/\/albums\/\d+\/tracks$/.test(path))response={data:[song(125)],next:null};
-  else if(/\/albums\/\d+$/.test(path))response={data:[album(Number(path.split('/').at(-1)))]};
+  else if(/\/albums\/\d+$/.test(path)){
+    const value=album(Number(path.split('/').at(-1)));
+    if(query['include[songs]']!=='artists')delete value.relationships.artists;
+    response={data:[value]};
+  }
   else throw Error('Unexpected path '+path);
   return {data:response};
 }},setQueue:async value=>transport.push(value),play:async()=>transport.push('play'),pause:async()=>transport.push('pause')};
@@ -122,6 +126,16 @@ const section=(result,id)=>result.sections.find(s=>s.id===id);
   collaboration=true;
   result=await call('artist',{songId:'123'});assert.equal(result.choices.length,2);assert.equal(result.artist,undefined);
   assert.equal((await call('artist',{id:result.choices[1].id})).artist.id,'101');
+  result=await call('credits',{id:'123'});
+  assert.equal(result.composer,'Fixture Composer');
+  assert.equal(result.artists.length,2);
+  assert.equal(result.artists[0].image,'https://example.invalid/180x180.jpg');
+  assert(!JSON.stringify(result).includes('NEVER_EXPORT'));
+  await assert.rejects(call('credits',{id:'124'}),/NOT_FOUND/);
+  await assert.rejects(call('credits',{id:'../account'}),/INVALID_ARGUMENTS/);
+  result=await call('release',{id:'456'});
+  assert.equal(result.release.artists.length,1);
+  assert.equal(result.items[0].artists[1].id,'101');
   collaboration=false;missingRelationship=true;
   result=await call('artist',{songId:'123',name:'A name with namesakes'});
   assert.equal(result.choices.length,2);assert.equal(result.artist,undefined,'Never silently choose a name search result');

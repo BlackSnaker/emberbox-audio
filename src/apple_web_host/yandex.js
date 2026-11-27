@@ -113,7 +113,7 @@ async function emberboxYandexCommand(request) {
     qualityPreference:{mode:'maximum',applied:maximumApplied,reason:subscribed===false?'subscription':maximumApplied?'':'adapter'}};
   status.artists=(Array.isArray(track?.artists)?track.artists:Array.isArray(extTrack?.artists)?extTrack.artists:[])
     .filter(a=>/^\d{1,20}$/.test(String(a.id||''))).slice(0,12)
-    .map(a=>({id:String(a.id),name:String(a.name||a.title||'').slice(0,300)}));
+    .map(a=>({id:String(a.id),name:String(a.name||a.title||'').slice(0,300),image:cover(a.cover?.uri||a.coverUri)}));
   const albumId=String(track?.mainAlbum?.id||extTrack?.album?.id||'');
   status.albumId=/^\d{1,20}$/.test(albumId)?albumId:'';
   if(request.method==='status')return status;
@@ -212,8 +212,8 @@ async function emberboxYandexCommand(request) {
       const url=link?.getAttribute('href')||row.querySelector('a[href*="/track/"]')?.getAttribute('href')||'';
       const match=url.match(/(?:\/track\/|\/tracks\/)(\d+)/);if(!match||seen.has(match[1]))continue;
       const id=match[1],name=text(node);if(!name)continue;seen.add(id);
-      const artists=Array.from(row.querySelectorAll('a[href*="/artist/"]')).map(text).filter(Boolean);
-      const image=row.querySelector('img');const item={id,kind:'track',title:name,artist:[...new Set(artists)].join(', '),image:cover(image?.src),uri:'yandex:track:'+id};
+      const artists=artistLinks(row);
+      const image=row.querySelector('img');const item={id,kind:'track',title:name,artist:artists.map(a=>a.name).join(', '),artists,image:cover(image?.src),uri:'yandex:track:'+id};
       state.items.set(id,row);result.push(item);if(result.length>=50)break;
     }
     return result;
@@ -253,7 +253,7 @@ async function emberboxYandexCommand(request) {
   const trackSelector='a[href*="/track/"], [data-test-id$="TRACK_TITLE"]';
   const emptyTracks=()=>document.querySelector('[class*="SearchEmpty"], [class*="CollectionEmpty"], [data-test-id$="EMPTY_TITLE"], [data-test-id$="EMPTY_ROOT"]')||test('SEARCH_EMPTY_CONTAINER')||test('COLLECTION_PLAYLIST_WITH_LIKES_EMPTY_BLOCK');
   function artistLinks(root=listRoot()) {
-    const seen=new Set();return Array.from(root.querySelectorAll('a[href*="/artist/"]')).map(a=>({
+    const seen=new Set();return Array.from(root?.querySelectorAll('a[href*="/artist/"]')||[]).map(a=>({
       id:a.getAttribute('href')?.match(/^\/artist\/(\d{1,20})$/)?.[1],name:text(a),
       image:cover(a.closest('[class*="ArtistCard"], [class*="HorizontalCard"]')?.querySelector('img')?.src)
     })).filter(a=>a.id&&a.name&&!seen.has(a.id)&&seen.add(a.id)).slice(0,20);
@@ -318,9 +318,9 @@ async function emberboxYandexCommand(request) {
     }
     if(!/^\d{1,20}$/.test(id))throw Error('INVALID_ARGUMENTS');
     await navigate('/album/'+id,true);await wait(()=>listRoot().querySelector(trackSelector)||emptyTracks());
-    const root=listRoot();
+    const root=listRoot(),artists=artistLinks(root.querySelector('[class*="PageHeader"], [class*="AlbumHeader"], header'));
     return {release:{id,kind:'album',uri:'yandex:album:'+id,title:text(root.querySelector('h1')),
-      artist:artistLinks().map(a=>a.name).join(', '),image:cover(root.querySelector('[class*="AlbumPage"] img, [class*="PageHeader"] img')?.src),
+      artist:artists.map(a=>a.name).join(', '),artists,image:cover(root.querySelector('[class*="AlbumPage"] img, [class*="PageHeader"] img')?.src),
       description:String(root.querySelector('[class*="AlbumDescription"]')?.textContent||'').trim().slice(0,14000)},items:items(),next:null};
   }
   if(request.method==='tracks') {

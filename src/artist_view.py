@@ -7,6 +7,8 @@ from listening_queue import track
 from discovery_panel import clear
 from music_library import NAMES,snapshot
 from artist_catalog import artist_ref,plain,SECTIONS,ReleaseCatalog,release_details
+from credits_view import group as credit_group,label as credit_label
+from recording_credits import album_people
 from artist_header import ArtistBanner,BannerCache,portrait_slot
 from artist_reveal import ArtistReveal
 from album_header import AlbumHeader,CSS as ALBUM_CSS
@@ -384,6 +386,29 @@ class ArtistView(Gtk.Box):
         if ident:ref['id']=str(ident)
         self.set_reference(ref);self.load('artist',ref)
 
+    def album_participants(self):
+        artists, guests = album_people(self.release or {}, self.items)
+        if len(artists) < 2 and not guests:
+            return
+        panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        panel.get_style_context().add_class('ember-credit-panel')
+        title = text('On this record', 'Участники альбома')
+        if self.height >= 680:
+            panel.pack_start(credit_label(title, 'ember-credit-title'), False, False, 0)
+        spotify = self.source == 'spotify'
+        if artists:
+            panel.pack_start(credit_group(text('Album artists', 'Исполнители альбома'), artists,
+                                           self.artwork, self.choose, grid=True, spotify=spotify), False, False, 0)
+        if guests:
+            caption = text('Also on these tracks', 'Также на треках') if artists else text('Track artists', 'Исполнители на треках')
+            panel.pack_start(credit_group(caption, guests, self.artwork, self.choose, grid=True, spotify=spotify), False, False, 0)
+        if self.height < 680:
+            disclosure = Gtk.Expander(label=title)
+            disclosure.add(panel)
+            self.content.pack_start(disclosure, False, False, 0)
+        else:
+            self.content.pack_start(panel, False, False, 0)
+
     def toggle_album_notes(self):
         if self.notes_revealer is None:return
         self.notes_open=not self.notes_open
@@ -409,6 +434,7 @@ class ArtistView(Gtk.Box):
         self.play_all_button.set_sensitive(bool(self.songs()));self.add_all_button.set_sensitive(bool(self.songs()))
         self.read_button=hero.notes_button
         self.content.pack_start(hero,False,False,0)
+        self.album_participants()
         self.notes_revealer=None
         if prose:
             self.notes_revealer=Gtk.Revealer();self.notes_revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)

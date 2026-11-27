@@ -78,7 +78,10 @@ READ=r'''(() => {
   const bio=root.querySelector('[data-testid="artist-about-description"], [data-testid="artist-biography"], [data-testid="artist-about"] p')?.textContent.trim().slice(0,14000)||'';
   const links=Array.from(root.querySelectorAll('a[href]')).map(a=>a.getAttribute('href'))
     .filter(p=>/^\/artist\/[A-Za-z0-9]{1,64}\/discography\/(all|album|single|compilation)$/.test(p));
-  return {name,image,bio,releases,songs,links};
+  const artists=Array.from(root.querySelector('[data-testid="entity-header"]')?.querySelectorAll('a[href^="/artist/"]')||[])
+    .map(a=>({id:a.getAttribute('href')?.match(/^\/artist\/([A-Za-z0-9]{1,64})$/)?.[1],name:a.textContent.trim().slice(0,300)}))
+    .filter(a=>a.id&&a.name).slice(0,32);
+  return {name,image,bio,releases,songs,links,artists};
 })()'''
 
 CHOICES=r'''(() => {
@@ -97,7 +100,7 @@ class SpotifyArtist:
     def __init__(self,client):self.client=client
 
     def navigate(self,path):
-        if not re.fullmatch(r'/(artist/[A-Za-z0-9]{1,64}(/discography/(all|album|single|compilation))?|album/[A-Za-z0-9]{1,64})',path):
+        if not re.fullmatch(r'/(collection/albums|artist/[A-Za-z0-9]{1,64}(/discography/(all|album|single|compilation))?|album/[A-Za-z0-9]{1,64})',path):
             raise ValueError('Invalid Spotify music path')
         if not self.client.evaluate(NAVIGATE.replace('PATH',json.dumps(path))):
             raise RuntimeError(text('Spotify navigation is unavailable. Reconnect the desktop client in Accounts.',
@@ -132,9 +135,12 @@ class SpotifyArtist:
             self.navigate('/album/'+ident)
             data=self.client.tracks({'href':'/album/'+ident})
             info=self.read()
+            artists=info.get('artists') or []
             return {'release':{'id':ident,'kind':'album','uri':'spotify:album:'+ident,
                     'title':data.get('title') or info['name'],'image':image_url(info.get('image','')),
-                    'description':info.get('bio','')},'items':data.get('tracks',[]),
+                    'artist':', '.join(person['name'] for person in artists),'artists':artists,
+                    'artistId':artists[0]['id'] if len(artists)==1 else '',
+                    'description':info.get('bio','')},'items':data.get('tracks',[]),'total':data.get('total'),
                     'note':text('Loaded tracks from the Spotify desktop client','Треки, загруженные настольным клиентом Spotify')}
         if not ident:
             choices=self.client.evaluate(REFERENCES.replace('URI',json.dumps(str(ref.get('songUri') or ''))).replace('CURRENT','true' if ref.get('current') else 'false')) or []

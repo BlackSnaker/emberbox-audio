@@ -94,6 +94,8 @@ TRACKS_SCRIPT = r'''(() => {
     tracks: items.filter(Boolean).map(t => t.track || t).filter(t => t.uri?.startsWith('spotify:track:')).map(t => ({
       uri: t.uri, title: t.name || '',
       artist: (t.artists || []).map(a => a.name).join(', '),
+      artists: (t.artists || []).slice(0,32).map(a=>({name:String(a.name||'').slice(0,300),
+        id:String(a.uri||a.id||'').match(/^(?:spotify:artist:)?([A-Za-z0-9]{1,64})$/)?.[1]||''})),
       album: t.album?.name || '',
       image: t.album?.images?.find(i => i.label === 'small')?.url || t.album?.images?.[0]?.url || '',
       duration_ms: t.duration?.milliseconds || 0,
@@ -187,6 +189,31 @@ class LocalSpotify:
             raise RuntimeError('Could not play this track. Try again.') from error
         if not played:
             raise ConnectionUnavailable('Connect Spotify to play tracks in the background.')
+
+    def saved_albums(self):
+        from spotify_artist import SpotifyArtist
+        SpotifyArtist(self).navigate('/collection/albums')
+        script = r'''(() => {
+            const main=document.querySelector('main');
+            if(location.pathname!=='/collection/albums'||!main)return null;
+            const seen=new Set(), albums=[];
+            for(const link of main.querySelectorAll('a[href^="/album/"]')){
+                const id=link.getAttribute('href')?.match(/^\/album\/([A-Za-z0-9]{1,64})(?:$|\?)/)?.[1];
+                const card=link.closest('[data-encore-id="card"],[data-testid="grid-cell"],[role="listitem"],[role="row"]');
+                const title=(card?.querySelector('[data-encore-id="cardTitle"]')?.textContent||link.textContent).trim();
+                if(!id||!title||seen.has(id))continue;
+                seen.add(id);albums.push({id,kind:'album',uri:'spotify:album:'+id,href:'/album/'+id,title,
+                    artist:card?.querySelector('[data-encore-id="cardSubtitle"],a[href^="/artist/"]')?.textContent.trim()||'',
+                    image:card?.querySelector('img')?.src||''});
+            }
+            return albums;
+        })()'''
+        for _ in range(25):
+            items=self.evaluate(script)
+            if items:
+                return {'items':[dict(item,image=image_url(item['image'])) for item in items]}
+            time.sleep(.12)
+        return {'items':[]}
 
     def tracks(self, item, deadline=None):
         href = item.get('href', '')

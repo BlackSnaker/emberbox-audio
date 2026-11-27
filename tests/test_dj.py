@@ -165,7 +165,8 @@ class QueueTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             book=QueueBook(Path(directory)/'queue.json');book.add('spotify',[song(1),song(2,origin='context')]);book.select('spotify',0)
             starts=[]
-            service=SimpleNamespace(host=SimpleNamespace(source='spotify'),book=book,play_generation=0,loading=False,
+            service=SimpleNamespace(host=SimpleNamespace(source='spotify'),book=book,saved_book=None,restore_queue=lambda:None,
+                play_generation=0,loading=False,
                 watch=SimpleNamespace(reset=lambda:None),start=lambda i:starts.append(i),changed=lambda:None)
             self.assertTrue(MusicService.play_dj(service,[song(3),song(4)]))
             self.assertEqual([v['uri'] for v in book.queues['spotify']],['spotify:track:1','spotify:track:3','spotify:track:4','spotify:track:2'])
@@ -174,7 +175,7 @@ class QueueTests(unittest.TestCase):
     def test_full_queue_does_not_destroy_user_music(self):
         with tempfile.TemporaryDirectory() as directory:
             book=QueueBook(Path(directory)/'q.json');book.add('spotify',[song(i) for i in range(200)])
-            service=SimpleNamespace(host=SimpleNamespace(source='spotify'),book=book)
+            service=SimpleNamespace(host=SimpleNamespace(source='spotify'),book=book,saved_book=None)
             self.assertFalse(MusicService.play_dj(service,[song(500)]));self.assertEqual(len(book.queues['spotify']),200)
 
 if __name__=='__main__':unittest.main()

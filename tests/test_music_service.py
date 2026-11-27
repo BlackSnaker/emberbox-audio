@@ -63,7 +63,9 @@ class Adapters(unittest.TestCase):
             client=api.return_value.__enter__.return_value
             client.home.return_value={'shelves':[{'items':[
                 {'uri':'spotify:album:ALB','title':'Album'},{'uri':'spotify:playlist:PL','title':'Mix'}]}]}
+            client.saved_albums.return_value={'items':[{'kind':'album','id':'ALB','title':'Album'}]}
             self.assertEqual([i['kind'] for i in r.load('spotify','albums')['items']],['album'])
+            client.saved_albums.assert_called_once_with()
             r.load('spotify','search','Song');client.search.assert_called_once_with('Song')
             r.play(dict(song(),source='spotify'),lambda:False);client.play.assert_not_called()
             r.play(dict(song(),source='spotify'),lambda:True);client.play.assert_called_once_with('spotify:track:A')
@@ -74,6 +76,18 @@ class Adapters(unittest.TestCase):
         h.yandex_web.request.assert_not_called()
         r.play(item,lambda:True)
         h.yandex_web.request.assert_called_once_with('play',id='123')
+
+    def test_whole_album_keeps_release_order_and_rejects_partial_paging(self):
+        repository=MusicRepository(host())
+        release={'kind':'library-albums','id':'l.demo','title':'Record','trackCount':2}
+        provider=repository.host.apple_web.request
+        provider.side_effect=[{'tracks':[song('A')],'next':100},{'tracks':[song('B')],'next':None}]
+        result=repository.load('apple-music','whole-album',collection=release)
+        self.assertEqual([item['uri'] for item in result['items']],['spotify:track:A','spotify:track:B'])
+        self.assertEqual([access.kwargs['offset'] for access in provider.call_args_list],[0,100])
+        provider.side_effect=[{'tracks':[song('A')],'next':None}]
+        with self.assertRaises(ValueError):
+            repository.load('apple-music','whole-album',collection=release)
 
 
 class QueueSnapshot(unittest.TestCase):
@@ -99,6 +113,25 @@ class Playback(unittest.TestCase):
         self.host=host();self.service=MusicService(self.host,Path(self.folder.name)/'queue.json')
         self.addCleanup(self.service.close)
         self.calls=[];self.service.repository.play=lambda item,alive:self.calls.append(item['id']) if alive() else None
+
+    def test_album_only_advances_on_natural_end_and_preserves_queue(self):
+        s=self.service;h=self.host
+        s.add([song('D')]);ordinary=s.book
+        self.assertEqual(s.play_album('Record',[song('A'),song('B')]),2)
+        self.assertTrue(drain(lambda:not s.loading))
+        s.step(1);s.step(-1);s.start(1)
+        self.assertEqual(self.calls,['A'])
+        self.assertEqual(s.book.indices['spotify'],0)
+        s.add([song('E')])
+        h.position=12_000_000;h.playing=True;s.poll()
+        h.position=h.length;h.playing=False;s.poll()
+        self.assertTrue(drain(lambda:not s.loading))
+        self.assertEqual(self.calls,['A','B'])
+        h.title.value='Song B';h.position=12_000_000;h.playing=True;s.poll()
+        h.position=h.length;h.playing=False;s.poll()
+        self.assertFalse(s.album_listening)
+        self.assertIs(s.book,ordinary)
+        self.assertEqual([item['id'] for _,item in s.book.upcoming('spotify')],['D','E'])
     def test_next_and_natural_playlist_end_start_its_wave(self):
         s=self.service;h=self.host;h.source='yandex-music';h.yandex_web.state={}
         s.source_changed()

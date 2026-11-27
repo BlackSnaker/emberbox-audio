@@ -41,7 +41,8 @@ class Artwork:
             widget.connect('destroy', lambda target: setattr(target, '_art_token', None))
             widget._art_destroy_connected = True
         path = self.folder / (hashlib.sha256(repr(token).encode()).hexdigest() + '.png')
-        if path.exists() and time.time() - path.stat().st_mtime < 86400:
+        # Large aspect-preserving covers can be decoded while GTK is drawing.
+        if not (high_quality and keep_aspect) and path.exists() and time.time() - path.stat().st_mtime < 86400:
             widget.set_from_file(str(path))
             if on_loaded:
                 on_loaded(widget.get_pixbuf())
@@ -97,7 +98,8 @@ class Artwork:
                 if 'aspect-v1' in token:
                     # Artist portraits keep their real proportions, without
                     # square padding or a thumbnail crop before composition.
-                    image=ImageOps.contain(source,(size,size),Image.Resampling.LANCZOS)
+                    source.thumbnail((size,size),Image.Resampling.LANCZOS)
+                    image = source
                 else:
                     image = (ImageOps.pad if 'original-v1' in token else ImageOps.fit)(source, (size, size), Image.Resampling.LANCZOS)
                     mask = Image.new('L', (size*3, size*3))
@@ -107,7 +109,11 @@ class Artwork:
                 temp = path.with_suffix(f'.{threading.get_ident()}.next.png')
                 image.save(temp)
                 temp.replace(path)
-            GLib.idle_add(self._apply, widget, token, str(path), on_loaded, priority=GLib.PRIORITY_DEFAULT)
+            if 'original-v1' in token and 'aspect-v1' in token:
+                pixels = GdkPixbuf.Pixbuf.new_from_file(str(path))
+                GLib.idle_add(self._apply_pixels, widget, token, pixels, on_loaded, priority=GLib.PRIORITY_LOW)
+            else:
+                GLib.idle_add(self._apply, widget, token, str(path), on_loaded, priority=GLib.PRIORITY_DEFAULT)
         except Exception:
             pass
 
@@ -117,4 +123,12 @@ class Artwork:
             widget.set_from_file(path)
             if on_loaded:
                 on_loaded(widget.get_pixbuf())
+        return False
+
+    @staticmethod
+    def _apply_pixels(widget, token, pixels, on_loaded):
+        if widget and getattr(widget,'_art_token',None) == token:
+            widget.set_from_pixbuf(pixels)
+            if on_loaded:
+                on_loaded(pixels)
         return False

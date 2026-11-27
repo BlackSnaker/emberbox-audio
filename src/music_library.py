@@ -24,9 +24,12 @@ class MusicRepository:
 
     def load_apple(self,category,term,collection,offset):
         h=self.host;native=h.apple_mode=='native'
+        player=h.apple_web if native else h.apple
+        if category=='release' and (collection or {}).get('kind')=='library-albums':
+            result=player.request('tracks',kind='library-albums',id=collection['id'],offset=offset)
+            return {'release':collection,'items':result.get('tracks',[]),'next':result.get('next')}
         if category in ('artist','artist-section','release'):
             return ArtistRepository(h).load('apple-music',category,collection,offset)
-        player=h.apple_web if native else h.apple
         if collection:return player.request('tracks',kind=collection['kind'],id=collection['id'],offset=offset)
         if category=='search':
             if not native:raise RuntimeError(text('Connect Apple Music in Accounts to search its catalogue.','Подключи Apple Music в Аккаунтах для поиска по каталогу.'))
@@ -35,9 +38,12 @@ class MusicRepository:
 
     def load(self,source,category,term='',collection=None,offset=0):
         h=self.host
+        if category=='whole-album':
+            return self.load_whole_album(source,collection)
         # The native Apple bridge matches concurrent replies by request ID.
         # Album reads can run beside a previous catalogue request safely.
-        if source=='apple-music' and h.apple_mode=='native':return self.load_apple(category,term,collection,offset)
+        if source=='apple-music' and (h.apple_mode=='native' or (collection or {}).get('kind')=='library-albums'):
+            return self.load_apple(category,term,collection,offset)
         with self.locks[source]:
             if category in ('artist','artist-section','release'):
                 return ArtistRepository(h).load(source,category,collection,offset)
@@ -50,6 +56,7 @@ class MusicRepository:
                 with LocalSpotify() as client:
                     if collection:return client.tracks(collection)
                     if category=='search':return client.search(term)
+                    if category=='albums':return client.saved_albums()
                     data=client.home()
                 shelves=data.get('shelves',[])
                 items=[];seen=set()
@@ -58,15 +65,14 @@ class MusicRepository:
                         if value['uri'] in seen:continue
                         seen.add(value['uri'])
                         item=dict(value,kind='album' if ':album:' in value['uri'] else 'playlist')
-                        if category!='albums' or item['kind']=='album':items.append(item)
-                return {'items':items,'note':text('Your personal Spotify picks','Твои персональные подборки Spotify') if category!='albums' else text('Albums from your personal picks','Альбомы из твоих подборок')}
+                        items.append(item)
+                return {'items':items,'note':text('Your personal Spotify picks','Твои персональные подборки Spotify')}
             if source=='apple-music':return self.load_apple(category,term,collection,offset)
             if source=='yandex-music':
                 player=h.yandex_web
                 if collection:return player.request('tracks',id=collection['id'])
                 if category=='search':return player.request('search',term=term)
-                if category=='albums':return {'items':[],'note':text('This connection exposes playlists and tracks. Find an album by title in Search.',
-                    'Это подключение показывает плейлисты и треки. Альбом можно найти по названию в Поиске.')}
+                if category=='albums':return player.request('browse',category='albums',offset=offset)
                 personal=player.request('browse',category='personal')
                 owned=player.request('browse',category='collection')
                 items=[];seen=set()
@@ -80,6 +86,26 @@ class MusicRepository:
                     'Здесь у видео YouTube нет каталога альбомов. Введи исполнителя и название альбома в Поиске.')}
                 return {'items':[youtube_item(i) for i in h.youtube.queue[-50:]],'note':text('Recently chosen in Emberbox','Недавно выбранное в Emberbox')}
         return {'items':[]}
+
+    def load_whole_album(self, source, collection):
+        """Resolve every page of the exact release before starting playback."""
+        from album_shelf_data import release_reference
+        ref = release_reference(source, collection)
+        if not ref:
+            raise ValueError(text('This source does not identify the album.', 'Источник не указал точное издание альбома.'))
+        offset, items, expected = 0, [], int(ref.get('trackCount') or 0)
+        for _ in range(40):
+            result = self.load(source, 'release', collection=ref, offset=offset)
+            values = result.get('items', result.get('tracks', []))
+            items.extend(values or [])
+            expected = max(expected, int(result.get('total') or (result.get('release') or {}).get('trackCount') or 0))
+            next_offset = result.get('next')
+            if next_offset is None and len(items) >= expected:
+                return {'title': ref['title'], 'items': items}
+            if type(next_offset) is not int or next_offset <= offset or not values:
+                break
+            offset = next_offset
+        raise ValueError(text('Could not load the complete track list. Try again.', 'Не удалось загрузить альбом целиком. Попробуй ещё раз.'))
 
     def play(self,item,alive):
         source=item['source'];h=self.host
@@ -139,6 +165,7 @@ class MusicService:
     def __init__(self,host,path=None):
         self.host=host;self.repository=MusicRepository(host)
         self.book=QueueBook(path or CONFIG_DIR/'listening-queue.json');self.watch=EndWatch()
+        self.saved_book=None;self.album_title=''
         self.listeners=[];self.closed=False;self.browse_generation=0;self.play_generation=0
         self.loading=False;self.error='';self.started=0.;self.source=host.source
         self.browse_future=None;self.play_future=None
@@ -178,7 +205,7 @@ class MusicService:
                 return
             self.youtube_done=(generation,source,done);self.youtube.start(term);return
         apple_album=(source=='apple-music' and self.host.apple_mode=='native' and
-                     (category=='release' or (collection or {}).get('kind') in ('albums','library-albums')))
+                     (category in ('release','whole-album') or (collection or {}).get('kind') in ('albums','library-albums')))
         pool=self.album_pool if apple_album else self.browse_pool
         future=pool.submit(self.repository.load,source,category,term,collection,offset)
         self.browse_future=future
@@ -221,7 +248,35 @@ class MusicService:
         return [dict(value) for value in values[index:]]
 
     def add(self,items):
-        count=self.book.add(self.host.source,[dict(item,origin='manual') for item in items]);self.error='';self.changed();return count
+        book=self.saved_book or self.book
+        count=book.add(self.host.source,[dict(item,origin='manual') for item in items]);self.error='';self.changed();return count
+
+    @property
+    def album_listening(self):
+        return self.saved_book is not None
+
+    def play_album(self, title, items):
+        source=self.host.source
+        songs=[song for item in items if (song:=track(item,source)) and song['kind']!='episode']
+        if not songs:return 0
+        self.restore_queue()
+        self.saved_book=self.book
+        self.book=QueueBook(None)
+        self.book.queues[source]=songs
+        self.album_title=title
+        self._start(0)
+        return len(songs)
+
+    def restore_queue(self):
+        if self.album_listening:
+            self.book=self.saved_book
+            self.book.active=None
+            self.saved_book=None;self.album_title=''
+
+    def exit_album(self):
+        if not self.album_listening:return
+        self.stop(pause_pending=True)
+        self.pause(self.host.source)
 
     def cancel_prime(self):
         if self.prime_timer:GLib.source_remove(self.prime_timer);self.prime_timer=0
@@ -229,7 +284,7 @@ class MusicService:
     def prime(self,item):
         self.cancel_prime()
         h=self.host
-        if self.closed or self.loading or h.source!='apple-music' or h.apple_mode!='native':return
+        if self.closed or self.loading or self.album_listening or h.source!='apple-music' or h.apple_mode!='native':return
         value=track(item,h.source)
         if not value:return
         generation=self.play_generation
@@ -244,6 +299,7 @@ class MusicService:
     def play_now(self,item,context=None):
         source=self.host.source;value=track(item,source)
         if not value:return
+        self.restore_queue()
         if context is not None and self.play_context(item,context):return
         self.book.compact(source,reserve=1)
         current=self.book.current(source)
@@ -270,6 +326,7 @@ class MusicService:
                 if value is selected:chosen=len(values)
                 values.append(normalized)
         if chosen is None:return False
+        self.restore_queue()
         selected=values[chosen]
         manual=[dict(value) for _,value in self.book.upcoming(source) if value.get('origin')!='context']
         # If this click selects an explicitly queued song, consume that entry
@@ -289,6 +346,7 @@ class MusicService:
         self.start(len(before));return True
 
     def play_all(self,items):
+        self.restore_queue()
         self.play_generation+=1;self.loading=False;self.watch.reset()
         self.book.replace(self.host.source,[dict(item,origin='context') for item in items])
         if self.book.queues[self.host.source]:self.start(0)
@@ -296,7 +354,7 @@ class MusicService:
 
     def preview_transition(self,items,index):
         """Audition through the real decks; keep manually queued songs."""
-        if not self.flow.supported or not 0<=index<len(items)-1:return False
+        if self.album_listening or not self.flow.supported or not 0<=index<len(items)-1:return False
         source=self.host.source
         before=self.play_generation
         if not self.play_context(items[index],items) or before==self.play_generation:return False
@@ -340,15 +398,18 @@ class MusicService:
         """Start a DJ block while preserving every pending non-DJ entry."""
         source=self.host.source
         values=[dict(value,origin='dj') for value in items if track(value,source)]
-        pending=[dict(value) for _,value in self.book.upcoming(source) if value.get('origin')!='dj']
-        current=self.book.current(source);before=[dict(current)] if current else []
+        book=self.saved_book or self.book
+        pending=[dict(value) for _,value in book.upcoming(source) if value.get('origin')!='dj']
+        current=book.current(source);before=[dict(current)] if current else []
         room=LIMIT-len(pending)-len(before)
         if room<1 or not values:return False
         values=values[:room]
+        self.restore_queue()
         self.play_generation+=1;self.loading=False;self.watch.reset()
         self.book.replace(source,before+values+pending);self.start(len(before));return True
 
     def extend_dj(self,items,before_pending=False):
+        if self.album_listening:return 0
         source=self.host.source;existing={value['uri'] for _,value in self.book.upcoming(source)}
         values=[dict(value,origin='dj') for value in items if value.get('uri') not in existing]
         count=self.book.add(source,values)
@@ -359,11 +420,15 @@ class MusicService:
         self.changed();return count
 
     def clear_dj(self,source):
-        index=self.book.indices[source];values=self.book.queues[source]
-        self.book.queues[source]=values[:index+1]+[v for v in values[index+1:] if v.get('origin')!='dj']
-        self.book.save();self.changed()
+        book=self.saved_book or self.book
+        index=book.indices[source];values=book.queues[source]
+        book.queues[source]=values[:index+1]+[v for v in values[index+1:] if v.get('origin')!='dj']
+        book.save();self.changed()
 
     def start(self,index=None):
+        if not self.album_listening:self._start(index)
+
+    def _start(self,index=None):
         self.cancel_prime()
         self.transition_preview=None
         self.flow.cancel(preserve_apple=True)
@@ -372,7 +437,7 @@ class MusicService:
         source=self.host.source
         if source=='youtube' and self.host.youtube_mode!='native':
             self.error=text('Choose the in-player YouTube source to play this queue.','Выбери встроенный YouTube в меню источников для воспроизведения очереди.')
-            self.book.active=None;self.changed();return
+            self.restore_queue();self.book.active=None;self.changed();return
         if index is None:
             pending=self.book.upcoming(source)
             index=self.book.indices[source] if self.error and self.book.current(source) else pending[0][0] if pending else max(0,self.book.indices[source])
@@ -400,12 +465,18 @@ class MusicService:
                 if source=='apple-music' and self.host.apple_mode=='native' and isinstance(ack,dict) and 'preparing' in ack:
                     self.awaiting_native=(generation,item);self.loading=True
             except Exception as error:
+                self.restore_queue()
                 self.error=str(error);self.book.active=None
             self.changed();return False
         future.add_done_callback(lambda result:GLib.idle_add(complete,result))
 
-    def step(self,direction):
+    def step(self,direction,*,automatic=False):
         source=self.host.source;index=self.book.indices[source]
+        if self.album_listening:
+            if automatic and direction==1:
+                if index+1<len(self.book.queues[source]):self._start(index+1)
+                else:self.exit_album()
+            return
         item=self.book.current(source);state=snapshot(self.host);now=time.monotonic()
         restart=self.previous_restart
         repeated=bool(item and restart and restart[0]==item['entry'] and now-restart[1]<20)
@@ -442,6 +513,7 @@ class MusicService:
         self.awaiting_native=None
         self.previous_restart=None
         if self.loading and pause_pending:self.pause_after.add(self.play_generation)
+        self.restore_queue()
         self.play_generation+=1;self.loading=False;self.book.active=None;self.error='';self.watch.reset();self.changed()
 
     def source_changed(self):
@@ -474,13 +546,15 @@ class MusicService:
             if item and matches(item,state) and state['position']<=3:self.previous_restart=None
         state = snapshot(self.host)
         upcoming = self.book.upcoming(source)
-        if state.get('kind') != 'episode' and not (upcoming and upcoming[0][1].get('kind') == 'episode'):
+        if not self.album_listening and state.get('kind') != 'episode' and not (upcoming and upcoming[0][1].get('kind') == 'episode'):
             self.flow.tick(state)
             self.poll_transition_preview(state)
         if self.flow.busy:return True
         if self.book.active==source and not self.loading:
             item=self.book.current(source);result=self.watch.observe(item,state) if item else None
-            if result=='next':self.step(1)
+            if result=='next':
+                if self.album_listening:self.step(1,automatic=True)
+                else:self.step(1)
             elif result=='external':self.stop()
             elif not self.watch.seen and time.monotonic()-self.started>20:
                 self.stop();self.error=text('Playback was not confirmed. Try this track again.','Запуск трека не подтверждён. Попробуй включить его ещё раз.');self.changed()

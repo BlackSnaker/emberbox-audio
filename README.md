@@ -6,6 +6,22 @@
   <p><a href="#get-started">Get started</a> · <a href="#system-requirements">System requirements</a> · <a href="docs/DESIGN.md">Grunesphism</a> · <a href="README.ru.md">Русский</a> · <a href="https://github.com/BlackSnaker/emberbox-video">Emberbox Video</a></p>
 </div>
 
+<a id="record-shelf"></a>
+
+## November 27, 2026 · 0.39.0 · The Record Shelf
+
+![Ember’s record shelf with album jackets, an amber lamp and a wood cabinet](assets/updates/2026-11-27-record-shelf.png)
+
+Pick a favourite album off the shelf and linger over the cover for a moment. That little listening ritual now has a home in Ember.
+
+- **Collection → Albums.** Pick a saved album, drag the jacket to turn it over, or slide the record out and look at the grooves. Ember loads artwork up to 1280 px when the service supplies it.
+- **Play the whole album.** Hear the tracks in release order. If you want a physical copy, put it on your wishlist or search marketplaces for vinyl and CDs.
+- **The people behind the music.** Open track credits next to the quality badge to see performers and songwriters where the source provides them. Album pages also show guest contributors.
+
+[See the jacket and vinyl](assets/updates/2026-11-27-record-jacket.png) · [Changelog](CHANGELOG.md) · [Русский](README.ru.md#record-shelf)
+
+*Ember shown with a demo collection. Available on main.*
+
 <a id="release-candidate"></a>
 
 ## November 24, 2026 · 1.0.0-rc.2 · Between the Lines
