@@ -12,7 +12,7 @@ from gi.repository import Gtk,GLib
 from favorite_button import FavoriteButton,CSS,heart_frame,FRAME_STEPS,CONFIRMATION_MS
 from favorites import Favorites
 from listening_library import LibraryView,CSS as LIBRARY_CSS
-from listening_queue import track
+from listening_queue import QueueBook, track
 
 
 def settle(seconds=.1):
@@ -35,6 +35,7 @@ class Music:
             title=Gtk.Label(label='Afterglow'),artist=Gtk.Label(label='Ember Sessions'),album=Gtk.Label(label='Vol. 01'),
             art_url='',playing=False,length=180_000_000,position=0)
         self.host.select_source=lambda source:setattr(self.host,'source',source)
+        self.book=QueueBook(Path(fixture.name)/"listening-queue.json");self.saved_book=None
         self.favorites=Favorites(self,Path(fixture.name)/'favorites.json');self.loading=False;self.error='';self.plays=[]
     def subscribe(self,_callback):return lambda:None
     def cancel_browse(self):pass
